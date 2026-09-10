@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "gameboy": {
+      "command": "/ABSOLUTE/PATH/pokemon-ai-player/venv/bin/python",
+      "args": [
+        "/ABSOLUTE/PATH/pokemon-ai-player/server.py",
+        "--rom", "/ABSOLUTE/PATH/game.gb",
+        "--ai-model", "claude-fable-5-1",
+        "--resume"
+      ]
+    }
+  }
+}
