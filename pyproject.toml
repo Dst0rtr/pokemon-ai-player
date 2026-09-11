@@ -3,6 +3,7 @@ name = "gameboy-mcp-player"
 version = "1.1.0"
 description = "MCP server that lets AI agents play any Game Boy game (with a rich Pokémon Gen 1 profile) and benchmarks them"
 requires-python = ">=3.10"
+license = { file = "LICENSE" }
 dependencies = [
     "pyboy>=2.6.0",
     "mcp>=1.10.0",

@@ -125,3 +125,7 @@ Subclass `games.base.GameProfile`, implement `status_line()`, `state()`, `snapsh
 ## Legal
 
 No ROMs are included. Use only games you own.
+
+## License
+
+MIT, see `LICENSE`. Pokémon and Game Boy are trademarks of Nintendo; no ROM is included.
