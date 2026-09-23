@@ -1227,6 +1227,27 @@ class PokemonGen1Profile(GameProfile):
         return head + "\n" + ruler + "\n" + body + ("\n" + tail if tail else "")
 
     # ------------------------------------------------------------------ #
+    # world graph persistence (survives load_state / --resume / restarts)
+    # ------------------------------------------------------------------ #
+    def world_data(self) -> Optional[dict]:
+        if not self.world:
+            return None
+        return {str(m): {"warps": [list(w) for w in info["warps"]], "conns": [list(c) for c in info["conns"]],
+                         "outside": info.get("outside")} for m, info in self.world.items()}
+
+    def load_world(self, data: dict) -> None:
+        for key, info in (data or {}).items():
+            try:
+                m = int(key)
+            except (TypeError, ValueError):
+                continue
+            if m in self.world or not isinstance(info, dict):
+                continue
+            self.world[m] = {"warps": [tuple(w) for w in info.get("warps", [])],
+                             "conns": [tuple(c) for c in info.get("conns", [])], "outside": info.get("outside")}
+            self.visited.add(m)
+
+    # ------------------------------------------------------------------ #
     # metrics
     # ------------------------------------------------------------------ #
     def snapshot(self) -> dict[str, Any]:

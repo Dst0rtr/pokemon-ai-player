@@ -65,6 +65,10 @@ class Emulator:
         charmap_file: Optional[str] = None,
         ai_model: str = "unknown",
         base_dir: Optional[Path] = None,
+        session_id: Optional[str] = None,
+        max_tool_calls: int = 0,
+        max_real_seconds: float = 0,
+        finalize_on_exit: bool = False,
     ):
         self.rom_path = Path(rom_path).expanduser().resolve()
         if not self.rom_path.exists():
@@ -91,7 +95,15 @@ class Emulator:
         self.actions = 0
         self._last_sent_hash: Optional[str] = None
         self._boot_time = time.time()
-        self.metrics = MetricsTracker(ai_model, self.rom_path.name, self.metrics_dir)
+        self.finalize_on_exit = finalize_on_exit
+        self.metrics = MetricsTracker(ai_model, self.rom_path.name, self.metrics_dir, session_id=session_id,
+                                      max_tool_calls=max_tool_calls, max_real_seconds=max_real_seconds)
+        if session_id:
+            # A fixed session id continues an earlier run: real time, calls and milestones accumulate.
+            for cand in (self.metrics_dir / f"{session_id}_checkpoint.json", self.metrics_dir / f"{session_id}.json"):
+                if cand.exists() and self.metrics.resume_from(cand):
+                    self.frame = max(self.frame, self.metrics.frames)
+                    break
 
     # ------------------------------------------------------------------ #
     # lifecycle
@@ -104,8 +116,9 @@ class Emulator:
         self.tick(1)
         msg = f"booted {self.pyboy.cartridge_title!r} profile={self.profile.name}"
         if resume and (self.saves_dir / "autosave.state").exists():
-            self.load_state("autosave")
+            self._load_slot("autosave")
             msg += " (resumed autosave)"
+        self._load_world()
         self.profile.after_load()
         self.metrics.set_profile(self.profile.name)
         self.metrics.observe(self._safe_snapshot(), self.frame, [])
@@ -118,7 +131,10 @@ class Emulator:
         try:
             if self.autosave_every:
                 self._autosave()
-                if not self.metrics.finalized:
+            if not self.metrics.finalized:
+                if self.finalize_on_exit:
+                    self.metrics.finalize()
+                else:
                     self.metrics.checkpoint()
         finally:
             self.pyboy.stop(save=True)  # writes battery save (.ram) next to the ROM
@@ -128,8 +144,7 @@ class Emulator:
         if self.pyboy is not None:
             self.pyboy.stop(save=True)
             self.pyboy = None
-        self.frame = 0
-        self._last_sent_hash = None
+        self._last_sent_hash = None          # frames keep counting: the metrics clock never rewinds
         self.boot()
         self.tick(60)
         return "game reset to power-on"
@@ -607,29 +622,50 @@ class Emulator:
         return f"saved state '{path.stem}'"
 
     def load_state(self, slot: str = "1") -> str:
-        pb = self._ensure()
         path = self._slot_path(slot)
         if not path.exists():
             slots = self.list_states()
             return f"no state '{slot}'. available: {', '.join(slots) or 'none'}"
-        with open(path, "rb") as f:
+        self._load_slot(path.stem)
+        self.metrics.mark_load(path.stem)     # reloads are visible in the benchmark timeline
+        return f"loaded state '{path.stem}'"
+
+    def _load_slot(self, slot: str) -> None:
+        """Raw state load. Frames keep counting (the emulated clock is cumulative, never rewound)."""
+        pb = self._ensure()
+        with open(self._slot_path(slot), "rb") as f:
             pb.load_state(f)
-        meta_path = path.with_suffix(".json")
-        if meta_path.exists():
-            try:
-                self.frame = int(json.loads(meta_path.read_text()).get("frame", self.frame))
-            except Exception:
-                pass
         self._last_sent_hash = None
         self.tick(2)
         self.profile.after_load()
-        return f"loaded state '{path.stem}'"
 
     def _autosave(self) -> None:
         try:
             self.save_state("autosave")
+            self._save_world()
         except Exception as e:  # pragma: no cover
             log.warning("autosave failed: %s", e)
+
+    def _world_path(self) -> Path:
+        return self.saves_dir / "world.json"
+
+    def _save_world(self) -> None:
+        data = self.profile.world_data() if self.profile else None
+        if not data:
+            return
+        self.saves_dir.mkdir(parents=True, exist_ok=True)
+        tmp = self._world_path().with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data))
+        os.replace(tmp, self._world_path())
+
+    def _load_world(self) -> None:
+        path = self._world_path()
+        if not path.exists() or self.profile is None:
+            return
+        try:
+            self.profile.load_world(json.loads(path.read_text()))
+        except (OSError, ValueError) as e:  # pragma: no cover
+            log.warning("could not load world graph: %s", e)
 
     # ------------------------------------------------------------------ #
     # memory

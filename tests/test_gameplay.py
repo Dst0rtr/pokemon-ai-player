@@ -363,3 +363,95 @@ def test_milestone_snapshot_includes_team(emu):
     assert team[0]["species"] == "Bulbasaur" and team[0]["level"] == 5 and len(team[0]["stats"]) == 4
     assert "owned_set" not in m.snapshot                # other lists are still dropped
     assert m.snapshot["party"] == ["Bulbasaur L5"]
+
+
+def _load_bedroom(e, in_game_state):
+    with open(in_game_state, "rb") as f:
+        e.pyboy.load_state(f)
+    e.tick(2)
+    e.profile.after_load()
+
+
+def test_metrics_session_resumes_across_restarts(rom_path, scratch, in_game_state):
+    from emulator import Emulator
+
+    base = scratch / "resume"
+    e = Emulator(str(rom_path), base_dir=base, autosave_every=2, save_screenshots=False, ai_model="m", session_id="run-abc")
+    e.boot()
+    _load_bedroom(e, in_game_state)
+    e.press("A")
+    e.walk("right 1")
+    e.metrics.note("remember the SNES")
+    frames = e.frame
+    e.metrics.record_call("press", 10, False)
+    e.metrics.record_call("walk", 10, False)
+    e.stop()
+    assert (base / "metrics" / "run-abc_checkpoint.json").exists()
+
+    e2 = Emulator(str(rom_path), base_dir=base, autosave_every=2, save_screenshots=False, ai_model="m", session_id="run-abc")
+    e2.boot(resume=True)
+    assert e2.metrics.session_id == "run-abc" and e2.metrics.chunks == 2
+    assert sum(e2.metrics.tool_calls.values()) == 2 and e2.frame >= frames
+    assert e2.metrics.notes == ["remember the SNES"]
+    e2.wait(1)
+    d = e2.metrics.to_dict()
+    assert d["frames"] > frames and d["chunks"] == 2 and "remember the SNES" in e2.metrics.summary()
+    e2.pyboy.stop(save=False)
+    e2.pyboy = None
+
+
+def test_budget_exhausted_refuses_actions_and_finalizes(rom_path, scratch, in_game_state):
+    from emulator import Emulator
+    from server import build_server
+
+    e = Emulator(str(rom_path), base_dir=scratch / "budget", autosave_every=0, save_screenshots=False,
+                 ai_model="b", session_id="budget-1", max_tool_calls=3)
+    e.boot()
+    _load_bedroom(e, in_game_state)
+    tools = {n: t.fn for n, t in build_server(e)._tool_manager._tools.items()}
+    txt = lambda res: "\n".join(c.text for c in res if c.type == "text")  # noqa: E731
+    assert txt(tools["press"](buttons="A", screenshot=False)).startswith("pressed")
+    assert txt(tools["state"](section="summary"))
+    assert txt(tools["wait"](frames=1, screenshot=False)).startswith("waited")
+    out = txt(tools["walk"](path="right 1", screenshot=False))
+    assert out.startswith("BUDGET EXHAUSTED"), out
+    assert e.metrics.finalized and (e.metrics_dir / "budget-1.json").exists()
+    assert txt(tools["metrics"](action="report")).startswith("session budget-1")     # reporting still works
+    assert txt(tools["press"](buttons="A", screenshot=False)).startswith("BUDGET EXHAUSTED")
+    e.pyboy.stop(save=False)
+    e.pyboy = None
+
+
+def test_frames_never_rewind_on_load_state(emu):
+    emu.metrics.restart("frames")
+    emu.save_state("t1")
+    emu.walk("right 2")
+    f = emu.frame
+    emu.load_state("t1")
+    assert emu.frame >= f
+    assert emu.metrics.loads == 1 and "loaded state 't1'" in [m.name for m in emu.metrics.milestones]
+    emu.wait(1)
+    assert emu.metrics.to_dict()["frames"] > f
+
+
+def test_world_graph_survives_restart(rom_path, scratch, in_game_state):
+    from emulator import Emulator
+
+    base = scratch / "world"
+    e = Emulator(str(rom_path), base_dir=base, autosave_every=1, save_screenshots=False)
+    e.boot()
+    _load_bedroom(e, in_game_state)
+    e.wait(1)                                              # snapshot the bedroom (map 38) into the graph
+    assert "entered Red's House 1F" in e.walk("to Red's House 1F")
+    assert "entered Pallet Town" in e.walk("to Pallet Town")
+    e.stop()
+    assert (base / "saves" / rom_path.stem / "world.json").exists()
+
+    e2 = Emulator(str(rom_path), base_dir=base, autosave_every=1, save_screenshots=False)
+    e2.boot(resume=True)
+    assert e2.profile.position()[0] == 0 and {37, 38} <= set(e2.profile.world)
+    r = e2.walk("to Red's House 2F")                       # two hops, known only from the saved graph
+    assert "entered Red's House 2F" in r, r
+    assert e2.profile.position()[0] == 38
+    e2.pyboy.stop(save=False)
+    e2.pyboy = None

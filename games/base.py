@@ -68,6 +68,13 @@ class GameProfile:
         """Return names of milestones reached between two snapshots."""
         return []
 
+    def world_data(self) -> Optional[dict]:
+        """JSON-serialisable navigation knowledge worth keeping across restarts (None if there is none)."""
+        return None
+
+    def load_world(self, data: dict) -> None:
+        """Restore what an earlier world_data() returned."""
+
     # -- screen ------------------------------------------------------------- #
     def screen_text(self) -> Optional[str]:
         """Decode on-screen text from VRAM. None if unsupported for this game."""
