@@ -9,12 +9,12 @@ Strategy: Charmander -> parcel -> 5 Poké Balls -> level to 12 in Viridian Fores
 Caterpie/Metapod -> level it as lead to Butterfree with Confusion -> Pewter -> Brock.
 Runs in about a minute; writes metrics/saves under ./reference_run_data next to the ROM copy.
 """
-import sys, os, time, shutil, tempfile
+import sys, os, shutil, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import logging; logging.basicConfig(level="WARNING", stream=sys.stderr)
 from emulator import Emulator
-from server import build_server
-from games import gen1_data as D
+from _agentlib import ScriptedAgent, BUGS, FIRE, out_of_pp
 
 if len(sys.argv) < 2:
     print(__doc__); sys.exit(1)
@@ -24,140 +24,11 @@ ROM = os.path.join(WORK, "rom.gb")
 shutil.copy(sys.argv[1], ROM)                       # a copy, so the run never touches your battery save
 emu = Emulator(ROM, base_dir=WORK, autosave_every=25, save_screenshots=False, ai_model=f"reference{SEED}")
 emu.boot()
-T = {n: t.fn for n, t in build_server(emu)._tool_manager._tools.items()}
+A = ScriptedAgent(emu)
 prof = emu.profile
-ODD, CALLS = [], [0]
-STATUS = {"Growl", "Tail Whip", "String Shot", "Leer", "Sand-Attack", "Harden", "PoisonPowder", "Stun Spore", "Sleep Powder"}
-BUGS = ("Caterpie", "Metapod", "Butterfree"); FIRE = ("Charmander", "Charmeleon", "Charizard")
-def out_of_pp(p): return all(pp == 0 for n, pp in p["moves"] if n not in STATUS)
-t_start = time.time()
-
-def txt(res): return "\n".join(c.text for c in res if c.type == "text")
-def call(name, **kw):
-    CALLS[0] += 1
-    kw.setdefault("screenshot", False) if name in ("press", "walk", "battle", "talk", "wait") else None
-    return txt(T[name](**kw))
-def press(b): return call("press", buttons=b)
-def walk(p): return call("walk", path=p)
-def talk(): return call("talk")
-def battle(a, t=""): return call("battle", action=a, target=t)
-def state(s="summary"): return call("state", section=s)
-def shop(i, q): return call("shop", item=i, qty=q)
-def manage(a, t="", t2=""): return call("manage", action=a, target=t, target2=t2)
-def log(*a): print(f"[{time.time()-t_start:6.1f}s #{CALLS[0]}]", *a, flush=True)
-def odd(what): ODD.append(what); log("ODD:", what)
-
-def until(fn, needle, tries=30, label=""):
-    out = ""
-    for _ in range(tries):
-        out = fn()
-        if needle in out: return out
-    odd(f"never saw {needle!r} ({label}); last: {out[:160]!r}")
-    return out
-
-def skip_text(max_n=40):
-    for _ in range(max_n):
-        if not prof.is_text_visible() or prof.in_battle(): return
-        r = talk()
-        if r.startswith("choice"):
-            odd("unexpected choice while skipping text: " + r[:120]); press("B"); return
-    odd("text never ended: " + (prof.screen_text() or "")[:100].replace("\n", "|") + " @ " + state())
-
-def resolve_battle(policy_move=None, trainee=None, strong=None, want=None):
-    turns = 0
-    while prof.in_battle() and turns < 45:
-        turns += 1
-        b = prof.battle()
-        if b is None or b["mine"]["max_hp"] == 0 or b["mine"]["species"].startswith("MissingNo"):
-            press("A"); continue
-        mine = b["mine"]
-        party = prof.party()
-        dmg_pp = sum(pp for n, pp in mine["moves"] if n not in STATUS)
-        if trainee and mine["species"] in trainee and (mine["hp"] < mine["max_hp"] * 0.5 or dmg_pp == 0):
-            idx = next((i + 1 for i, p in enumerate(party) if p["species"] in strong and p["hp"] > 0), None)
-            if idx:
-                r = battle("switch", str(idx))
-                if "battle over" in r or not prof.in_battle(): return r
-                continue
-            if dmg_pp == 0:                            # helpless trainee and nobody to switch to: flee
-                r = battle("run")
-                if not prof.in_battle(): return r
-        if want and b["enemy"]["species"] in want and any("Ball" in n for n, _ in prof.items()):
-            r = battle("item", "Poké Ball")           # tiny bugs: throw right away
-            log("  throw:", r[:120])
-            if "needs a decision" in r:                # nickname prompt
-                press("DOWN A")
-                return r
-            continue
-        moves = [n for n, pp in mine["moves"] if pp > 0]
-        pick = policy_move if policy_move in moves else next((m for m in moves if m not in STATUS), moves[0] if moves else "")
-        if not trainee and not want:
-            r = battle("auto", pick)                  # routine fight: one call
-        else:
-            r = battle("fight", pick)
-        if turns >= 30: log("  long battle turn", turns, r[:160])
-        if "needs a decision" in r:
-            if "learn" in r.lower() or "forget" in r.lower():
-                press("DOWN A")                       # don't learn, keep moves (simplest)
-                r2 = press("A")
-                log("  learn prompt ->", r2[:80])
-            else:
-                press("A")
-        elif "battle('switch'" in r:
-            alive = [i + 1 for i, p in enumerate(prof.party()) if p["hp"] > 0]
-            if alive: battle("switch", str(alive[0]))
-            else: press("A*3")
-        elif r.startswith(("could not", "cannot", "no move", "unknown")):
-            odd("battle helper: " + r[:150]); press("A")
-    if prof.in_battle(): odd("battle did not end in 45 turns")
-    return r if turns else "no battle"
-
-def go(target, **bk):
-    """walk to a target; auto-resolve battles/dialogue on the way. Returns the last walk text."""
-    for _ in range(12):
-        r = walk(target)
-        if prof.in_battle():
-            resolve_battle(**bk); continue
-        if "cannot walk" in r and "text" in r:
-            t = talk()
-            if t.startswith("choice"): odd("choice during travel: " + t[:100]); press("B")
-            continue
-        if "dialogue appeared" in r:
-            skip_text()
-            if prof.in_battle(): resolve_battle(**bk)
-            continue
-        if r.startswith(("'", "arrived", "went toward", "walked", "already")):
-            if "stopped: blocked" in r: odd(f"blocked going {target}: {r[:120]}"); return r
-            if "could not get closer" in r: odd(f"could not reach {target}: {r[:700]}"); return r
-            return r
-        odd(f"walk({target!r}) -> {r[:140]}"); return r
-    odd(f"gave up going {target}"); return r
-
-def travel(map_name, **bk):
-    """Go to a named map (through explored maps), resolving battles/dialogue on the way."""
-    for _ in range(14):
-        m = prof.position()[0]
-        if _norm(D.map_name(m)) == _norm(map_name): return True
-        r = go(f"to {map_name}", **bk)
-        if "no explored route" in r or "unknown place" in r:
-            odd(f"travel to {map_name} failed from {state()}: {r[:100]}"); return False
-    m = prof.position()[0]
-    return _norm(D.map_name(m)) == _norm(map_name)
-
-def _norm(x): return "".join(c for c in x.lower() if c.isalnum())
-
-CITY_OF = {"Viridian Poké Center": "Viridian City", "Pewter Poké Center": "Pewter City"}
-def heal_at(center_name):
-    city = CITY_OF[center_name]
-    if _norm(D.map_name(prof.position()[0])) not in (_norm(city), _norm(center_name)):
-        travel(city)
-    if _norm(D.map_name(prof.position()[0])) != _norm(center_name):
-        go(f"to {center_name}")
-    go("to 3,4"); press("UP:2")
-    r = talk()
-    if "HEAL" in r: press("A"); r = talk()
-    if "fighting fit" not in r: odd("heal text odd: " + r[:120])
-    go("to outside")
+press, walk, talk, battle, state, shop, manage, call = A.press, A.walk, A.talk, A.battle, A.state, A.shop, A.manage, A.call
+log, odd, until, skip_text, resolve_battle, go, travel, heal_at = A.log, A.odd, A.until, A.skip_text, A.resolve_battle, A.go, A.travel, A.heal_at
+t_start = A.t_start
 
 # ---------------------------------------------------------------- intro
 press(f"W{600 + SEED}")
@@ -306,8 +177,5 @@ for attempt in range(3):
     log("  lost to Brock, retrying"); heal_at("Pewter Poké Center")
 badges = prof.badges()
 log("RESULT badges:", badges, state(), state("party"))
-rep = call("metrics", action="finalize")
-log(rep.splitlines()[0])
-log("DONE in", f"{time.time()-t_start:.0f}s, {CALLS[0]} tool calls, {len(ODD)} oddities")
-for o in ODD: log("  -", o)
+A.finish()
 emu.stop()
