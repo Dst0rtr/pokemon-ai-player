@@ -318,6 +318,8 @@ class PokemonGen1Profile(GameProfile):
         txt = self.screen_text() or ""
         if "FIGHT" in txt and "RUN" in txt:
             return "menu: FIGHT/PKMN/ITEM/RUN (cursor on " + ("FIGHT" if "▶FIGHT" in txt else "PKMN" if "▶PKMN" in txt else "ITEM" if "▶ITEM" in txt else "RUN") + ")"
+        if "BAIT" in txt and "RUN" in txt:
+            return "menu: BALL/BAIT/ROCK/RUN (Safari: cursor on " + ("BALL" if "▶BALL" in txt else "BAIT" if "▶BAIT" in txt else "ROCK" if ("▶THROW" in txt or "▶ROCK" in txt) else "RUN") + ")"
         if "TYPE/" in txt:
             return "menu: choose a move (UP/DOWN then A, B to go back)"
         if "▶" in txt:
@@ -417,6 +419,7 @@ class PokemonGen1Profile(GameProfile):
     # battle automation (used by the `battle` tool)
     # ------------------------------------------------------------------ #
     def _main_menu_cursor(self, txt: str) -> Optional[tuple[int, int]]:
+        """(col, row) of the ▶ cursor in the battle menu: FIGHT/PKMN/ITEM/RUN or Safari BALL/BAIT/ROCK/RUN."""
         for ln in txt.split("\n"):
             if "FIGHT" in ln and "PKMN" in ln:
                 if "▶FIGHT" in ln:
@@ -428,7 +431,20 @@ class PokemonGen1Profile(GameProfile):
                     return (0, 1)
                 if "▶RUN" in ln:
                     return (1, 1)
+            if "BALL" in ln and "BAIT" in ln:
+                if "▶BALL" in ln:
+                    return (0, 0)
+                if "▶BAIT" in ln:
+                    return (1, 0)
+            if "ROCK" in ln and "RUN" in ln:
+                if "▶THROW" in ln or "▶ROCK" in ln:
+                    return (0, 1)
+                if "▶RUN" in ln:
+                    return (1, 1)
         return None
+
+    def in_safari_battle(self) -> bool:
+        return self.in_battle() != 0 and self._u8(D.BATTLE_TYPE) == 2
 
     def _list_cursor(self, txt: str, entries: list[str]) -> Optional[int]:
         """Index of the entry marked with ▶ among `entries` (normalised names)."""
@@ -518,6 +534,8 @@ class PokemonGen1Profile(GameProfile):
     def battle_auto(self, emu, target: str = "") -> str:
         """Fight with damaging moves until the battle ends, a prompt appears, or HP gets low."""
         logs: list[str] = []
+        if self.in_safari_battle():
+            return "Safari Zone battle: there is no FIGHT. battle('item') throws a Safari Ball, battle('bait') / battle('rock') change catch odds, battle('run') leaves"
         for turn in range(25):
             if not self.in_battle():
                 break
@@ -563,9 +581,22 @@ class PokemonGen1Profile(GameProfile):
         b = self.battle()
         before = (b["enemy"]["hp"], b["mine"]["hp"], b["mine"]["species"]) if b else None
 
+        safari = self.in_safari_battle()
+        if action in ("bait", "rock") and not safari:
+            return "bait/rock only exist in Safari Zone battles"
+        if action == "fight" and safari:
+            return "Safari Zone battle: no FIGHT here. battle('item') throws a Safari Ball, 'bait', 'rock' or 'run'"
         if action == "run":
             if kind != "main" or not self._select_main(emu, (1, 1)):
                 return "cannot run now"
+            emu.press("A", settle=1)
+        elif action in ("bait", "rock"):
+            if kind != "main" or not self._select_main(emu, (1, 0) if action == "bait" else (0, 1)):
+                return f"cannot {action} now"
+            emu.press("A", settle=1)
+        elif action == "item" and safari:
+            if kind != "main" or not self._select_main(emu, (0, 0)):
+                return "cannot throw a ball now"
             emu.press("A", settle=1)
         elif action == "fight":
             if kind != "main" or not self._select_main(emu, (0, 0)):
@@ -638,22 +669,36 @@ class PokemonGen1Profile(GameProfile):
             bag = self.items()
             if not bag:
                 return "bag is empty"
-            t = self._norm(target)
+            item_name, _, mon_target = target.partition(":")           # "Potion" or "Potion: Pidgey"
+            t = self._norm(item_name)
             idx = 0
             if t:
                 matches = [i for i, (n, _) in enumerate(bag) if t in self._norm(n)]
                 if not matches:
-                    return f"no item '{target}'; bag: " + ", ".join(f"{n}×{q}" for n, q in bag)
+                    return f"no item '{item_name.strip()}'; bag: " + ", ".join(f"{n}×{q}" for n, q in bag)
                 idx = matches[0]
-            emu.press("A", settle=1)
-            if idx:
-                emu.press("DOWN " * idx, settle=1)
+            emu.press("A", settle=1)                                    # open the bag
+            names = [self._norm(n) for n, _ in bag]
+            for _ in range(len(bag) + 2):                               # the bag remembers its cursor: look, don't assume
+                cur = self._list_cursor(self.screen_text() or "", names)
+                if cur is None or cur == idx:
+                    break
+                emu.press("DOWN" if idx > cur else "UP", settle=1)
             emu.press("A", settle=1)
             txt = self.screen_text() or ""
-            if "▶" in txt and not self.dialog_text():      # item wants a target Pokémon: first one
+            if "▶" in txt and not self.dialog_text():                   # item wants a target Pokémon
+                party = self.party()
+                k = self._pick_party(emu, mon_target) if mon_target.strip() else None
+                if k is None:                                           # default: the Pokémon that is fighting
+                    k = min(self._u8(D.PLAYER_MON_NUMBER), max(len(party) - 1, 0))
+                pnames = [self._norm(p["nick"] or p["species"]) for p in party]
+                cur = self._list_cursor(txt, pnames) or 0
+                steps = k - cur
+                if steps:
+                    emu.press(("DOWN " if steps > 0 else "UP ") * abs(steps), settle=1)
                 emu.press("A", settle=1)
         else:
-            return "unknown action; use fight, run, switch or item"
+            return "unknown action; use fight, run, switch, item, bait or rock"
 
         kind, log = self._wait_menu(emu)
         if prelog:
@@ -674,7 +719,7 @@ class PokemonGen1Profile(GameProfile):
     def hint(self) -> str:
         txt = self.screen_text() or ""
         if not txt:
-            return ""
+            return self.obstacle_hint() or self.health_hint()
         if "Bring out which" in txt or "Use next" in txt:
             return "hint: choose a Pokémon with battle('switch', n)"
         if "▶YES" in txt or "▶NO" in txt:
@@ -688,6 +733,8 @@ class PokemonGen1Profile(GameProfile):
             m = self.battle_menu()
             if m.startswith("menu: FIGHT"):
                 return "hint: battle('fight', '<move>') / battle('run') / battle('item', 'Poké Ball') / battle('switch', n)"
+            if m.startswith("menu: BALL"):
+                return "hint: Safari Zone: battle('item') throws a Safari Ball, battle('bait') / battle('rock') / battle('run')"
             return ""
         if "▶" in txt and "NEW GAME" not in txt:
             return "hint: a menu is open: UP/DOWN then A, or B to close"
@@ -695,7 +742,23 @@ class PokemonGen1Profile(GameProfile):
             return "hint: text is waiting: talk() reads it all, or press('A')"
         if self.scripted():
             return "hint: a cutscene is running (you cannot walk yet): talk() advances it"
-        return self.health_hint()
+        return self.obstacle_hint() or self.health_hint()
+
+    def obstacle_hint(self) -> str:
+        """After a blocked walk: what is in front of the player and which field move deals with it."""
+        if self.last_stop != "blocked" or not self.started():
+            return ""
+        tile, tileset = self._u8(D.TILE_IN_FRONT), self._u8(D.CUR_TILESET)
+        if tile == D.WATER_TILE and tileset in D.WATER_TILESETS and not self.surfing():
+            return "hint: water ahead: manage('field', 'Surf') while facing it (a party Pokémon must know Surf; needs the Soul Badge)"
+        if tile == D.CUT_TREE_TILES.get(tileset, -1):
+            return "hint: a small tree blocks the way: manage('field', 'Cut') while facing it (teach HM01 first; needs the Cascade Badge)"
+        if tileset == 17:                                   # caves: a sprite in the way is often a boulder
+            m, px, py = self.position()
+            dx, dy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}.get(self.facing(), (0, 0))
+            if (px + dx, py + dy) in set(self.npcs()):
+                return "hint: if that is a boulder, manage('field', 'Strength') once, then walk into it to push it"
+        return ""
 
     def health_hint(self) -> str:
         if self.in_battle() or not self.started():
@@ -855,7 +918,8 @@ class PokemonGen1Profile(GameProfile):
             if not self._menu_select(emu, "POKéMON") and not self._menu_select(emu, "POK"):
                 emu.press("B", settle=1)
                 return "no POKéMON entry in the menu"
-            emu.press("DOWN " * i if i else "W1", settle=1)
+            if not self._party_cursor_to(emu, i):
+                emu.press("DOWN " * i if i else "W1", settle=1)  # unreadable list: assume it starts at the top
             emu.press("A", settle=1)                              # STATS / SWITCH / CANCEL
             if not self._menu_select(emu, "SWITCH"):
                 emu.press("B*3", settle=1)
@@ -868,41 +932,9 @@ class PokemonGen1Profile(GameProfile):
             new = self.party()
             return "party: " + ", ".join(f"{k + 1}={p['species']} L{p['level']}" for k, p in enumerate(new))
         if action == "use":
-            bag = self.items()
-            want = self._norm(target)
-            hit = next((k for k, (n, _) in enumerate(bag) if want and want in self._norm(n)), None)
-            if hit is None:
-                return f"no '{target}' in the bag: " + (", ".join(f"{n}×{q}" for n, q in bag) or "empty")
-            if not self._open_start_menu(emu):
-                return "cannot open the START menu now (close any text first)"
-            if not self._menu_select(emu, "ITEM"):
-                emu.press("B", settle=1)
-                return "no ITEM entry in the menu"
-            # the bag list scrolls; move down until the wanted item is under the cursor
-            for _ in range(len(bag) + 2):
-                if self._norm(self._cursor_line()).startswith(self._norm(bag[hit][0])[:6]):
-                    break
-                emu.press("DOWN", settle=1)
-            emu.press("A", settle=1)                              # USE / TOSS
-            if not self._menu_select(emu, "USE", 2):
-                emu.press("B*3", settle=1)
-                return "could not select USE"
-            txt = self.screen_text() or ""
-            if "▶" in txt and any(p["species"].upper()[:5] in txt for p in self.party()):   # pick a Pokémon
-                k = self._pick_party(emu, target2) if target2 else 0
-                if k is None:
-                    emu.press("B*3", settle=1)
-                    return "use it on which Pokémon? give a name or number as the second target"
-                emu.press("DOWN " * k if k else "W1", settle=1)
-                emu.press("A", settle=1)
-            seen: list[str] = []
-            for _ in range(6):
-                self._collect(seen)
-                if not (self.screen_text() or "").strip() or "▶" in (self.screen_text() or ""):
-                    break
-                emu.press("A", settle=1)
-            emu.press("B*3", settle=1)
-            return (" | ".join(seen) or f"used {bag[hit][0]}") + " | bag: " + (", ".join(f"{n}×{q}" for n, q in self.items()) or "empty")
+            return self._use_item(emu, target, target2)
+        if action == "field":
+            return self._field_move(emu, target, target2)
         if action == "save":
             if not self._open_start_menu(emu):
                 return "cannot open the START menu now (close any text first)"
@@ -921,7 +953,184 @@ class PokemonGen1Profile(GameProfile):
                     return "game saved (battery save; survives restarts)"
                 emu.tick(30)
             return "save may not have completed: " + self.dialog_text()
-        return "unknown action; use lead, swap, use or save"
+        return "unknown action; use lead, swap, use, field or save"
+
+    def _party_cursor_index(self, txt: str) -> Optional[int]:
+        """Party slot under the ▶ cursor. The cursor sits on an entry's name row, or (TM/HM lists) on its
+        second row, in which case the name is on the line above."""
+        names = [self._norm(p["nick"] or p["species"]) for p in self.party()]
+        lines = [ln for ln in txt.split("\n") if ln.strip()]
+        for i, ln in enumerate(lines):
+            if "▶" not in ln:
+                continue
+            for cand in (ln.split("▶", 1)[1], lines[i - 1] if i else ""):
+                label = self._norm(cand)
+                for j, e in enumerate(names):
+                    if e and label.startswith(e[:6]):
+                        return j
+        return None
+
+    def _party_cursor_to(self, emu, k: int) -> bool:
+        """Move the ▶ cursor of the open party list to slot k (the menu remembers its last position)."""
+        for _ in range(8):
+            cur = self._party_cursor_index(self.screen_text() or "")
+            if cur is None:
+                return False
+            if cur == k:
+                return True
+            emu.press("DOWN" if k > cur else "UP", settle=1)
+        return False
+
+    def _party_list_open(self, txt: str) -> bool:
+        """True when the START-menu party list (nicknames with ▶) is on screen."""
+        if "▶" not in txt:
+            return False
+        return any((p["nick"] or p["species"].upper())[:5] in txt for p in self.party())
+
+    def _bag_text(self) -> str:
+        return "bag: " + (", ".join(f"{n}×{q}" for n, q in self.items()) or "empty")
+
+    def _use_item(self, emu, target: str, target2: str) -> str:
+        """START → ITEM → item → USE, answering the prompts: a Pokémon to use it on (target2), and for
+        TMs/HMs the move to forget ("Charmander: Growl")."""
+        bag = self.items()
+        want = self._norm(target)
+        hit = next((k for k, (n, _) in enumerate(bag) if want and want in self._norm(n)), None)
+        if hit is None:
+            return f"no '{target}' in the bag: " + (", ".join(f"{n}×{q}" for n, q in bag) or "empty")
+        item_name = bag[hit][0]
+        mon_target, _, forget = target2.partition(":")
+        mon_target, forget = mon_target.strip(), forget.strip()
+        if not self._open_start_menu(emu):
+            return "cannot open the START menu now (close any text first)"
+        if not self._menu_select(emu, "ITEM"):
+            emu.press("B", settle=1)
+            return "no ITEM entry in the menu"
+        for _ in range(len(bag) + 2):                          # the bag list scrolls: move until the item is under the cursor
+            if self._norm(self._cursor_line()).startswith(self._norm(item_name)[:6]):
+                break
+            emu.press("DOWN", settle=1)
+        emu.press("A", settle=1)                              # USE / TOSS
+        if not self._menu_select(emu, "USE", 2):
+            emu.press("B*3", settle=1)
+            return "could not select USE"
+        seen: list[str] = []
+        picked: Optional[int] = None
+        outcome = ""
+        for _ in range(16):
+            txt = self.screen_text() or ""
+            d = self.dialog_text()
+            if not txt.strip():
+                break                                         # back in the overworld
+            if "▶YES" in txt or "▶NO" in txt:
+                self._collect(seen)
+                low = d.lower()
+                if "delete" in low or "make room" in low:     # "Delete an older move to make room for X?"
+                    if forget:
+                        emu.press("A", settle=1)
+                    else:
+                        emu.press("DOWN A", settle=1)         # NO: keep the moves, ask the agent
+                        outcome = "needs a decision"
+                elif "abandon" in low:
+                    emu.press("A", settle=1)                  # YES, abandon (we declined to forget a move)
+                else:
+                    emu.press("A", settle=1)                  # "Teach X to a POKéMON?" and other confirmations
+                continue
+            if "▶" in txt and picked is None and self._party_list_open(txt):
+                k = self._pick_party(emu, mon_target) if mon_target else 0
+                if k is None:
+                    emu.press("B*3", settle=1)
+                    return "use it on which Pokémon? give a name or number as the second target"
+                if not self._party_cursor_to(emu, k):
+                    emu.press("DOWN " * k if k else "W1", settle=1)
+                emu.press("A", settle=1)
+                picked = k
+                continue
+            if "▶" in txt and ("forgotten" in d or "Which move" in d) and picked is not None:
+                mon = self.party()[picked] if picked < len(self.party()) else None
+                names = [self._norm(n) for n, _ in mon["moves"]] if mon else []
+                fk = self._norm(forget)
+                idx = next((i for i, n in enumerate(names) if fk and (n.startswith(fk) or fk in n)), None)
+                if idx is None:
+                    emu.press("B", settle=1)                  # → "Abandon learning X?"
+                    outcome = "needs a decision"
+                    continue
+                cur = self._list_cursor(txt, names) or 0
+                steps = idx - cur
+                if steps:
+                    emu.press(("DOWN " if steps > 0 else "UP ") * abs(steps), settle=1)
+                emu.press("A", settle=1)
+                continue
+            if "▶" in txt:
+                break                                         # back in the bag / party list: done
+            self._collect(seen)
+            emu.press("A", settle=1)
+        emu.press("B*3", settle=1)
+        result = " | ".join(seen) or f"used {item_name}"
+        if outcome == "needs a decision":
+            mon = self.party()[picked] if picked is not None and picked < len(self.party()) else None
+            moves = ", ".join(n for n, _ in mon["moves"]) if mon else "?"
+            result += (f" — {mon['species'] if mon else 'it'} already knows 4 moves ({moves}): repeat with "
+                       f"manage('use', '{item_name}', '{mon['species'] if mon else mon_target}: <move to forget>')")
+        return result + " | " + self._bag_text()
+
+    def _field_move(self, emu, move: str, where: str = "") -> str:
+        """Use Cut / Surf / Strength / Flash / Fly / Dig / Teleport / Softboiled from the party menu."""
+        key = self._norm(move)
+        if not key:
+            return "which field move? " + ", ".join(D.FIELD_MOVES)
+        party = self.party()
+        k = next((i for i, p in enumerate(party) if any(self._norm(n).startswith(key) for n, _ in p["moves"])), None)
+        if k is None:
+            known = {n for p in party for n, _ in p["moves"] if n in D.FIELD_MOVES}
+            return f"no Pokémon in the party knows {move}" + (f"; field moves available: {', '.join(sorted(known))}" if known else "")
+        label = next(n for n, _ in party[k]["moves"] if self._norm(n).startswith(key))
+        if not self._open_start_menu(emu):
+            return "cannot open the START menu now (close any text first)"
+        if not self._menu_select(emu, "POKéMON") and not self._menu_select(emu, "POK"):
+            emu.press("B", settle=1)
+            return "no POKéMON entry in the menu"
+        if not self._party_cursor_to(emu, k):
+            emu.press("DOWN " * k if k else "W1", settle=1)
+        emu.press("A", settle=1)                              # <field moves> / STATS / SWITCH / CANCEL
+        if not self._menu_select(emu, label, 6):
+            emu.press("B*3", settle=1)
+            return f"{party[k]['species']} shows no {label} option here"
+        seen: list[str] = []
+        before = self.position()
+        for _ in range(16):
+            txt = self.screen_text() or ""
+            if not txt.strip():
+                break
+            if self._norm(label) == "fly" and "▶" not in txt and not self.dialog_text():
+                # Town map: UP/DOWN cycles the visited towns, the name shows at the top.
+                if where and self._norm(where)[:6] in self._norm(txt):
+                    emu.press("A", settle=1)
+                    seen.append(f"flying to {where}")
+                    break
+                if not where:
+                    emu.press("B*2", settle=1)
+                    return "Fly: give the town as the second target, e.g. manage('field', 'Fly', 'Pewter City')"
+                emu.press("DOWN", settle=1)
+                continue
+            if "▶YES" in txt or "▶NO" in txt:
+                self._collect(seen)
+                emu.press("A", settle=1)
+                continue
+            if "▶" in txt:
+                emu.press("B", settle=1)                      # a menu is still open: close it
+                continue
+            self._collect(seen)
+            emu.press("A", settle=1)
+        emu.tick(30)
+        emu._settle()
+        after = self.position()
+        note = " | ".join(seen) or f"used {label}"
+        if self.surfing() and self._norm(label) == "surf":
+            note += " — now surfing: walk onto the water (~)"
+        if after != before:
+            note += f" — now at {D.map_name(after[0])} ({after[1]},{after[2]})"
+        return note
 
     # ------------------------------------------------------------------ #
     # full map (decoded from the block grid in RAM + tileset data in ROM)
@@ -953,7 +1162,10 @@ class PokemonGen1Profile(GameProfile):
         bw = self._u8(D.MAP_WIDTH) + 6
         walkable = self._walkable_tiles()
         grass = self._u8(D.GRASS_TILE)
-        ledges = D.LEDGE_TILES if self._u8(D.CUR_TILESET) == 0 else {}
+        tileset = self._u8(D.CUR_TILESET)
+        ledges = D.LEDGE_TILES if tileset == 0 else {}
+        water = D.WATER_TILE if tileset in D.WATER_TILESETS else -1
+        tree = D.CUT_TREE_TILES.get(tileset, -1)
         blocks = self.mem[D.OVERWORLD_MAP:D.OVERWORLD_MAP + bw * (self._u8(D.MAP_HEIGHT) + 6)]
         cells = []
         for y in range(h):
@@ -965,8 +1177,14 @@ class PokemonGen1Profile(GameProfile):
                     row.append(",")
                 elif tile in ledges:
                     row.append(D.LEDGE_CHAR[ledges[tile]])
+                elif tile in walkable:
+                    row.append(".")
+                elif tile == water:
+                    row.append("~")
+                elif tile == tree:
+                    row.append("T")
                 else:
-                    row.append("." if tile in walkable else "#")
+                    row.append("#")
             cells.append(row)
         return cells
 
@@ -980,10 +1198,13 @@ class PokemonGen1Profile(GameProfile):
         if not (0 <= tx < w and 0 <= ty < h):
             return None
         blocked = {(nx, ny) for nx, ny in self.npcs()}
+        # Never cross another warp on the way (stairs, ladders, teleport pads would whisk the player away).
+        blocked |= {(wx, wy) for wx, wy, _ in self.warps() if (wx, wy) != (tx, ty)}
         if 0 <= tx < w and 0 <= ty < h and cells[ty][tx] in ("#",) and any((wx, wy) == (tx, ty) for wx, wy, _ in self.warps()):
             cells[ty][tx] = "."                 # a solid door tile can still be walked into as the destination
         if (tx, ty) == (px, py):
             return []
+        solid = ("#", "T") if self.surfing() else ("#", "T", "~")
         moves = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
         prev: dict[tuple[int, int], tuple[tuple[int, int], str]] = {}
         # Dijkstra: tall grass costs extra so routes avoid needless wild encounters.
@@ -1005,10 +1226,10 @@ class PokemonGen1Profile(GameProfile):
                     if D.LEDGE_DIR[c] != d:
                         continue
                     nx, ny = nx + dx, ny + dy
-                    if not (0 <= nx < w and 0 <= ny < h) or cells[ny][nx] in ("#",) or cells[ny][nx] in D.LEDGE_DIR:
+                    if not (0 <= nx < w and 0 <= ny < h) or cells[ny][nx] in solid or cells[ny][nx] in D.LEDGE_DIR:
                         continue
                     c = cells[ny][nx]
-                elif c == "#":
+                elif c in solid:
                     continue
                 if (nx, ny) in blocked and (nx, ny) != (tx, ty):
                     continue
@@ -1089,6 +1310,28 @@ class PokemonGen1Profile(GameProfile):
         if best is None:
             return None
         return best[1], best[2], sides[want]
+
+    def surfing(self) -> bool:
+        return self._u8(D.WALK_BIKE_SURF) == 2
+
+    def route_hint(self, tx: int, ty: int) -> str:
+        try:
+            cells = self.full_map_cells()
+        except Exception:  # pragma: no cover
+            return ""
+        h, w = len(cells), len(cells[0]) if cells else 0
+        c = cells[ty][tx] if 0 <= tx < w and 0 <= ty < h else "#"
+        if c == "~":
+            return "the target is water: stand at the shore facing it and manage('field', 'Surf') first"
+        if c == "T":
+            return "the target is a small tree: stand next to it facing it and manage('field', 'Cut') removes it"
+        flat = {ch for row in cells for ch in row}
+        notes = []
+        if "T" in flat:
+            notes.append("a small tree (T) may block the way: face it and manage('field', 'Cut')")
+        if "~" in flat and not self.surfing():
+            notes.append("water (~) needs Surf: face it and manage('field', 'Surf')")
+        return "; ".join(notes)
 
     def place_names(self) -> list[str]:
         if not self.started():
@@ -1218,7 +1461,8 @@ class PokemonGen1Profile(GameProfile):
         if 0 <= px < w and 0 <= py < h:
             cells[py][px] = "P"
         head = (f"{D.map_name(m)} {w}x{h}, you at ({px},{py}) facing {self.facing()}. "
-                "x→ right, y↓ down. P=you N=npc D=door/warp #=blocked .=walkable ,=tall grass v<>=one-way ledge")
+                "x→ right, y↓ down. P=you N=npc D=door/warp #=blocked .=walkable ,=tall grass v<>=one-way ledge "
+                "~=water (Surf) T=small tree (Cut)")
         ruler = "   " + "".join(str(x % 10) for x in range(w))
         body = "\n".join(f"{y:2d} " + "".join(row) for y, row in enumerate(cells))
         exits = ", ".join(f"({wx},{wy})→{self.map_label(d)}" for wx, wy, d in self.warps()[:12])

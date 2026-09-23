@@ -47,7 +47,7 @@ MAX_PRESSES = 100
 _GOTO = re.compile(r"^(?:to|goto)\s*\(?\s*(?P<x>\d+)\s*[, ]\s*(?P<y>\d+)\s*\)?$", re.I)
 _GOTO_NAME = re.compile(r"^(?:to|goto)\s+(?P<name>[^\d].*)$", re.I)
 MAX_HOLD = 600
-MAX_STEPS = 40
+MAX_STEPS = 60
 MAX_WAIT = 3600
 
 
@@ -353,6 +353,7 @@ class Emulator:
             elif self.profile.is_text_visible():
                 stop_reason = "dialogue appeared"
         self._after_action()
+        self.profile.last_stop = stop_reason
         out = "walked " + ", ".join(report)
         if stop_reason:
             out += f" — stopped: {stop_reason}"
@@ -368,12 +369,13 @@ class Emulator:
             if segs is None:
                 pos = prof.position()
                 self._after_action()
+                why = getattr(prof, "route_hint", lambda x, y: "")(tx, ty)
                 return (f"no walkable route from ({pos[1]},{pos[2]}) to ({tx},{ty}) on this map"
-                        + (" — " + ", ".join(report) if report else ""))
+                        + (" — " + ", ".join(report) if report else "") + (f" — {why}" if why else ""))
             if not segs:
                 break
             total = sum(n for _, n in segs)
-            if total > 200:
+            if total > 300:
                 self._after_action()
                 return f"route to ({tx},{ty}) is {total} steps; move closer first"
             for direction, n in segs:
@@ -415,6 +417,7 @@ class Emulator:
         self._after_action()
         pos = prof.position()
         arrived = pos is not None and (pos[1], pos[2]) == (tx, ty)
+        prof.last_stop = stop_reason or (None if arrived else "blocked")
         if arrived and not report:
             out = f"already at ({tx},{ty})"
         else:
@@ -717,6 +720,7 @@ class Emulator:
 
     def _after_action(self) -> list[str]:
         self.actions += 1
+        self.profile.last_stop = None            # walk helpers set it again right after this
         try:
             self.profile.after_action()
         except Exception as e:  # pragma: no cover

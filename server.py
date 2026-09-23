@@ -96,7 +96,7 @@ def build_server(emu: Emulator) -> FastMCP:
             return _respond("walk", head, None)
         return _observe("walk", head, screenshot, with_map=True)
 
-    @tool(description="Battle helper (Pokémon): action 'fight' (target = move name or 1-4), 'auto' (keep attacking with damaging moves until the battle ends, a question appears, or HP is low; target = preferred move), 'run', 'switch' (target = party number or name; also answers 'Bring out which POKéMON?'), 'item' (target = item name). Returns what happened plus HP changes; stops on YES/NO or learn-move prompts so you can answer with press().")
+    @tool(description="Battle helper (Pokémon): action 'fight' (target = move name or 1-4), 'auto' (keep attacking with damaging moves until the battle ends, a question appears, or HP is low; target = preferred move), 'run', 'switch' (target = party number or name; also answers 'Bring out which POKéMON?'), 'item' (target = item name, optionally 'Potion: Pidgey' to pick who gets it; in the Safari Zone it throws a Safari Ball), 'bait' / 'rock' (Safari Zone). Returns what happened plus HP changes; stops on YES/NO or learn-move prompts so you can answer with press().")
     def battle(action: str = "fight", target: str = "", screenshot: bool = False) -> list:
         if (blocked := _guard("battle")) is not None:
             return blocked
@@ -115,7 +115,7 @@ def build_server(emu: Emulator) -> FastMCP:
             return blocked
         return _respond("shop", emu.shop(item, qty), None)
 
-    @tool(description="Menu helper (Pokémon, outside battle): action 'lead' (target = Pokémon name/number to put first), 'swap' (two party slots), 'use' (target = item name, target2 = Pokémon for Potions etc.), 'save' (in-game save). Handles the START menu for you.")
+    @tool(description="Menu helper (Pokémon, outside battle): action 'lead' (target = Pokémon name/number to put first), 'swap' (two party slots), 'use' (target = item name, target2 = Pokémon for Potions/TMs/HMs; 'Charmander: Growl' names the move to forget when it already knows 4), 'field' (target = Cut/Surf/Strength/Flash/Fly/Dig/Teleport while facing the tree/water/boulder; target2 = town for Fly), 'save' (in-game save). Handles the START menu for you.")
     def manage(action: str, target: str = "", target2: str = "") -> list:
         if (blocked := _guard("manage")) is not None:
             return blocked

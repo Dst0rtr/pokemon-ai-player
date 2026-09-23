@@ -24,6 +24,8 @@ class GameProfile:
     name = "generic"
     #: Extra guidance appended to the MCP server instructions for the agent.
     agent_hints = ""
+    #: Why the last walk stopped ("blocked", "entered X", ...), set by the emulator; None after other actions.
+    last_stop: Optional[str] = None
 
     def __init__(self, pyboy: "PyBoy", options: dict[str, Any] | None = None):
         self.pyboy = pyboy
@@ -105,6 +107,10 @@ class GameProfile:
     def resolve_target(self, name: str):
         """Turn a place name into (x, y, edge_direction) for walk('to <name>'), or None."""
         return None
+
+    def route_hint(self, tx: int, ty: int) -> str:
+        """Why a route to (tx, ty) may be impossible (water, obstacles...); empty if unknown."""
+        return ""
 
     def battle_action(self, emu, action: str, target: str = "") -> str:
         return "this game profile has no battle helper; use press()"

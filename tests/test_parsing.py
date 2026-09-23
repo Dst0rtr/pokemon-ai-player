@@ -37,7 +37,7 @@ def test_parse_walk_path():
     assert isinstance(Emulator._parse_walk(None, "north 2"), str)
     assert isinstance(Emulator._parse_walk(None, "up 0"), str)
     assert isinstance(Emulator._parse_walk(None, ""), str)
-    assert Emulator._parse_walk(None, "up 999")[0][1] == 40  # clamped
+    assert Emulator._parse_walk(None, "up 999")[0][1] == 60  # clamped
 
 
 def test_parse_addr():
@@ -67,3 +67,15 @@ def test_gen1_tables():
 def test_instructions_are_compact():
     from server import GUIDE
     assert len(GUIDE) < 1500, "keep the agent guide short: it is sent with every request"
+
+
+def test_safari_battle_menu_cursor():
+    from games.pokemon_gen1 import PokemonGen1Profile
+    cur = PokemonGen1Profile._main_menu_cursor
+    assert cur(None, "▶BALL×      BAIT\n THROW ROCK  RUN") == (0, 0)
+    assert cur(None, " BALL×     ▶BAIT\n THROW ROCK  RUN") == (1, 0)
+    assert cur(None, " BALL×      BAIT\n▶THROW ROCK  RUN") == (0, 1)
+    assert cur(None, " BALL×      BAIT\n THROW ROCK ▶RUN") == (1, 1)
+    assert cur(None, "▶FIGHT  PKMN\n ITEM   RUN") == (0, 0)
+    assert cur(None, " FIGHT  PKMN\n ITEM  ▶RUN") == (1, 1)
+    assert cur(None, "some text ▼") is None

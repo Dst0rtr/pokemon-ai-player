@@ -455,3 +455,132 @@ def test_world_graph_survives_restart(rom_path, scratch, in_game_state):
     assert e2.profile.position()[0] == 38
     e2.pyboy.stop(save=False)
     e2.pyboy = None
+
+
+def _encode(text: str) -> list[int]:
+    from games import gen1_data as D
+    rev = {v: k for k, v in D.CHARMAP.items() if len(v) == 1}
+    return [rev[c] for c in text] + [0x50]
+
+
+def _inject_mon(emu, slot: int, species: int, level: int, moves: list[int], hp: int = 30, nick: str = "MON"):
+    """Write a party member straight into RAM (species is the internal index)."""
+    from games import gen1_data as D
+    mem = emu.pyboy.memory
+    mem[D.PARTY_COUNT] = max(mem[D.PARTY_COUNT], slot + 1)
+    mem[D.PARTY_COUNT + 1 + slot] = species
+    mem[D.PARTY_COUNT + 2 + slot] = 0xFF
+    base = D.PARTY_MONS + slot * D.PARTY_MON_SIZE
+    for i in range(D.PARTY_MON_SIZE):
+        mem[base + i] = 0
+    mem[base + D.MON_SPECIES] = species
+    mem[base + D.MON_HP], mem[base + D.MON_HP + 1] = hp >> 8, hp & 0xFF
+    mem[base + D.MON_LEVEL] = level
+    mem[base + 3] = level                                 # box level byte
+    mem[base + D.MON_MAX_HP], mem[base + D.MON_MAX_HP + 1] = hp >> 8, hp & 0xFF
+    for j in range(4):
+        mem[base + D.MON_MOVES + j] = moves[j] if j < len(moves) else 0
+        mem[base + D.MON_PP + j] = 20 if j < len(moves) else 0
+    for j, stat in enumerate((20, 20, 20, 20)):
+        mem[base + D.MON_ATTACK + 2 * j], mem[base + D.MON_ATTACK + 2 * j + 1] = 0, stat
+    enc = _encode(nick.upper())
+    for i, b in enumerate(enc):
+        mem[D.PARTY_NICKS + slot * D.NAME_LEN + i] = b
+    for i, b in enumerate(_encode("RED")):                # OT name
+        mem[0xD273 + slot * D.NAME_LEN + i] = b
+
+
+def _give_item(emu, item: int, qty: int = 1):
+    from games import gen1_data as D
+    mem = emu.pyboy.memory
+    n = mem[D.BAG_COUNT] if mem[D.BAG_COUNT] <= 20 else 0
+    mem[D.BAG_ITEMS + 2 * n], mem[D.BAG_ITEMS + 2 * n + 1] = item, qty
+    mem[D.BAG_ITEMS + 2 * n + 2] = 0xFF
+    mem[D.BAG_COUNT] = n + 1
+
+
+def _to_pallet(emu):
+    emu.walk("right 2, up 5, right 2")
+    emu.walk("down 6, left 4, down 1")
+    assert emu.profile.position()[0] == 0
+
+
+def test_pathfinder_never_crosses_a_warp_en_route(emu):
+    emu.walk("right 2, up 5, right 2")                     # Red's House 1F, arriving on the stairs
+    prof = emu.profile
+    warps = {(x, y) for x, y, _ in prof.warps()}
+    cells = prof.full_map_cells()
+    _, px, py = prof.position()
+    row = len(cells) - 1                                   # bottom row holds the exit door tiles
+    targets = [x for x in range(len(cells[0])) if cells[row][x] == "." and (x, row) not in warps]
+    assert targets
+    for tx in targets:
+        segs = prof.find_path(tx, row)
+        assert segs is not None
+        x, y = px, py
+        for d, n in segs:
+            dx, dy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}[d]
+            for _ in range(n):
+                x, y = x + dx, y + dy
+                assert (x, y) not in warps or (x, y) == (tx, row), (tx, segs)
+        assert (x, y) == (tx, row)
+    r = emu.walk(f"to {targets[0]},{row}")
+    assert r.startswith("arrived") and "entered" not in r, r
+
+
+def test_water_marked_and_surf_field_move(emu):
+    from games import gen1_data as D
+
+    _to_pallet(emu)
+    m = emu.state("map")
+    rows = [ln[3:] for ln in m.split("\n")[2:20]]
+    assert rows[15][5] == "~" and rows[15][6] == "~", m     # the pond south of town
+    r = emu.walk("to 5,15")
+    assert r.startswith("no walkable route") and "Surf" in r, r
+    assert emu.walk("to 5,13").startswith("arrived")
+    r = emu.walk("down 1")                                 # bump into the water
+    assert "blocked" in r
+    assert "Surf" in emu.profile.hint(), emu.profile.hint()
+    assert "no Pokémon in the party knows Surf" in emu.manage("field", "Surf")
+    _inject_mon(emu, 0, 0xB1, 30, [57, 33], nick="SQUIRTLE")   # Squirtle with Surf + Tackle
+    emu.pyboy.memory[D.BADGES] |= 0x10                      # Soul Badge
+    r = emu.manage("field", "Surf")
+    assert emu.profile.surfing(), r
+    assert "surfing" in r and emu.profile.position()[1:] == (5, 14)   # Surf steps onto the first water tile
+    r = emu.walk("down 2")
+    assert r.startswith("walked down 2/2"), r
+    assert emu.profile.position()[1:] == (5, 16)
+    assert emu.profile.find_path(6, 16) is not None         # water is walkable while surfing
+
+
+def test_manage_use_teaches_hm_and_asks_which_move_to_forget(emu):
+    from games import gen1_data as D
+
+    _inject_mon(emu, 0, 0xB0, 12, [10, 45, 52, 43], nick="CHARMANDER")   # Scratch Growl Ember Leer
+    _give_item(emu, 0xC4)                                                 # HM01 Cut
+    r = emu.manage("use", "HM01", "Charmander")
+    assert "Growl" in r and "move to forget" in r, r
+    assert [n for n, _ in emu.profile.party()[0]["moves"]] == ["Scratch", "Growl", "Ember", "Leer"]
+    assert not (emu.screen_text() or "").strip()                          # menus closed again
+    r = emu.manage("use", "HM01", "Charmander: Growl")
+    moves = [n for n, _ in emu.profile.party()[0]["moves"]]
+    assert "Cut" in moves and "Growl" not in moves, (r, moves)
+    assert "learned" in r.lower(), r
+    assert D.item_name(emu.pyboy.memory[D.BAG_ITEMS]) == "HM01"           # HMs are not consumed
+    assert not (emu.screen_text() or "").strip()
+    _inject_mon(emu, 1, 0xB1, 12, [33], nick="SQUIRTLE")
+    r = emu.manage("use", "HM01", "Squirtle")                              # Squirtle cannot learn Cut in Gen 1
+    assert "can't learn" in r and [n for n, _ in emu.profile.party()[1]["moves"]] == ["Tackle"], r
+    _inject_mon(emu, 2, 0x99, 12, [33], nick="BULBASAUR")
+    r = emu.manage("use", "HM01", "Bulbasaur")                             # room for a 2nd move: no question asked
+    assert "Cut" in [n for n, _ in emu.profile.party()[2]["moves"]], r
+
+
+def test_manage_use_potion_on_named_pokemon(emu):
+    _inject_mon(emu, 0, 0xB0, 12, [10], hp=30, nick="CHARMANDER")
+    _inject_mon(emu, 1, 0xB1, 12, [33], hp=30, nick="SQUIRTLE")
+    emu.pyboy.memory[0xD16B + 44 + 2] = 5                                  # Squirtle at 5/30
+    _give_item(emu, 0x14, 2)                                               # Potion x2
+    r = emu.manage("use", "Potion", "Squirtle")
+    assert emu.profile.party()[1]["hp"] == 25, r
+    assert "Potion×1" in r, r

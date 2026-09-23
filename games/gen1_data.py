@@ -308,7 +308,10 @@ FIELD_MOVES = ("Cut", "Fly", "Surf", "Strength", "Flash", "Dig", "Teleport", "So
 # Tiles the pathfinder must know beyond the walkable list (pokered tileset graphics):
 # water (surfable) in the overworld tileset, cuttable trees in the overworld (0) and gym (7) tilesets.
 WATER_TILE = 0x14
+WATER_TILESETS = {0, 3, 5, 7, 13, 14, 17, 22, 23}      # pokered WaterTilesets: where tile $14 is surfable water
 CUT_TREE_TILES = {0: 0x3D, 7: 0x50}
+TILE_IN_FRONT = 0xCFC6      # wTileInFrontOfPlayer: what Cut / Surf / talking would act on
+PLAYER_MON_NUMBER = 0xCC2F  # wPlayerMonNumber: party index of the Pokémon currently in battle
 # ROM map header table (pokered MapHeaderPointers / MapHeaderBanks): header = tileset, height, width, ...
 MAP_HEADER_PTRS = 0x01AE
 MAP_HEADER_BANKS = 0xC23D
