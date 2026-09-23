@@ -52,7 +52,9 @@ PLAY_TIME_SECONDS = 0xDA44
 PLAY_TIME_FRAMES = 0xDA45
 BOX_COUNT = 0xDA80          # current PC box: count, then species list (0xFF terminated)
 BOX_SPECIES = 0xDA81
-NUM_HOF_TEAMS = 0xD5A0      # incremented each Hall of Fame entry (= Champion defeated)
+BOX_NUM = 0xD5A0            # wCurrentBoxNum (bit 7 = box switched); NOT the Hall of Fame counter
+NUM_HOF_TEAMS = 0xD5A2      # wNumHoFTeams: incremented each Hall of Fame entry (= Champion defeated)
+WALK_BIKE_SURF = 0xD700     # wWalkBikeSurfState: 0 walking, 1 bicycle, 2 surfing
 SFX_CHANNELS = 0xC02A       # wChannelSoundIDs[4..7]: non-zero while a sound effect / jingle plays
 SPRITE_STATE_1 = 0xC100     # 16 sprites x 16 bytes; +0 picture id, +9 facing (0 down,4 up,8 left,0xC right)
 SPRITE_STATE_2 = 0xC200     # +4 map y + 4, +5 map x + 4
@@ -248,16 +250,16 @@ MAPS.update({
     63: "Cerulean Trade House", 64: "Cerulean Poké Center", 65: "Cerulean Gym",
     66: "Bike Shop", 67: "Cerulean Mart", 68: "Mt. Moon Poké Center",
     70: "Route 5 Gate", 71: "Underground Path (Route 5)", 72: "Daycare", 73: "Route 6 Gate",
-    74: "Underground Path (Route 6)", 75: "Route 7 Gate", 76: "Underground Path (Route 7)",
-    78: "Route 8 Gate", 79: "Underground Path (Route 8)", 80: "Rock Tunnel Poké Center",
-    81: "Rock Tunnel 1F", 82: "Power Plant", 83: "Route 11 Gate 1F",
-    84: "Diglett's Cave (Route 11 side)", 85: "Route 11 Gate 2F", 86: "Route 12 Gate 1F",
-    87: "Bill's House", 88: "Vermilion Poké Center", 89: "Pokémon Fan Club",
-    90: "Vermilion Mart", 91: "Vermilion Gym", 92: "Vermilion Pidgey House",
-    93: "Vermilion Dock", 94: "S.S. Anne 1F", 95: "S.S. Anne 2F", 96: "S.S. Anne 3F",
-    97: "S.S. Anne B1F", 98: "S.S. Anne Bow", 99: "S.S. Anne Kitchen",
-    100: "S.S. Anne Captain's Room", 101: "S.S. Anne 1F Rooms", 102: "S.S. Anne 2F Rooms",
-    103: "S.S. Anne B1F Rooms", 108: "Victory Road 1F", 113: "Lance's Room",
+    74: "Underground Path (Route 6)", 75: "Underground Path (Route 6) copy", 76: "Route 7 Gate",
+    77: "Underground Path (Route 7)", 78: "Underground Path (Route 7) copy", 79: "Route 8 Gate",
+    80: "Underground Path (Route 8)", 81: "Rock Tunnel Poké Center", 82: "Rock Tunnel 1F",
+    83: "Power Plant", 84: "Route 11 Gate 1F", 85: "Diglett's Cave (Route 11 side)",
+    86: "Route 11 Gate 2F", 87: "Route 12 Gate 1F", 88: "Bill's House", 89: "Vermilion Poké Center",
+    90: "Pokémon Fan Club", 91: "Vermilion Mart", 92: "Vermilion Gym", 93: "Vermilion Pidgey House",
+    94: "Vermilion Dock", 95: "S.S. Anne 1F", 96: "S.S. Anne 2F", 97: "S.S. Anne 3F",
+    98: "S.S. Anne B1F", 99: "S.S. Anne Bow", 100: "S.S. Anne Kitchen",
+    101: "S.S. Anne Captain's Room", 102: "S.S. Anne 1F Rooms", 103: "S.S. Anne 2F Rooms",
+    104: "S.S. Anne B1F Rooms", 108: "Victory Road 1F", 113: "Lance's Room",
     118: "Hall of Fame", 119: "Underground Path N-S", 120: "Champion's Room",
     121: "Underground Path W-E", 122: "Celadon Mart 1F", 123: "Celadon Mart 2F",
     124: "Celadon Mart 3F", 125: "Celadon Mart 4F", 126: "Celadon Mart Roof",
@@ -294,10 +296,30 @@ MAPS.update({
     223: "Safari Zone West Rest House", 224: "Safari Zone East Rest House",
     225: "Safari Zone North Rest House", 226: "Cerulean Cave 2F", 227: "Cerulean Cave B1F",
     228: "Cerulean Cave 1F", 229: "Name Rater's House", 230: "Cerulean Badge House",
-    234: "Rock Tunnel B1F", 235: "Silph Co. 9F", 236: "Silph Co. 10F", 237: "Silph Co. 11F",
-    238: "Silph Co. Elevator", 245: "Trade Center", 246: "Colosseum", 248: "Lorelei's Room",
-    249: "Bruno's Room", 250: "Agatha's Room",
+    232: "Rock Tunnel B1F", 233: "Silph Co. 9F", 234: "Silph Co. 10F", 235: "Silph Co. 11F",
+    236: "Silph Co. Elevator", 239: "Trade Center", 240: "Colosseum", 245: "Lorelei's Room",
+    246: "Bruno's Room", 247: "Agatha's Room",
 })
+
+
+# Rooms holding exactly one trainer each: leaving the battle victorious in one of them is a defeat milestone.
+E4_ROOMS = {245: "Lorelei", 246: "Bruno", 247: "Agatha", 113: "Lance", 120: "Champion"}
+FIELD_MOVES = ("Cut", "Fly", "Surf", "Strength", "Flash", "Dig", "Teleport", "Softboiled")
+# Tiles the pathfinder must know beyond the walkable list (pokered tileset graphics):
+# water (surfable) in the overworld tileset, cuttable trees in the overworld (0) and gym (7) tilesets.
+WATER_TILE = 0x14
+CUT_TREE_TILES = {0: 0x3D, 7: 0x50}
+# ROM map header table (pokered MapHeaderPointers / MapHeaderBanks): header = tileset, height, width, ...
+MAP_HEADER_PTRS = 0x01AE
+MAP_HEADER_BANKS = 0xC23D
+
+
+def map_header(rom: bytes, map_id: int) -> tuple[int, int, int, int]:
+    """(bank, tileset, height, width) of a map header read straight from a ROM image."""
+    ptr = rom[MAP_HEADER_PTRS + 2 * map_id] | (rom[MAP_HEADER_PTRS + 2 * map_id + 1] << 8)
+    bank = rom[MAP_HEADER_BANKS + map_id]
+    off = bank * 0x4000 + (ptr - 0x4000)
+    return bank, rom[off], rom[off + 1], rom[off + 2]
 
 
 def map_name(idx: int) -> str:

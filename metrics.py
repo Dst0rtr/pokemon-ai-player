@@ -20,6 +20,9 @@ from typing import Any, Optional
 
 log = logging.getLogger("gameboy.metrics")
 
+# List-valued snapshot keys worth keeping per milestone (the team at each badge etc.); other lists are dropped.
+_SNAPSHOT_LISTS = {"party", "team"}
+
 
 @dataclass
 class Milestone:
@@ -85,7 +88,8 @@ class MetricsTracker:
     def _add(self, name: str, snapshot: dict[str, Any]) -> None:
         m = Milestone(name=name, frame=self.frames, elapsed_s=round(time.time() - self.start_time, 1),
                       tool_calls=sum(self.tool_calls.values()), at=datetime.now().isoformat(timespec="seconds"),
-                      snapshot={k: v for k, v in snapshot.items() if not isinstance(v, (list, dict))})
+                      snapshot={k: v for k, v in snapshot.items()
+                                if not isinstance(v, (list, dict)) or k in _SNAPSHOT_LISTS})
         self.milestones.append(m)
         log.info("[milestone] %s", name)
 

@@ -32,7 +32,8 @@ _DEX_BY_NAME = {n: i + 1 for i, n in enumerate(_DEX)}
 _DEX_BY_NAME["Mr. Mime"] = _DEX_BY_NAME["Mr.Mime"]
 
 # Maps worth reporting as "reached" milestones (towns, routes, dungeons).
-_LANDMARKS = set(range(0, 37)) | {59, 81, 82, 94, 108, 118, 142, 156, 165, 174, 181, 192, 199, 228}
+_LANDMARKS = set(range(0, 37)) | {59, 82, 83, 94, 108, 113, 118, 120, 142, 156, 159, 165, 174, 181, 192, 194, 198,
+                                  199, 217, 218, 219, 220, 228, 232, 245, 246, 247}
 
 _BATTLE_KIND = {1: "wild", 2: "trainer"}
 _STATUS_MOVES = {"Growl", "Tail Whip", "String Shot", "Leer", "Sand-Attack", "Harden", "Withdraw", "Defense Curl",
@@ -67,6 +68,7 @@ class PokemonGen1Profile(GameProfile):
         self._block_cache: dict[tuple[int, int, int], bytes] = {}
         self._coll_cache: dict[int, frozenset] = {}
         self.world: dict[int, dict] = {}        # visited map id -> {"warps": [(x,y,dest)], "conns": [(side,dest)]}
+        self._starter_reported = False
 
     # ------------------------------------------------------------------ #
     # memory helpers
@@ -97,6 +99,8 @@ class PokemonGen1Profile(GameProfile):
         self.visited.add(self._u8(D.CUR_MAP))
         if self.started():   # resumed/loaded game: what is already owned is not a new capture
             self._reported_owned |= self.dex_owned_set() & self.have_dex_numbers()
+            if self.party():
+                self._starter_reported = True
 
     def after_action(self) -> None:
         self._enforce_options()
@@ -1250,6 +1254,10 @@ class PokemonGen1Profile(GameProfile):
             "party_count": len(party),
             "max_level": max((p["level"] for p in party), default=0),
             "party": [f"{p['species']} L{p['level']}" for p in party],
+            "team": [{"species": p["species"], "nick": p["nick"], "level": p["level"], "hp": p["hp"],
+                      "max_hp": p["max_hp"], "status": p["status"], "types": p["types"],
+                      "moves": [[n, pp] for n, pp in p["moves"]], "stats": list(p["stats"])} for p in party],
+            "surfing": self._u8(D.WALK_BIKE_SURF) == 2,
             "money": self.money(),
             "map": m,
             "map_name": D.map_name(m),
@@ -1286,11 +1294,19 @@ class PokemonGen1Profile(GameProfile):
         for n in sorted(confirmed):
             out.append(evolved.get(n, f"obtained: {_DEX[n - 1]}"))
         self._reported_owned |= confirmed
+        # The starter: the only time a party grows from empty (you can never deposit your last Pokémon).
+        if not self._starter_reported and prev.get("party_count", 0) == 0 and cur.get("party_count", 0) >= 1 and cur_party:
+            self._starter_reported = True
+            out.append(f"starter: {cur_party[0].rsplit(' L', 1)[0]}")
+        # Elite Four / Champion rooms hold one trainer each: a trainer battle ending normally (not with
+        # the 0xFF loss flag) while still in that room means that member was defeated.
+        m = cur.get("map")
+        if prev.get("in_battle") == 2 and cur.get("in_battle") == 0 and prev.get("map") == m and m in D.E4_ROOMS:
+            out.append(f"defeated: {D.E4_ROOMS[m]}")
         if cur.get("hall_of_fame", 0) > prev.get("hall_of_fame", 0):
             out.append("champion defeated (Hall of Fame)")
         if cur.get("in_battle") == 0xFF and prev.get("in_battle") != 0xFF:
             out.append("blacked out (lost a battle)")
-        m = cur.get("map")
         if m != prev.get("map") and m in _LANDMARKS and m not in self._reported_maps:
             self._reported_maps.add(m)
             out.append(f"reached: {D.map_name(m)}")

@@ -280,3 +280,86 @@ def test_cross_map_routing_through_explored_maps(emu):
     r = emu.walk("to Red's House 2F")                                    # two hops back through 1F
     assert "entered Red's House 2F" in r, r
     assert emu.profile.position()[0] == 38
+
+
+def test_map_table_matches_rom_headers(rom_path):
+    from games import gen1_data as D
+
+    rom = rom_path.read_bytes()
+    # (tileset, height, width) straight from the ROM; tilesets: 2 mart, 5 dojo, 6 poké center, 7 gym,
+    # 14 ship port, 15 cemetery, 17 cavern, 18 lobby, 22 facility.
+    expect = {40: (5, 6, 5), 41: (6, 4, 7), 59: (17, 18, 20), 81: (6, 4, 7), 82: (17, 18, 20), 83: (22, 18, 20),
+              91: (2, 4, 4), 92: (7, 9, 5), 94: (14, 6, 14), 113: (5, 13, 13), 118: (7, 4, 5), 120: (7, 4, 4),
+              174: (2, 6, 8), 232: (17, 18, 20), 236: (18, 2, 2), 245: (7, 6, 5), 246: (7, 6, 5), 247: (15, 6, 5)}
+    for mid, want in expect.items():
+        assert D.map_header(rom, mid)[1:] == want, (mid, D.map_name(mid), D.map_header(rom, mid))
+    for mid in D.MAPS:                                   # every named map has a sane header (no unused slots)
+        bank, tileset, h, w = D.map_header(rom, mid)
+        assert bank <= 0x2D and tileset <= 23 and 1 <= w <= 80 and 1 <= h <= 80, (mid, D.map_name(mid))
+    assert D.map_name(82) == "Rock Tunnel 1F" and D.map_name(92) == "Vermilion Gym"
+    assert D.map_name(245) == "Lorelei's Room" and D.map_name(120) == "Champion's Room"
+
+
+def test_hall_of_fame_milestone_uses_the_counter_not_the_box_number(emu):
+    emu.metrics.restart("hof")
+    emu.pyboy.memory[0xD5A0] = 1                       # switching PC box must not count
+    emu.wait(1)
+    assert "champion defeated (Hall of Fame)" not in [m.name for m in emu.metrics.milestones]
+    emu.pyboy.memory[0xD5A2] = 1                       # wNumHoFTeams
+    emu.wait(1)
+    assert "champion defeated (Hall of Fame)" in [m.name for m in emu.metrics.milestones]
+
+
+def test_starter_milestone(emu):
+    emu.metrics.restart("starter")
+    mem = emu.pyboy.memory
+    mem[0xD163] = 1                                    # a Charmander appears in the (empty) party
+    mem[0xD164] = 0xB0
+    mem[0xD16B] = 0xB0
+    emu.wait(1)
+    names = [m.name for m in emu.metrics.milestones]
+    assert names.count("starter: Charmander") == 1, names
+    mem[0xD163] = 0
+    emu.wait(1)
+    mem[0xD163] = 1
+    emu.wait(1)
+    assert [m.name for m in emu.metrics.milestones].count("starter: Charmander") == 1   # never twice
+
+
+def test_elite_four_defeat_milestone(emu):
+    # Pure snapshot logic: the room ids and battle flags are fed in directly.
+    prof = emu.profile
+    base = emu.profile.snapshot()
+    prev = {**base, "map": 174, "in_battle": 0}
+    cur = {**base, "map": 245, "in_battle": 2}
+    assert "reached: Lorelei's Room" in prof.milestones(prev, cur)
+    won = {**cur, "in_battle": 0}
+    assert "defeated: Lorelei" in prof.milestones(cur, won)
+    lost = {**cur, "in_battle": 0xFF}
+    out = prof.milestones(cur, lost)
+    assert "blacked out (lost a battle)" in out and not any(n.startswith("defeated") for n in out)
+    teleported = {**cur, "map": 174, "in_battle": 0}
+    assert not any(n.startswith("defeated") for n in prof.milestones(cur, teleported))
+    champ = {**base, "map": 120, "in_battle": 2}
+    assert "defeated: Champion" in prof.milestones(champ, {**champ, "in_battle": 0})
+    hof = {**champ, "in_battle": 0, "hall_of_fame": 1}
+    assert "champion defeated (Hall of Fame)" in prof.milestones({**champ, "in_battle": 0}, hof)
+
+
+def test_milestone_snapshot_includes_team(emu):
+    emu.metrics.restart("team")
+    mem = emu.pyboy.memory
+    mem[0xD163] = 1                                    # one Bulbasaur L5 20/20
+    mem[0xD164] = 0x99
+    base = 0xD16B
+    mem[base] = 0x99
+    mem[base + 1], mem[base + 2] = 0, 20
+    mem[base + 33] = 5
+    mem[base + 34], mem[base + 35] = 0, 20
+    mem[0xD356] = 0b00000001                           # Boulder badge
+    emu.wait(1)
+    m = next(m for m in emu.metrics.milestones if m.name == "badge: Boulder")
+    team = m.snapshot["team"]
+    assert team[0]["species"] == "Bulbasaur" and team[0]["level"] == 5 and len(team[0]["stats"]) == 4
+    assert "owned_set" not in m.snapshot                # other lists are still dropped
+    assert m.snapshot["party"] == ["Bulbasaur L5"]

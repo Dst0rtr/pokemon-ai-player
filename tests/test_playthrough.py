@@ -97,6 +97,7 @@ def test_opening_playthrough(rom_path, scratch):
     assert re.search(r"Charmander L5 \d+/\d+", out) and "obtained: Charmander" in out   # HP varies with DVs
     names = [m.name for m in emu.metrics.milestones]
     assert [n for n in names if n.startswith("obtained:")] == ["obtained: Charmander"], names
+    assert [n for n in names if n.startswith("starter:")] == ["starter: Charmander"], names
     party = _text(state(section="party"))
     assert "Scratch 35pp" in party and "Fire" in party
 
