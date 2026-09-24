@@ -364,8 +364,9 @@ class Emulator:
         prof = self.profile
         report: list[str] = []
         stop_reason = None
+        avoid: set = set()                          # cells that turned out solid (NPC, boulder, hidden object)
         for attempt in range(4):
-            segs = prof.find_path(tx, ty)
+            segs = prof.find_path(tx, ty, avoid) if avoid else prof.find_path(tx, ty)
             if segs is None:
                 pos = prof.position()
                 self._after_action()
@@ -386,7 +387,11 @@ class Emulator:
                     break
             if stop_reason != "blocked":
                 break
-            stop_reason = None                      # an NPC probably stepped in the way: re-plan
+            stop_reason = None                      # something is in the way: remember the cell and re-plan
+            pos = prof.position()
+            if pos is not None:
+                dx, dy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}[direction]
+                avoid.add((pos[1] + dx, pos[2] + dy))
             self.tick(30)
         pos = prof.position()
         if (_retry and stop_reason in (None, "blocked") and pos is not None and (pos[1], pos[2]) != (tx, ty)

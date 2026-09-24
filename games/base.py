@@ -100,8 +100,9 @@ class GameProfile:
     def map_label(self, map_id: int) -> str:
         return f"map {map_id}"
 
-    def find_path(self, tx: int, ty: int):
-        """Return [(direction, steps), ...] to reach (tx, ty) on the current map, or None."""
+    def find_path(self, tx: int, ty: int, avoid=frozenset()):
+        """Return [(direction, steps), ...] to reach (tx, ty) on the current map, or None.
+        `avoid`: cells found to be solid while walking (the emulator re-plans with them)."""
         return None
 
     def resolve_target(self, name: str):

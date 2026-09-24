@@ -596,10 +596,28 @@ def test_battle_reports_disabled_move(emu):
         mem[D.BATTLE_MON_PP + j] = 20
     mem[D.BATTLE_MON + 1], mem[D.BATTLE_MON + 2] = 0, 30
     mem[D.BATTLE_MON + 15], mem[D.BATTLE_MON + 16] = 0, 60
-    mem[D.PLAYER_DISABLED_MOVE], mem[D.PLAYER_DISABLED_MOVE_ID] = 0x34, 52
+    mem[D.PLAYER_DISABLED_MOVE] = 0x34                          # slot 3 (Ember), 4 turns
     b = emu.profile.battle()
     assert b["mine"]["disabled"] == "Ember"
     assert "Ember 20pp DISABLED" in emu.profile._mon_line(b["mine"], True)
-    mem[D.PLAYER_DISABLED_MOVE], mem[D.PLAYER_DISABLED_MOVE_ID] = 0, 0
+    mem[D.PLAYER_DISABLED_MOVE] = 0
     assert emu.profile.battle()["mine"]["disabled"] == ""
     mem[D.IS_IN_BATTLE] = 0
+
+
+def test_find_path_avoid_cells_are_walls(emu):
+    prof = emu.profile
+    _, px, py = prof.position()
+    segs = prof.find_path(7, 1)
+    d, n = segs[0]
+    dx, dy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}[d]
+    first = (px + dx, py + dy)
+    alt = prof.find_path(7, 1, avoid={first})
+    assert alt is None or alt != segs
+    if alt:
+        x, y = px, py
+        for d2, n2 in alt:
+            dx, dy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}[d2]
+            for _ in range(n2):
+                x, y = x + dx, y + dy
+                assert (x, y) != first

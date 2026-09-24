@@ -123,7 +123,9 @@ go("to 27,3", **BK)
 log("out of Mt. Moon:", state())
 if prof.position()[0] != 15:
     odd("not on Route 4 after Mt. Moon: " + state())
-travel("Cerulean City", **BK)
+go("to Cerulean City", **BK)                      # Route 4's east edge (a connection, not yet in the world graph)
+if prof.position()[0] != 3:
+    travel("Cerulean City", **BK)
 log("STAGE 1 done:", state(), state("party"))
 manage("save")
 

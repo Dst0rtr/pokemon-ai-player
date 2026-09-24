@@ -146,8 +146,8 @@ class ScriptedAgent:
                 r = battle("auto", pick)                  # routine fight: one call
             else:
                 r = battle("fight", pick)
-            if turns >= 30:
-                log("  long battle turn", turns, r[:160])
+            if turns >= 30 or turns <= 3:
+                log("  battle turn", turns, pick, "->", r[:160])
             if "needs a decision" in r:
                 if "learn" in r.lower() or "forget" in r.lower():
                     press("DOWN A")                       # don't learn, keep moves (simplest)
@@ -161,7 +161,7 @@ class ScriptedAgent:
                     battle("switch", str(alive[0]))
                 else:
                     press("A*3")
-            elif "DISABLED" in r or r.startswith("no PP left"):
+            elif "is DISABLED" in r or r.startswith("no PP left"):
                 bad_moves.add(pick)
             elif r.startswith(("could not", "cannot", "no move", "unknown")):
                 self.odd("battle helper: " + r[:150])

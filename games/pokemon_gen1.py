@@ -224,9 +224,13 @@ class PokemonGen1Profile(GameProfile):
     def _battle_mon(self, base: int, pp_addr: int, disabled_addr: int = 0) -> dict[str, Any]:
         moves = self._bytes(base + 8, 4)
         pp = self._bytes(pp_addr, 4)
-        dis = self._u8(disabled_addr) if disabled_addr else 0
+        disabled = ""
+        if disabled_addr:
+            slot = self._u8(disabled_addr) >> 4            # high nibble: disabled move slot 1-4 (0 = none)
+            if 1 <= slot <= 4 and moves[slot - 1]:
+                disabled = D.move_name(moves[slot - 1])
         return {
-            "disabled": D.move_name(dis) if dis and dis in moves else "",
+            "disabled": disabled,
             "species": D.species_name(self._u8(base)),
             "hp": self._u16(base + 1), "max_hp": self._u16(base + 15),
             "level": self._u8(base + 14), "status": D.status_name(self._u8(base + 4), self._u16(base + 1)),
@@ -242,8 +246,8 @@ class PokemonGen1Profile(GameProfile):
         return {
             "kind": _BATTLE_KIND.get(kind, "battle"),
             "safari": self._u8(D.BATTLE_TYPE) == 2,
-            "enemy": self._battle_mon(D.ENEMY_MON, D.ENEMY_MON_PP, D.ENEMY_DISABLED_MOVE_ID),
-            "mine": self._battle_mon(D.BATTLE_MON, D.BATTLE_MON_PP, D.PLAYER_DISABLED_MOVE_ID),
+            "enemy": self._battle_mon(D.ENEMY_MON, D.ENEMY_MON_PP, D.ENEMY_DISABLED_MOVE),
+            "mine": self._battle_mon(D.BATTLE_MON, D.BATTLE_MON_PP, D.PLAYER_DISABLED_MOVE),
         }
 
     def warps(self) -> list[tuple[int, int, int]]:
@@ -694,21 +698,23 @@ class PokemonGen1Profile(GameProfile):
                 emu.press("DOWN" if idx > cur else "UP", settle=1)
             emu.press("A", settle=1)
             txt = self.screen_text() or ""
-            if "▶" in txt and not self.dialog_text():                   # item wants a target Pokémon
+            d = self.dialog_text()
+            if "▶" in txt and ("which POK" in d or "Use item" in d):     # item wants a target Pokémon
                 party = self.party()
                 k = self._pick_party(emu, mon_target) if mon_target.strip() else None
                 if k is None:                                           # default: the Pokémon that is fighting
                     k = min(self._u8(D.PLAYER_MON_NUMBER), max(len(party) - 1, 0))
-                pnames = [self._norm(p["nick"] or p["species"]) for p in party]
-                cur = self._list_cursor(txt, pnames) or 0
-                steps = k - cur
-                if steps:
-                    emu.press(("DOWN " if steps > 0 else "UP ") * abs(steps), settle=1)
+                if not self._party_cursor_to(emu, k):
+                    emu.press("DOWN " * k if k else "W1", settle=1)
                 emu.press("A", settle=1)
         else:
             return "unknown action; use fight, run, switch, item, bait or rock"
 
         kind, log = self._wait_menu(emu)
+        if action == "fight" and kind == "main" and "move is disabled" in log.lower():
+            chosen = b["mine"]["moves"][idx][0] if b and idx < len(b["mine"]["moves"]) else target
+            usable = [n for n, pp in b["mine"]["moves"] if pp > 0 and n != chosen] if b else []
+            return f"{chosen} is DISABLED by the enemy for a few turns; usable: " + (", ".join(usable) or "none") + " — pick another move or switch"
         if prelog:
             log = prelog + " | " + log if log else prelog
         b2 = self.battle()
@@ -1205,8 +1211,9 @@ class PokemonGen1Profile(GameProfile):
             cells.append(row)
         return cells
 
-    def find_path(self, tx: int, ty: int) -> Optional[list[tuple[str, int]]]:
-        """BFS over the decoded map (NPCs count as walls). Returns straight-line segments."""
+    def find_path(self, tx: int, ty: int, avoid=frozenset()) -> Optional[list[tuple[str, int]]]:
+        """Dijkstra over the decoded map. NPC sprites are expensive rather than solid (some are hidden
+        by events, others wander off); cells in `avoid` were found solid by walking and are walls."""
         if self.in_battle() or not self.started():
             return None
         _, px, py = self.position()
@@ -1214,7 +1221,8 @@ class PokemonGen1Profile(GameProfile):
         h, w = len(cells), len(cells[0]) if cells else 0
         if not (0 <= tx < w and 0 <= ty < h):
             return None
-        blocked = {(nx, ny) for nx, ny in self.npcs()}
+        npc_cells = {(nx, ny) for nx, ny in self.npcs()}
+        blocked = set(avoid)
         # Never cross another warp on the way (stairs, ladders, teleport pads would whisk the player away).
         blocked |= {(wx, wy) for wx, wy, _ in self.warps() if (wx, wy) != (tx, ty)}
         if 0 <= tx < w and 0 <= ty < h and cells[ty][tx] in ("#",) and any((wx, wy) == (tx, ty) for wx, wy, _ in self.warps()):
@@ -1258,6 +1266,8 @@ class PokemonGen1Profile(GameProfile):
                 if (nx, ny) in blocked and (nx, ny) != (tx, ty):
                     continue
                 step = 4 if c == "," else 1
+                if (nx, ny) in npc_cells and (nx, ny) != (tx, ty):
+                    step += 40
                 nc = cost + step
                 if nc < dist.get((nx, ny), 1 << 30):
                     dist[(nx, ny)] = nc
