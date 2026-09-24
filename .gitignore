@@ -30,3 +30,6 @@ metrics/
 *.swp
 .DS_Store
 settings.local.json
+
+# Benchmark run directories (results/ is committed instead)
+bench/runs/

@@ -1,0 +1,1 @@
+You were interrupted and restarted; the game was restored from its autosave and your metrics session continues. Call `state("full")` and `metrics("report")` first to see where you are and read your notes, then keep playing toward the Champion. Do not stop until the server replies `BUDGET EXHAUSTED` or you enter the Hall of Fame.
