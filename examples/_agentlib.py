@@ -29,12 +29,13 @@ def _norm(x):
 
 
 class ScriptedAgent:
-    def __init__(self, emu):
+    def __init__(self, emu, max_odd=40):
         self.emu = emu
         self.T = {n: t.fn for n, t in build_server(emu)._tool_manager._tools.items()}
         self.prof = emu.profile
         self.ODD = []
         self.calls = 0
+        self.max_odd = max_odd
         self.t_start = time.time()
 
     # -- raw tool calls ------------------------------------------------------ #
@@ -62,6 +63,11 @@ class ScriptedAgent:
     def odd(self, what):
         self.ODD.append(what)
         self.log("ODD:", what)
+        if self.max_odd and len(self.ODD) >= self.max_odd:
+            self.log("too many oddities: aborting the run")
+            self.finish("ABORTED")
+            self.emu.stop()
+            raise SystemExit(3)
 
     # -- composite behaviours ------------------------------------------------ #
     def until(self, fn, needle, tries=30, label=""):
@@ -85,11 +91,14 @@ class ScriptedAgent:
                 return
         self.odd("text never ended: " + (prof.screen_text() or "")[:100].replace("\n", "|") + " @ " + self.state())
 
-    def resolve_battle(self, policy_move=None, trainee=None, strong=None, want=None, heal_below=0.0, potion="Potion"):
+    def resolve_battle(self, policy_move=None, trainee=None, strong=None, want=None, heal_below=0.0, potion="Potion",
+                       smart=False):
         """Fight the current battle to its end. trainee/strong: switch a weak trainee out for a strong
-        species when low; want: throw balls at those species; heal_below: use a potion under that HP ratio."""
+        species when low; want: throw balls at those species; heal_below: use a potion under that HP ratio;
+        smart: switch a Pokémon below 30% HP for the healthiest team-mate when no potion is left."""
         prof, battle, press, log = self.prof, self.battle, self.press, self.log
         turns, r = 0, ""
+        bad_moves: set = set()                          # moves the helper refused this battle (disabled / no PP)
         while prof.in_battle() and turns < 45:
             turns += 1
             b = prof.battle()
@@ -121,9 +130,19 @@ class ScriptedAgent:
                 r = battle("item", potion)
                 log("  heal:", r[:120])
                 continue
-            moves = [n for n, pp in mine["moves"] if pp > 0]
+            if smart and mine["hp"] < mine["max_hp"] * 0.3:
+                cur = self.prof._u8(0xCC2F)
+                best = max(((i, p) for i, p in enumerate(party) if i != cur and p["hp"] > p["max_hp"] * 0.5),
+                           key=lambda ip: ip[1]["level"], default=None)
+                if best:
+                    r = battle("switch", str(best[0] + 1))
+                    log("  switch:", r[:100])
+                    if not prof.in_battle():
+                        return r
+                    continue
+            moves = [n for n, pp in mine["moves"] if pp > 0 and n != mine.get("disabled") and n not in bad_moves]
             pick = policy_move if policy_move in moves else next((m for m in moves if m not in STATUS), moves[0] if moves else "")
-            if not trainee and not want and not heal_below:
+            if not trainee and not want and not heal_below and not smart:
                 r = battle("auto", pick)                  # routine fight: one call
             else:
                 r = battle("fight", pick)
@@ -142,6 +161,8 @@ class ScriptedAgent:
                     battle("switch", str(alive[0]))
                 else:
                     press("A*3")
+            elif "DISABLED" in r or r.startswith("no PP left"):
+                bad_moves.add(pick)
             elif r.startswith(("could not", "cannot", "no move", "unknown")):
                 self.odd("battle helper: " + r[:150])
                 press("A")

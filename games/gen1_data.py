@@ -45,6 +45,10 @@ BATTLE_TYPE = 0xD05A        # 0 normal, 1 old man, 2 safari
 ENEMY_MON = 0xCFE5          # species, hp(2), lvl(box), status, type1, type2, catch, moves(4), dvs(2), level(@0xCFF3), maxhp(2)...
 BATTLE_MON = 0xD014         # same layout as enemy: species, hp(2), ..., level @ +14 (0xD022), maxhp @ +15
 BATTLE_MON_PP = 0xD02D      # 4 bytes
+PLAYER_DISABLED_MOVE = 0xD06D    # high nibble: disabled move slot 1-4, low nibble: turns left (0 = none)
+PLAYER_DISABLED_MOVE_ID = 0xD06E # move id of the disabled move (0 = none); verified by writing it in a battle
+ENEMY_DISABLED_MOVE = 0xD072
+ENEMY_DISABLED_MOVE_ID = 0xD073
 ENEMY_MON_PP = 0xCFFE
 PLAY_TIME_HOURS = 0xDA41
 PLAY_TIME_MINUTES = 0xDA43
@@ -310,6 +314,14 @@ FIELD_MOVES = ("Cut", "Fly", "Surf", "Strength", "Flash", "Dig", "Teleport", "So
 WATER_TILE = 0x14
 WATER_TILESETS = {0, 3, 5, 7, 13, 14, 17, 22, 23}      # pokered WaterTilesets: where tile $14 is surfable water
 CUT_TREE_TILES = {0: 0x3D, 7: 0x50}
+# pokered TilePairCollisionsLand / Water: in these tilesets you cannot step between the two tiles of a pair
+# (either direction). They model elevation changes in caves and the forest edges.
+TILE_PAIR_COLLISIONS_LAND = {
+    17: {frozenset((0x20, 0x05)), frozenset((0x41, 0x05)), frozenset((0x2A, 0x05)), frozenset((0x05, 0x21))},
+    3: {frozenset((0x30, 0x2E)), frozenset((0x52, 0x2E)), frozenset((0x55, 0x2E)), frozenset((0x56, 0x2E)),
+        frozenset((0x20, 0x2E)), frozenset((0x5E, 0x2E)), frozenset((0x5F, 0x2E))},
+}
+TILE_PAIR_COLLISIONS_WATER = {3: {frozenset((0x14, 0x2E)), frozenset((0x48, 0x2E))}, 17: {frozenset((0x14, 0x05))}}
 TILE_IN_FRONT = 0xCFC6      # wTileInFrontOfPlayer: what Cut / Surf / talking would act on
 PLAYER_MON_NUMBER = 0xCC2F  # wPlayerMonNumber: party index of the Pokémon currently in battle
 # ROM map header table (pokered MapHeaderPointers / MapHeaderBanks): header = tileset, height, width, ...

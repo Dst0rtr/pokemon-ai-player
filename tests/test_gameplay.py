@@ -584,3 +584,22 @@ def test_manage_use_potion_on_named_pokemon(emu):
     r = emu.manage("use", "Potion", "Squirtle")
     assert emu.profile.party()[1]["hp"] == 25, r
     assert "Potion×1" in r, r
+
+
+def test_battle_reports_disabled_move(emu):
+    from games import gen1_data as D
+    mem = emu.pyboy.memory
+    mem[D.IS_IN_BATTLE] = 1
+    mem[D.BATTLE_MON] = 0xB0                                   # Charmeleon-ish: species + moves + pp
+    for j, mv in enumerate((10, 45, 52, 43)):
+        mem[D.BATTLE_MON + 8 + j] = mv
+        mem[D.BATTLE_MON_PP + j] = 20
+    mem[D.BATTLE_MON + 1], mem[D.BATTLE_MON + 2] = 0, 30
+    mem[D.BATTLE_MON + 15], mem[D.BATTLE_MON + 16] = 0, 60
+    mem[D.PLAYER_DISABLED_MOVE], mem[D.PLAYER_DISABLED_MOVE_ID] = 0x34, 52
+    b = emu.profile.battle()
+    assert b["mine"]["disabled"] == "Ember"
+    assert "Ember 20pp DISABLED" in emu.profile._mon_line(b["mine"], True)
+    mem[D.PLAYER_DISABLED_MOVE], mem[D.PLAYER_DISABLED_MOVE_ID] = 0, 0
+    assert emu.profile.battle()["mine"]["disabled"] == ""
+    mem[D.IS_IN_BATTLE] = 0

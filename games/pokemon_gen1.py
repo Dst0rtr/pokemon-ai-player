@@ -221,10 +221,12 @@ class PokemonGen1Profile(GameProfile):
             out.append((D.item_name(item), qty))
         return out
 
-    def _battle_mon(self, base: int, pp_addr: int) -> dict[str, Any]:
+    def _battle_mon(self, base: int, pp_addr: int, disabled_addr: int = 0) -> dict[str, Any]:
         moves = self._bytes(base + 8, 4)
         pp = self._bytes(pp_addr, 4)
+        dis = self._u8(disabled_addr) if disabled_addr else 0
         return {
+            "disabled": D.move_name(dis) if dis and dis in moves else "",
             "species": D.species_name(self._u8(base)),
             "hp": self._u16(base + 1), "max_hp": self._u16(base + 15),
             "level": self._u8(base + 14), "status": D.status_name(self._u8(base + 4), self._u16(base + 1)),
@@ -240,8 +242,8 @@ class PokemonGen1Profile(GameProfile):
         return {
             "kind": _BATTLE_KIND.get(kind, "battle"),
             "safari": self._u8(D.BATTLE_TYPE) == 2,
-            "enemy": self._battle_mon(D.ENEMY_MON, D.ENEMY_MON_PP),
-            "mine": self._battle_mon(D.BATTLE_MON, D.BATTLE_MON_PP),
+            "enemy": self._battle_mon(D.ENEMY_MON, D.ENEMY_MON_PP, D.ENEMY_DISABLED_MOVE_ID),
+            "mine": self._battle_mon(D.BATTLE_MON, D.BATTLE_MON_PP, D.PLAYER_DISABLED_MOVE_ID),
         }
 
     def warps(self) -> list[tuple[int, int, int]]:
@@ -292,7 +294,8 @@ class PokemonGen1Profile(GameProfile):
         st = f" {m['status']}" if m["status"] else ""
         s = f"{name} L{m['level']} {m['hp']}/{m['max_hp']}{st}"
         if with_moves:
-            s += " [" + ", ".join(f"{n} {p}pp" for n, p in m["moves"]) + "]"
+            dis = m.get("disabled", "")
+            s += " [" + ", ".join(f"{n} {p}pp" + (" DISABLED" if n == dis else "") for n, p in m["moves"]) + "]"
         return s
 
     def status_line(self) -> str:
@@ -544,7 +547,7 @@ class PokemonGen1Profile(GameProfile):
                 return " | ".join(logs) + f" — stopped: {b['mine']['species']} is low on HP ({b['mine']['hp']}/{b['mine']['max_hp']}); switch, use an item, run, or battle('auto') again to keep going"
             move = ""
             if b and b["mine"]["moves"]:
-                usable = [(n, pp) for n, pp in b["mine"]["moves"] if pp > 0]
+                usable = [(n, pp) for n, pp in b["mine"]["moves"] if pp > 0 and n != b["mine"].get("disabled")]
                 wanted = next((n for n, _ in usable if target and self._norm(target) in self._norm(n)), None)
                 dmg = [n for n, _ in usable if n not in _STATUS_MOVES]
                 move = wanted or (dmg[0] if dmg else (usable[0][0] if usable else ""))
@@ -631,6 +634,11 @@ class PokemonGen1Profile(GameProfile):
                 usable = [n for n, pp in b["mine"]["moves"] if pp > 0]
                 return (f"no PP left for {b['mine']['moves'][idx][0]}; usable: " + (", ".join(usable) or "none (only Struggle)")
                         + " — pick another move, switch, or heal at a Poké Center")
+            if b["mine"]["moves"][idx][0] == b["mine"].get("disabled"):
+                emu.press("B", settle=1)
+                usable = [n for n, pp in b["mine"]["moves"] if pp > 0 and n != b["mine"]["disabled"]]
+                return (f"{b['mine']['disabled']} is DISABLED by the enemy for a few turns; usable: "
+                        + (", ".join(usable) or "none") + " — pick another move or switch")
             cur = self._list_cursor(self.screen_text() or "", moves) or 0
             steps = idx - cur
             if steps:
@@ -1156,23 +1164,32 @@ class PokemonGen1Profile(GameProfile):
             self._block_cache[key] = bytes(self.mem[bank, a:a + 16])
         return self._block_cache[key]
 
-    def full_map_cells(self) -> list[list[str]]:
-        """Walkability of every 2x2-tile metatile of the current map."""
+    def full_map_tiles(self) -> list[list[int]]:
+        """Collision tile (bottom-left 8x8 tile) of every 2x2-tile metatile of the current map."""
         w, h = self._u8(D.MAP_WIDTH) * 2, self._u8(D.MAP_HEIGHT) * 2
         bw = self._u8(D.MAP_WIDTH) + 6
+        blocks = self.mem[D.OVERWORLD_MAP:D.OVERWORLD_MAP + bw * (self._u8(D.MAP_HEIGHT) + 6)]
+        tiles = []
+        for y in range(h):
+            row = []
+            for x in range(w):
+                blk = self._block(blocks[(y // 2 + 3) * bw + (x // 2 + 3)])
+                row.append(blk[((y % 2) * 2 + 1) * 4 + (x % 2) * 2])
+            tiles.append(row)
+        return tiles
+
+    def full_map_cells(self) -> list[list[str]]:
+        """Walkability of every 2x2-tile metatile of the current map."""
         walkable = self._walkable_tiles()
         grass = self._u8(D.GRASS_TILE)
         tileset = self._u8(D.CUR_TILESET)
         ledges = D.LEDGE_TILES if tileset == 0 else {}
         water = D.WATER_TILE if tileset in D.WATER_TILESETS else -1
         tree = D.CUT_TREE_TILES.get(tileset, -1)
-        blocks = self.mem[D.OVERWORLD_MAP:D.OVERWORLD_MAP + bw * (self._u8(D.MAP_HEIGHT) + 6)]
         cells = []
-        for y in range(h):
+        for trow in self.full_map_tiles():
             row = []
-            for x in range(w):
-                blk = self._block(blocks[(y // 2 + 3) * bw + (x // 2 + 3)])
-                tile = blk[((y % 2) * 2 + 1) * 4 + (x % 2) * 2]     # bottom-left tile of the metatile
+            for tile in trow:
                 if tile == grass:
                     row.append(",")
                 elif tile in ledges:
@@ -1205,6 +1222,11 @@ class PokemonGen1Profile(GameProfile):
         if (tx, ty) == (px, py):
             return []
         solid = ("#", "T") if self.surfing() else ("#", "T", "~")
+        tileset = self._u8(D.CUR_TILESET)
+        pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(tileset, ()))
+        if self.surfing():
+            pairs |= set(D.TILE_PAIR_COLLISIONS_WATER.get(tileset, ()))
+        tiles = self.full_map_tiles() if pairs else None       # cave/forest elevation steps you cannot cross
         moves = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
         prev: dict[tuple[int, int], tuple[tuple[int, int], str]] = {}
         # Dijkstra: tall grass costs extra so routes avoid needless wild encounters.
@@ -1230,6 +1252,8 @@ class PokemonGen1Profile(GameProfile):
                         continue
                     c = cells[ny][nx]
                 elif c in solid:
+                    continue
+                elif tiles is not None and frozenset((tiles[y][x], tiles[ny][nx])) in pairs:
                     continue
                 if (nx, ny) in blocked and (nx, ny) != (tx, ty):
                     continue
