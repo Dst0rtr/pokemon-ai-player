@@ -10,7 +10,8 @@ import time
 from games import gen1_data as D
 from server import build_server
 
-STATUS = {"Growl", "Tail Whip", "String Shot", "Leer", "Sand-Attack", "Harden", "PoisonPowder", "Stun Spore", "Sleep Powder"}
+STATUS = {"Growl", "Tail Whip", "String Shot", "Leer", "Sand-Attack", "Harden", "PoisonPowder", "Stun Spore", "Sleep Powder",
+          "Rage", "Bide", "Focus Energy", "Smokescreen", "Supersonic", "Whirlwind", "Roar", "Teleport", "Mist", "Agility"}
 BUGS = ("Caterpie", "Metapod", "Butterfree")
 FIRE = ("Charmander", "Charmeleon", "Charizard")
 CITY_OF = {"Viridian Poké Center": "Viridian City", "Pewter Poké Center": "Pewter City",
@@ -149,10 +150,8 @@ class ScriptedAgent:
             if turns >= 30 or turns <= 3:
                 log("  battle turn", turns, pick, "->", r[:160])
             if "needs a decision" in r:
-                if "learn" in r.lower() or "forget" in r.lower():
-                    press("DOWN A")                       # don't learn, keep moves (simplest)
-                    r2 = press("A")
-                    log("  learn prompt ->", r2[:80])
+                if "learn" in r.lower() or "forget" in r.lower() or "delete" in r.lower():
+                    log("  learn prompt ->", self.learn_move()[:100])
                 else:
                     press("A")
             elif "battle('switch'" in r:
@@ -170,11 +169,39 @@ class ScriptedAgent:
             self.odd("battle did not end in 45 turns")
         return r if turns else "no battle"
 
+    def learn_move(self) -> str:
+        """Answer a 'learn new move' prompt: yes, forgetting the first status move (else the first move)."""
+        prof, press = self.prof, self.press
+        press("A")                                          # YES: delete an older move
+        for _ in range(6):
+            txt = prof.screen_text() or ""
+            d = prof.dialog_text()
+            if "▶" in txt and ("forgotten" in d or "Which move" in d):
+                idx = prof._u8(0xCC2F) if prof.in_battle() else 0
+                party = prof.party()
+                mon = party[idx] if idx < len(party) else (party[0] if party else None)
+                names = [n for n, _ in mon["moves"]] if mon else []
+                k = next((i for i, n in enumerate(names) if n in STATUS), 0)
+                cur = prof._list_cursor(txt, [prof._norm(n) for n in names]) or 0
+                steps = k - cur
+                if steps:
+                    press(("DOWN " if steps > 0 else "UP ") * abs(steps))
+                press("A")
+                return f"forgot {names[k] if names else '?'}"
+            if "▶YES" in txt or "▶NO" in txt:
+                press("A")
+                continue
+            if d:
+                press("A")
+                continue
+            break
+        return "learned"
+
     def go(self, target, **bk):
         """walk to a target; auto-resolve battles/dialogue on the way. Returns the last walk text."""
         prof = self.prof
         r = ""
-        for _ in range(12):
+        for _ in range(20):
             r = self.walk(target)
             if prof.in_battle():
                 self.resolve_battle(**bk)

@@ -86,3 +86,14 @@ def test_ranking_and_results_md():
     assert "**Final team**" in md and "| 1 | Charmeleon | 23 |" in md and "remember Cut" in md
     assert build_results_md([]).endswith("_No runs yet._\n")
     json.dumps(a)                                                            # results stay JSON-serialisable
+
+
+def test_claude_tokens_accumulate_per_message_without_result():
+    st = ChunkStats("claude")
+    usage = {"input_tokens": 5, "cache_creation_input_tokens": 100, "cache_read_input_tokens": 1000, "output_tokens": 20}
+    for block in ({"type": "thinking", "thinking": ""}, {"type": "tool_use", "name": "mcp__gameboy__walk", "input": {}}):
+        st.feed({"type": "assistant", "message": {"id": "m1", "usage": usage, "content": [block]}})
+    st.feed({"type": "assistant", "message": {"id": "m2", "usage": usage, "content": [{"type": "text", "text": "hi"}]}})
+    assert st.tokens["input"] == 10 and st.tokens["cached_input"] == 2000 and st.tokens["output"] == 40   # m1 counted once
+    st.feed({"type": "result", "usage": {"input_tokens": 11, "output_tokens": 41}, "total_cost_usd": 0.5, "session_id": "s"})
+    assert st.tokens["input"] == 11 and st.tokens["output"] == 41 and st.cost_usd == 0.5

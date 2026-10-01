@@ -22,9 +22,13 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `games/gen1_data.py` | verified WRAM addresses, charmap, species/move/item/map tables, ledge tiles |
 | `games/pyboy_wrapped.py` | score/lives for games PyBoy has wrappers for (Tetris, Mario Land, Kirby, Pinball) |
 | `examples/reference_run.py` | scripted agent: power-on → Brock with the public tools; logs every odd reply (`ODD:`) |
-| `tests/` | pytest (35): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip |
+| `examples/extended_run.py` | scripted agent: after-Brock state → Mt. Moon → Cerulean → Misty (needs a local `saves/<rom>/after-brock.state`) |
+| `examples/_agentlib.py` | `ScriptedAgent`: tool wrappers, battle resolver, travel/heal helpers shared by the scripted runs |
+| `bench/run.py` | benchmark harness: launches Claude Code / Codex headless in resumable chunks, budgets, rate-limit pauses, writes `results/<run>.json` |
+| `bench/report.py` | derives per-run summaries and renders `RESULTS.md` from `results/*.json` |
+| `bench/stream.py`, `bench/providers.py` | CLI event-stream parsers (tested on captured streams) and per-CLI command builders |
+| `tests/` | pytest (57): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
-| `compare_benchmarks.py` | compares `metrics/*.json` across models |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 
 Docs: `README.md`, `QUICKSTART.md`, `AGENT_GUIDE.md`, `BENCHMARKING.md`.
@@ -37,6 +41,9 @@ python -m pytest tests -q           # ~5 s with a Pokémon Red ROM in the projec
 python examples/reference_run.py Pokemon-Red_Version.gb [seed]   # ~35 s; expect "0 oddities" and 1 badge
 python test_emulator.py Pokemon-Red_Version.gb --play-intro
 python server.py --rom Pokemon-Red_Version.gb --ai-model NAME [--resume]
+python examples/extended_run.py Pokemon-Red_Version.gb       # ~15 s from the local after-brock state; expect "0 oddities"
+python bench/run.py --provider claude --model claude-haiku-4-5-20251001 --smoke   # harness checklist (uses the real CLI)
+python bench/run.py --provider codex --model gpt-5.6-sol      # a full 12 h / 20k-call benchmark run -> results/, RESULTS.md
 ```
 
 Clients must run the interpreter that has the dependencies (use the venv path in the config).
@@ -47,8 +54,9 @@ exists, but keep the project ROM free of a `.ram` file for reproducible runs.
 
 ## Tool set (keep it small)
 
-`press`, `walk`, `battle`, `talk`, `shop`, `manage`, `wait`, `screen`, `state`, `save_state`,
-`load_state`, `reset_game`, `memory`, `metrics`. Tool schema JSON stays under 10 KB (enforced by a
+`press`, `walk`, `battle` (incl. `auto`, `bait`, `rock`), `talk`, `shop`, `manage` (`lead`, `swap`, `use`,
+`field`, `save`), `wait`, `screen`, `state`, `save_state`, `load_state`, `reset_game`, `memory`, `metrics`
+(incl. `note`). Tool schema JSON stays under 10 KB (enforced by a
 test, currently ~6.5 KB) and the agent guide under 1.5 KB. If you add a tool, ask whether it could
 be a parameter of an existing one instead.
 
@@ -107,6 +115,23 @@ after a walk), `hint:` (from `profile.hint()`), then an image only if the screen
   does ¼ damage to Rock/Ground. A local `saves/Pokemon-Red_Version/after-brock.state` (gitignored,
   not in the repo) is that state if you have generated one.
 * Species table is by *internal* index (Bulbasaur = 0x99); Pokédex bits are by national number.
+* Hall of Fame counter is `0xD5A2` (`0xD5A0` is the current PC box number). Map ids come from the
+  ROM's header table (`MapHeaderPointers` at ROM 0x01AE, banks at 0xC23D; a test checks the table):
+  82 Rock Tunnel 1F, 83 Power Plant, 92 Vermilion Gym, 232 Rock Tunnel B1F, 233-236 Silph 9F-11F +
+  elevator, 245/246/247 Lorelei/Bruno/Agatha, 113 Lance, 120 Champion, 118 Hall of Fame.
+* `0xD700` = walk/bike/surf state (2 = surfing). Water tile `$14` (surfable in pokered's water
+  tilesets), cut trees `$3D` (overworld) / `$50` (gym); `wTileInFrontOfPlayer` 0xCFC6. Cave/forest
+  elevation steps are pokered's `TilePairCollisionsLand/Water` (tileset 17 and 3), applied by the pathfinder.
+* Disable: `0xD06D` high nibble = the player's disabled move slot (1-4); `battle()` reports it and
+  `fight`/`auto` skip it. Rage locks the user for the whole battle, so `auto` treats it as a status move.
+* Pathfinding: other warps are never crossed en route; NPC sprites cost +40 instead of blocking
+  (objects hidden by events keep their sprite slot); a cell that turns out solid while walking is
+  remembered and the route re-planned. A "blocked" step waits while `wJoyIgnore` is set (a trainer who
+  spotted the player is walking over) and reports "dialogue appeared" instead.
+* Party menus remember their cursor: helpers read the `▶` row (on TM lists it sits on the entry's
+  second row) instead of assuming the top. In-battle item use shows "Use item on which POKéMON?".
+* Metrics: a session resumes from `metrics/<id>_checkpoint.json` when `--session-id` is reused; frames
+  never rewind on `load_state` (reloads are milestones); the world graph persists in `saves/<rom>/world.json`.
 
 ## Adding a game
 
@@ -122,4 +147,6 @@ games can also pass `--charmap file.json` to decode text.
 * Every emulator behavior change should have a test in `tests/test_gameplay.py`; anything that
   touches input timing, walking or battle parsing should also pass `tests/test_playthrough.py`
   and a `reference_run.py` with "0 oddities".
-* `saves/`, `metrics/`, `screenshots/`, ROMs and `.ram` files are runtime data, not source.
+* `saves/`, `metrics/`, `screenshots/`, `bench/runs/`, ROMs and `.ram` files are runtime data, not source;
+  `results/*.json` and the generated `RESULTS.md` are the published benchmark data.
+* Commits: identity `Dst0rtr <135249234+Dst0rtr@users.noreply.github.com>`, no AI attribution lines.

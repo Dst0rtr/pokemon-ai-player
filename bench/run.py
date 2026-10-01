@@ -274,16 +274,26 @@ class Run:
         self.state["tokens"] = tok
         self.state["cost_usd"] = round(sum(costs), 4) if costs else None
         self.state["cost_estimated"] = False
+        if len(costs) < len(self.state["chunks"]):           # some chunks ended without a cost figure: estimate
+            prices = _read_json(ROOT / "bench" / "prices.json").get(self.model)
+            if prices:
+                est = sum(tok.get(k, 0) * prices.get(k, 0) / 1e6 for k in ("input", "cached_input", "cache_write", "output"))
+                self.state["cost_usd"] = round(est, 4)
+                self.state["cost_estimated"] = True
         self.state["wall_seconds"] = round((datetime.fromisoformat(self.state["ended"]) - datetime.fromisoformat(self.state["started"])).total_seconds(), 1)
         self.save()
         metrics = self.checkpoint()
         result = {"schema": 1, "run_id": self.run_id, "harness": {k: v for k, v in self.state.items() if k != "run_id"},
                   "metrics": metrics, "derived": derive(metrics, self.state)}
-        out = ROOT / "results" / f"{self.run_id}.json"
-        out.parent.mkdir(exist_ok=True)
+        if self.args.smoke:                       # a smoke run is not a benchmark result
+            out = self.dir / "result.json"
+        else:
+            out = ROOT / "results" / f"{self.run_id}.json"
+            out.parent.mkdir(exist_ok=True)
         out.write_text(json.dumps(result, indent=1))
         self.log(f"results written to {out}; exit reason {reason}")
-        write_results_md(ROOT / "results", ROOT / "RESULTS.md")
+        if not self.args.smoke:
+            write_results_md(ROOT / "results", ROOT / "RESULTS.md")
         return out
 
     def smoke_report(self) -> None:

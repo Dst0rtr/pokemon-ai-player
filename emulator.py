@@ -508,7 +508,23 @@ class Emulator:
                         break
         if reason is None and steps < n:
             reason = "blocked"                     # ran out of time without finishing: treat as blocked
+        if reason == "blocked":
+            reason = self._blocked_or_spotted(reason)
         return steps, reason
+
+    def _blocked_or_spotted(self, reason: str) -> str:
+        """A 'blocked' step may really be a trainer who spotted us: the game freezes the player while
+        the trainer walks over, then a text box opens. Wait that out and report the dialogue instead."""
+        prof = self.profile
+        for _ in range(80):                        # up to ~8 s of game time
+            if getattr(prof, "in_battle", lambda: 0)():
+                return "battle started"
+            if prof.is_text_visible():
+                return "dialogue appeared"
+            if not getattr(prof, "scripted", lambda: False)():
+                return reason
+            self.tick(6)
+        return reason
 
     # ------------------------------------------------------------------ #
     # observation

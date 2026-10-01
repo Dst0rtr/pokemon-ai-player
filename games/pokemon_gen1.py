@@ -43,7 +43,7 @@ _STATUS_MOVES = {"Growl", "Tail Whip", "String Shot", "Leer", "Sand-Attack", "Ha
                  "Lovely Kiss", "Spore", "Mist", "Haze", "Reflect", "Light Screen", "Recover", "Rest",
                  "Softboiled", "Amnesia", "Barrier", "Acid Armor", "Transform", "Substitute", "Roar", "Whirlwind",
                  "Teleport", "Splash", "Disable", "Mimic", "Kinesis", "Flash", "Growth", "Conversion", "Metronome",
-                 "Mirror Move", "Bide", "Counter"}
+                 "Mirror Move", "Bide", "Counter", "Rage"}   # Rage locks the user in for the whole battle (Gen 1)
 
 
 class PokemonGen1Profile(GameProfile):

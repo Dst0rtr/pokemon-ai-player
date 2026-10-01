@@ -128,11 +128,35 @@ if prof.position()[0] != 3:
     travel("Cerulean City", **BK)
 log("STAGE 1 done:", state(), state("party"))
 manage("save")
+with open(os.path.join(os.path.dirname(STATE), "cerulean.state"), "wb") as f:
+    emu.pyboy.save_state(f)                       # local checkpoint for probing (gitignored)
 
-# ---------------------------------------------------------------- Stage 2: Misty
+# ---------------------------------------------------------------- Stage 2: Nugget Bridge and Route 25 (experience)
 heal_at("Cerulean Poké Center")
-buy("Potion", 4, "Cerulean City", "Cerulean Mart")
 lead_strongest()
+go("to Route 24", **BK)                           # north edge of Cerulean (the rival ambushes here)
+for _ in range(3):
+    if prof.position()[0] == 23:
+        break
+    travel("Route 24", **BK)
+for _ in range(4):                                # across Nugget Bridge (five trainers and a Rocket) to Route 25's edge
+    if prof.position()[0] != 23:
+        break
+    r = go("to Route 25", **BK)
+    log("  bridge:", r[-120:])
+log("after the bridge:", state(), state("party"))
+if prof.position()[0] == 24:
+    go("to Bill's House", **BK)                   # Route 25's trainers line the way
+    log("Route 25 done:", state())
+if need_heal():
+    heal_at("Cerulean Poké Center")
+travel("Cerulean City", **BK)
+heal_at("Cerulean Poké Center")
+buy("Potion", 6, "Cerulean City", "Cerulean Mart")              # Cerulean sells no Super Potions
+lead_strongest()
+log("before Misty:", state(), state("party"))
+
+# ---------------------------------------------------------------- Stage 3: Misty
 
 
 def misty_fight():
@@ -144,13 +168,18 @@ def misty_fight():
             press("A")
             continue
         me = b["mine"]
-        if me["hp"] < me["max_hp"] * 0.35 and any("Potion" in n for n, _ in prof.items()):
-            r = battle("item", "Potion")
+        potion = next((n for n, _ in prof.items() if "Potion" in n), None)
+        if me["hp"] < me["max_hp"] * 0.4 and potion and me["species"] in FIRE:
+            r = battle("item", potion)
             log("  misty turn", turns, "potion:", r[:120])
         else:
-            pick = "Ember" if me["species"] in FIRE else ("Confusion" if me["species"] == "Butterfree" else "")
+            moves = [n for n, pp in me["moves"] if pp > 0 and n != me.get("disabled")]
+            if me["species"] in FIRE:
+                pick = next((m for m in ("Slash", "Scratch", "Ember") if m in moves), "")
+            else:
+                pick = next((m for m in ("Confusion", "Gust", "Tackle") if m in moves), "")
             r = battle("fight", pick)
-            log("  misty turn", turns, r[:160])
+            log("  misty turn", turns, pick, "->", r[:160])
         if "battle('switch'" in r:
             alive = [i + 1 for i, p in enumerate(prof.party()) if p["hp"] > 0]
             if alive:
@@ -160,16 +189,32 @@ def misty_fight():
     return r
 
 
+def approach_misty():
+    """Misty stands at (4,2) on her platform. The trainer guarding row 3 walks over and parks on (4,3),
+    the cell below Misty, so approach from (5,2) beside her and face left."""
+    for attempt in range(6):
+        go("to 7,3", **BK)
+        go("to 5,2", **BK)
+        if prof.in_battle():
+            A.resolve_battle(**BK)
+            skip_text()
+            continue
+        if prof.position()[1:] == (5, 2):
+            press("LEFT:2")
+            return True
+        A.call("wait", frames=180, screenshot=False)
+    odd("could not stand next to Misty: " + state() + "\n" + state("map"))
+    return False
+
+
 for attempt in range(3):
     travel("Cerulean Gym", **BK)
-    go("to 4,3", **BK)                            # Misty stands at (4,2); the gym trainers may intercept
-    if prof.in_battle():
-        A.resolve_battle(**BK)
     if prof.position()[0] != 65:
         continue
+    if not approach_misty():
+        break
     if need_heal():
-        go("to outside"); heal_at("Cerulean Poké Center"); travel("Cerulean Gym", **BK); go("to 4,3", **BK)
-    press("UP:2")
+        go("to outside"); heal_at("Cerulean Poké Center"); travel("Cerulean Gym", **BK); approach_misty()
     r = talk()
     if not prof.in_battle():
         A.until(lambda: press("A"), "BATTLE", 6, "misty")

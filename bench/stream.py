@@ -32,6 +32,7 @@ class ChunkStats:
     result_text: str = ""
     turns: int = 0
     finished: bool = False
+    _msg_usage: dict = field(default_factory=dict)      # Claude: per-message usage, summed when no result event arrives
 
     def feed_line(self, line: str) -> None:
         line = line.strip()
@@ -69,6 +70,14 @@ def _feed_claude(st: ChunkStats, obj: dict[str, Any]) -> None:
                 st.tool_calls += 1
                 st.last_activity = time.time()
         st.turns += 1
+        u = msg.get("usage")
+        if u and msg.get("id") and not st.finished:
+            # Every content block of one API message repeats that message's usage: keep one copy per id.
+            st._msg_usage[msg["id"]] = u
+            st.tokens = {k: 0 for k in TOKEN_KEYS}
+            for mu in st._msg_usage.values():
+                st.add_tokens(input=mu.get("input_tokens", 0), cached_input=mu.get("cache_read_input_tokens", 0),
+                              cache_write=mu.get("cache_creation_input_tokens", 0), output=mu.get("output_tokens", 0))
     elif t == "user":
         st.last_activity = time.time()
     elif t == "rate_limit_event":
@@ -81,6 +90,7 @@ def _feed_claude(st: ChunkStats, obj: dict[str, Any]) -> None:
         st.finished = True
         st.session_id = obj.get("session_id") or st.session_id
         u = obj.get("usage") or {}
+        st.tokens = {k: 0 for k in TOKEN_KEYS}          # the result totals are authoritative
         st.add_tokens(input=u.get("input_tokens", 0), cached_input=u.get("cache_read_input_tokens", 0),
                       cache_write=u.get("cache_creation_input_tokens", 0), output=u.get("output_tokens", 0),
                       reasoning=(u.get("output_tokens_details") or {}).get("thinking_tokens", 0))

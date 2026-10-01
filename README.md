@@ -13,7 +13,12 @@ Any other ROM works with the generic profile (button scripts, screenshots, save 
 * Played from power-on to the Boulder Badge by a scripted reference agent using only the public
   tools, cleanly on four different RNG seeds (`examples/reference_run.py`, about 35 s of real time
   and 1,400 tool calls per run).
-* 35 automated tests, including a replay of the game's opening and an MCP client round-trip.
+* A second scripted run (`examples/extended_run.py`) continues from the Boulder Badge through Mt. Moon
+  to Cerulean City and Misty, covering caves, trainers, in-battle items, field moves and the world graph.
+* 57 automated tests, including a replay of the game's opening, an MCP client round-trip and the
+  benchmark harness's stream parsers.
+* A public **benchmark**: agent CLIs (Claude Code, Codex) play from power-on toward the Champion with
+  the same prompt and budgets; see [RESULTS.md](RESULTS.md) and [BENCHMARKING.md](BENCHMARKING.md).
 * Save states are not included in the repository (they contain emulator memory derived from the
   ROM). Create your own with `save_state("after-brock")` at the post-Brock point and reload it with
   `load_state("after-brock")`.
@@ -64,17 +69,17 @@ Then point your MCP client at `server.py` (see [QUICKSTART.md](QUICKSTART.md)):
 |---|---|
 | `press(buttons, screenshot=true)` | Button script: `A B START SELECT UP DOWN LEFT RIGHT`, `A*5` repeats, `UP:16` holds, `W60` waits. Each press waits for text and animations to finish |
 | `walk(path, screenshot=true, on_battle="stop")` | Steps (`"up 5, right 3"`) or goals: `"to 23,25"`, `"to Viridian Mart"`, `"to north edge"`, `"to Pewter City"` (routes through maps you have visited). Stops when blocked, at doors, or when a battle/dialogue starts and says why. `on_battle="run"` or `"auto"` resolves wild encounters and keeps going |
-| `battle(action, target)` | Pokémon: `fight` (move name or 1-4), `auto` (whole routine battle), `run`, `switch` (party number or name), `item` (item name). Reports messages and HP changes; stops at YES/NO or learn-move prompts |
+| `battle(action, target)` | Pokémon: `fight` (move name or 1-4), `auto` (whole routine battle), `run`, `switch` (party number or name), `item` (item name, or `"Potion: Pidgey"`), `bait` / `rock` (Safari Zone). Reports messages and HP changes, marks moves locked by Disable; stops at YES/NO or learn-move prompts |
 | `talk()` | Interact with what you face and read the whole conversation, including cutscenes; stops at any choice |
 | `shop(item, qty)` | Pokémon: buy from a clerk by item name; reports money and bag |
-| `manage(action, target, target2)` | Pokémon: `lead` (put a Pokémon first), `swap`, `use` (item, optional Pokémon), `save` (in-game save) |
+| `manage(action, target, target2)` | Pokémon: `lead` (put a Pokémon first), `swap`, `use` (item, optional Pokémon; TMs/HMs with `"Charmander: Growl"` naming the move to forget), `field` (Cut / Surf / Strength / Flash / Fly / Dig / Teleport from the party menu), `save` (in-game save) |
 | `wait(frames=60)` | Let the game run |
 | `screen(mode="image"\|"text"\|"both", scale)` | Explicit look at the screen |
 | `state(section)` | `summary`, `map` (whole area decoded from RAM), `nearby` (10x9 window), `party`, `battle`, `items`, `full` (Pokémon); score/lives for PyBoy-wrapped games |
 | `save_state(slot)` / `load_state(slot)` | Emulator checkpoints; `load_state("list")` lists them; `autosave` is automatic |
 | `reset_game(confirm=true)` | Power-cycle |
 | `memory(action, address, length, values)` | Hex dump any RAM; writes need `--allow-memory-write` |
-| `metrics(action, name)` | `report`, `milestone`, `start`, `checkpoint`, `finalize` |
+| `metrics(action, name)` | `report`, `milestone`, `note` (a reminder to yourself, shown in `report`), `start`, `checkpoint`, `finalize` |
 
 Every action returns the same compact block: a status line (position, party, money, badges), `EVENT:`
 lines for milestones, the decoded screen text (or the map after a walk), a `hint:` line whenever the
@@ -87,6 +92,8 @@ agent guide as MCP instructions; [AGENT_GUIDE.md](AGENT_GUIDE.md) is the long ve
 python3 server.py --rom GAME.gb [--ai-model NAME] [--profile auto|generic|pokemon-gen1|pyboy-wrapper]
                   [--scale 1-4] [--resume] [--autosave-every N] [--no-fast-text]
                   [--no-screenshot-files] [--allow-memory-write] [--charmap map.json] [--data-dir DIR]
+                  [--session-id ID] [--max-tool-calls N] [--max-real-seconds S] [--finalize-on-exit]
+                  [--log-file FILE]
 ```
 
 * `--resume` continues from `saves/<rom>/autosave.state`.
@@ -95,6 +102,9 @@ python3 server.py --rom GAME.gb [--ai-model NAME] [--profile auto|generic|pokemo
 * `--charmap` lets the generic profile decode on-screen text for other games: a JSON object mapping
   tile IDs (hex strings) to characters.
 * `--data-dir` puts `screenshots/`, `saves/` and `metrics/` somewhere other than next to `server.py`.
+* `--session-id` continues one metrics session across launches (with `--resume`); `--max-tool-calls` /
+  `--max-real-seconds` end a benchmark run cleanly (`BUDGET EXHAUSTED`); `--finalize-on-exit` writes the
+  final report when the server stops.
 
 ## Layout
 
@@ -108,8 +118,11 @@ games/pokemon_gen1.py   Red/Blue/Yellow profile: state, maps, routing, battle/ta
 games/gen1_data.py      verified addresses, charmap, species/move/item/map tables
 games/pyboy_wrapped.py  Tetris / Super Mario Land / Kirby / Pinball via PyBoy wrappers
 examples/reference_run.py  scripted agent that plays to Brock with the public tools (also a regression run)
-tests/                  pytest suite: parsers, ROM-driven gameplay, opening replay, MCP round-trip
-compare_benchmarks.py   compare metrics/*.json across models
+examples/extended_run.py   scripted agent: Boulder Badge -> Mt. Moon -> Cerulean -> Misty
+examples/_agentlib.py      helpers shared by the scripted agents
+bench/                  benchmark harness: run.py (drives Claude Code / Codex headless), report.py (RESULTS.md)
+results/                one JSON per published benchmark run; RESULTS.md is generated from them
+tests/                  pytest suite: parsers, ROM-driven gameplay, opening replay, MCP round-trip, harness
 ```
 
 Docs: [QUICKSTART.md](QUICKSTART.md), [AGENT_GUIDE.md](AGENT_GUIDE.md), [BENCHMARKING.md](BENCHMARKING.md),

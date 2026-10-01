@@ -87,6 +87,7 @@ class CodexProvider(Provider):
         args = json.dumps(self._server_cmd[1:])              # JSON strings are valid TOML strings
         return [f"mcp_servers.gameboy.command={json.dumps(self._server_cmd[0])}",
                 f"mcp_servers.gameboy.args={args}",
+                "mcp_servers.gameboy.default_tools_approval_mode=\"approve\"",   # no per-call approval prompts
                 "mcp_servers.gameboy.startup_timeout_sec=90",
                 "mcp_servers.gameboy.tool_timeout_sec=600"]
 
