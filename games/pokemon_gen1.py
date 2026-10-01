@@ -768,7 +768,8 @@ class PokemonGen1Profile(GameProfile):
         if tile == D.WATER_TILE and tileset in D.WATER_TILESETS and not self.surfing():
             return "hint: water ahead: manage('field', 'Surf') while facing it (a party Pokémon must know Surf; needs the Soul Badge)"
         if tile == D.CUT_TREE_TILES.get(tileset, -1):
-            return "hint: a small tree blocks the way: manage('field', 'Cut') while facing it (teach HM01 first; needs the Cascade Badge)"
+            return ("hint: a small tree blocks this tile. Early in the game there is another way (gates, forests, other exits: "
+                    "see state('map')); later, manage('field', 'Cut') removes it (HM01 from the S.S. Anne, Cascade Badge)")
         if tileset == 17:                                   # caves: a sprite in the way is often a boulder
             m, px, py = self.position()
             dx, dy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}.get(self.facing(), (0, 0))
@@ -1360,11 +1361,11 @@ class PokemonGen1Profile(GameProfile):
         if c == "~":
             return "the target is water: stand at the shore facing it and manage('field', 'Surf') first"
         if c == "T":
-            return "the target is a small tree: stand next to it facing it and manage('field', 'Cut') removes it"
+            return "the target is a small tree: look for another way around (state('map') exits/connections); Cut removes it later"
         flat = {ch for row in cells for ch in row}
         notes = []
         if "T" in flat:
-            notes.append("a small tree (T) may block the way: face it and manage('field', 'Cut')")
+            notes.append("a small tree (T) blocks part of this map: use another exit or route around it; Cut removes it later")
         if "~" in flat and not self.surfing():
             notes.append("water (~) needs Surf: face it and manage('field', 'Surf')")
         return "; ".join(notes)
