@@ -1324,6 +1324,7 @@ class PokemonGen1Profile(GameProfile):
                 break
         if want is None:
             return self._resolve_far(key)
+        self._last_unreachable = None
         cells = self.full_map_cells()
         h, w = len(cells), len(cells[0]) if cells else 0
         if want == "north":
@@ -1345,8 +1346,22 @@ class PokemonGen1Profile(GameProfile):
             if best is None or dist < best[0]:
                 best = (dist, ex, ey)
         if best is None:
+            # The map connects that way, but this part of the map does not reach that edge (trees, ledges,
+            # a split map like Route 2): remember why, so walk() can explain instead of "unknown place".
+            self._last_unreachable = (name, want)
             return None
         return best[1], best[2], sides[want]
+
+    _last_unreachable = None
+
+    def unreachable_note(self, name: str) -> str:
+        if not self._last_unreachable or self._norm(self._last_unreachable[0]) != self._norm(name):
+            return ""
+        side = self._last_unreachable[1]
+        exits = ", ".join(self.map_label(d) for _, _, d in self.warps()[:8]) or "none"
+        return (f"{name} lies past this map's {side} edge, but no walkable route from here reaches that edge "
+                f"(trees, ledges or a split map). Use one of this map's exits instead ({exits}) and come back "
+                f"into the other part of the map, or walk the roads through the next town.")
 
     def surfing(self) -> bool:
         return self._u8(D.WALK_BIKE_SURF) == 2
@@ -1506,6 +1521,20 @@ class PokemonGen1Profile(GameProfile):
         conns = ", ".join(f"{side} edge→{D.map_name(mid)}" for side, mid in self.connections())
         tail = "\n".join(t for t in (f"exits: {exits}" if exits else "", f"connections: {conns}" if conns else "") if t)
         return head + "\n" + ruler + "\n" + body + ("\n" + tail if tail else "")
+
+    def seed_milestones(self, names) -> None:
+        by_name = {self._norm(n): m for m, n in D.MAPS.items()}
+        for name in names:
+            if name.startswith("reached: "):
+                m = by_name.get(self._norm(name[9:]))
+                if m is not None:
+                    self._reported_maps.add(m)
+            elif name.startswith("starter: "):
+                self._starter_reported = True
+            elif name.startswith("obtained: ") or name.startswith("evolved: "):
+                species = name.split("→")[-1].split(":", 1)[-1].strip()
+                if species in _DEX_BY_NAME:
+                    self._reported_owned.add(_DEX_BY_NAME[species])
 
     # ------------------------------------------------------------------ #
     # world graph persistence (survives load_state / --resume / restarts)

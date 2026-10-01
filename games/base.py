@@ -70,6 +70,9 @@ class GameProfile:
         """Return names of milestones reached between two snapshots."""
         return []
 
+    def seed_milestones(self, names) -> None:
+        """Told the milestone names already recorded in a resumed session, so they are not reported again."""
+
     def world_data(self) -> Optional[dict]:
         """JSON-serialisable navigation knowledge worth keeping across restarts (None if there is none)."""
         return None

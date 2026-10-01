@@ -621,3 +621,39 @@ def test_find_path_avoid_cells_are_walls(emu):
             for _ in range(n2):
                 x, y = x + dx, y + dy
                 assert (x, y) != first
+
+
+def test_resumed_session_does_not_repeat_landmarks(rom_path, scratch, in_game_state):
+    from emulator import Emulator
+
+    base = scratch / "seed"
+    e = Emulator(str(rom_path), base_dir=base, autosave_every=1, save_screenshots=False, session_id="seed-1")
+    e.boot()
+    _load_bedroom(e, in_game_state)
+    e.wait(1)
+    assert "entered Red's House 1F" in e.walk("to Red's House 1F")
+    assert "entered Pallet Town" in e.walk("to Pallet Town")
+    names = [m.name for m in e.metrics.milestones]
+    assert names.count("reached: Pallet Town") == 1
+    e.stop()
+    e2 = Emulator(str(rom_path), base_dir=base, autosave_every=1, save_screenshots=False, session_id="seed-1")
+    e2.boot(resume=True)
+    assert 0 in e2.profile._reported_maps
+    e2.walk("to Red's House 1F")
+    e2.walk("to Pallet Town")
+    assert [m.name for m in e2.metrics.milestones].count("reached: Pallet Town") == 1
+    e2.pyboy.stop(save=False)
+    e2.pyboy = None
+
+
+def test_unreachable_connection_is_explained(emu):
+    _to_pallet(emu)
+    prof = emu.profile
+    real = prof.find_path
+    prof.find_path = lambda *a, **k: None                  # pretend nothing on this map is reachable (trees, ledges)
+    try:
+        r = emu.walk("to Route 1")
+    finally:
+        prof.find_path = real
+    assert "north edge" in r and "no walkable route" in r and "exits" in r, r
+    assert "entered" in emu.walk("to Route 1")             # and the real route still works

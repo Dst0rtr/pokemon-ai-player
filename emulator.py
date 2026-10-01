@@ -120,6 +120,8 @@ class Emulator:
             msg += " (resumed autosave)"
         self._load_world()
         self.profile.after_load()
+        if self.metrics.milestones:                        # a resumed session: do not report old landmarks again
+            self.profile.seed_milestones([m.name for m in self.metrics.milestones])
         self.metrics.set_profile(self.profile.name)
         self.metrics.observe(self._safe_snapshot(), self.frame, [])
         log.info(msg)
@@ -311,6 +313,9 @@ class Emulator:
                 if resolved is None:
                     if outs:
                         break
+                    note = getattr(self.profile, "unreachable_note", lambda n: "")(name)
+                    if note:
+                        return note
                     places = getattr(self.profile, "place_names", lambda: [])()
                     return (f"'{name}' is not on this map and no explored route leads there. Here you can walk to: " + ", ".join(places)
                             if places else f"unknown place '{name}': use x,y coordinates on this map")
