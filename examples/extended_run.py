@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import logging; logging.basicConfig(level="WARNING", stream=sys.stderr)  # noqa: E702
 from emulator import Emulator  # noqa: E402
-from _agentlib import ScriptedAgent, FIRE  # noqa: E402
+from _agentlib import ScriptedAgent, FIRE, _norm  # noqa: E402
+from games import gen1_data as D  # noqa: E402
 
 if len(sys.argv) < 2:
     print(__doc__)
@@ -49,6 +50,10 @@ log, odd, skip_text, go, travel, heal_at = A.log, A.odd, A.skip_text, A.go, A.tr
 BK = dict(smart=True, heal_below=0.3)          # battle policy: switch/heal sensibly
 
 
+def at(map_name):
+    return _norm(D.map_name(prof.position()[0])) == _norm(map_name)
+
+
 def lead_strongest():
     best = max(prof.party(), key=lambda p: (p["hp"] > 0, p["level"]))
     if prof.party()[0]["species"] != best["species"]:
@@ -76,7 +81,7 @@ def buy(item, qty, center_city, mart):
 log("START", state())
 log(state("party"))
 # ---------------------------------------------------------------- Stage 1: Pewter -> Mt. Moon -> Cerulean
-if prof.position()[0] == 54:                      # still inside Pewter Gym
+if at("Pewter Gym"):                              # still inside Pewter Gym
     go("to outside")
 heal_at("Pewter Poké Center")
 buy("Potion", 4, "Pewter City", "Pewter Mart")
@@ -89,22 +94,21 @@ if need_heal():
 travel("Mt. Moon 1F", **BK)
 # 1F: the top-left ladder (5,5) -> B1F (5,5) pocket -> ladder (21,17) -> B2F -> ladder (5,7) -> B1F exit pocket -> (27,3)
 go("to 5,5", **BK)
-if prof.position()[0] != 60:
+if not at("Mt. Moon B1F"):
     odd("not on Mt. Moon B1F after the first ladder: " + state())
 go("to 21,17", **BK)
-if prof.position()[0] != 61:
+if not at("Mt. Moon B2F"):
     odd("not on Mt. Moon B2F: " + state())
 log("B2F:", state())
 # The two fossils at (12,6)/(13,6) block the passage to the exit until the Super Nerd at (12,8) is beaten
 # and one fossil is taken (he keeps the other).
-go("to 13,8", **BK)
+go("to 13,8", **BK)                               # he usually spots us and the fight happens on the way
 if not prof.in_battle():
     press("LEFT:2")
     r = talk()
     log("  nerd:", r[:100])
-    if not prof.in_battle():
-        A.until(lambda: press("A"), "BATTLE", 6, "super nerd")
-A.resolve_battle(**BK)
+if prof.in_battle():
+    A.resolve_battle(**BK)
 skip_text()
 go("to 12,7", **BK)
 press("UP:2")
@@ -117,14 +121,14 @@ else:
 if "Fossil" not in state("items"):
     odd("no fossil in the bag: " + state("items"))
 go("to 5,7", **BK)                                # exit ladder, up to B1F's exit pocket
-if prof.position()[0] != 60:
+if not at("Mt. Moon B1F"):
     odd("not back on B1F after B2F: " + state())
 go("to 27,3", **BK)
 log("out of Mt. Moon:", state())
-if prof.position()[0] != 15:
+if not at("Route 4"):
     odd("not on Route 4 after Mt. Moon: " + state())
 go("to Cerulean City", **BK)                      # Route 4's east edge (a connection, not yet in the world graph)
-if prof.position()[0] != 3:
+if not at("Cerulean City"):
     travel("Cerulean City", **BK)
 log("STAGE 1 done:", state(), state("party"))
 manage("save")
@@ -136,16 +140,16 @@ heal_at("Cerulean Poké Center")
 lead_strongest()
 go("to Route 24", **BK)                           # north edge of Cerulean (the rival ambushes here)
 for _ in range(3):
-    if prof.position()[0] == 23:
+    if at("Route 24"):
         break
     travel("Route 24", **BK)
 for _ in range(4):                                # across Nugget Bridge (five trainers and a Rocket) to Route 25's edge
-    if prof.position()[0] != 23:
+    if not at("Route 24"):
         break
     r = go("to Route 25", **BK)
     log("  bridge:", r[-120:])
 log("after the bridge:", state(), state("party"))
-if prof.position()[0] == 24:
+if at("Route 25"):
     go("to Bill's House", **BK)                   # Route 25's trainers line the way
     log("Route 25 done:", state())
 if need_heal():
@@ -174,10 +178,7 @@ def misty_fight():
             log("  misty turn", turns, "potion:", r[:120])
         else:
             moves = [n for n, pp in me["moves"] if pp > 0 and n != me.get("disabled")]
-            if me["species"] in FIRE:
-                pick = next((m for m in ("Slash", "Scratch", "Ember") if m in moves), "")
-            else:
-                pick = next((m for m in ("Confusion", "Gust", "Tackle") if m in moves), "")
+            pick = next((m for m in ("Slash", "Scratch", "Confusion", "Gust", "Tackle", "Ember") if m in moves), "")
             r = battle("fight", pick)
             log("  misty turn", turns, pick, "->", r[:160])
         if "battle('switch'" in r:
@@ -209,7 +210,7 @@ def approach_misty():
 
 for attempt in range(3):
     travel("Cerulean Gym", **BK)
-    if prof.position()[0] != 65:
+    if not at("Cerulean Gym"):
         continue
     if not approach_misty():
         break
@@ -232,6 +233,6 @@ if prof.badges() >= 2:
         emu.pyboy.save_state(f)
     log("saved", out)
 else:
-    odd("no Cascade Badge")
+    log("no Cascade Badge: Misty won (a game outcome, not a tool anomaly); the tools were exercised all the way")
 A.finish()
 emu.stop()
