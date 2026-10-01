@@ -272,7 +272,8 @@ class Run:
         tok = {k: sum(int((c.get("tokens") or {}).get(k, 0)) for c in self.state["chunks"]) for k in ("input", "cached_input", "cache_write", "output", "reasoning")}
         costs = [c["cost_usd"] for c in self.state["chunks"] if c.get("cost_usd") is not None]
         self.state["tokens"] = tok
-        self.state["cost_usd"] = round(sum(costs), 4) if costs else None
+        # Claude Code reports total_cost_usd for the whole (resumed) session, so the last figure is the total.
+        self.state["cost_usd"] = round(max(costs) if self.provider.name == "claude" else sum(costs), 4) if costs else None
         self.state["cost_estimated"] = False
         if len(costs) < len(self.state["chunks"]):           # some chunks ended without a cost figure: estimate
             prices = _read_json(ROOT / "bench" / "prices.json").get(self.model)
