@@ -93,7 +93,7 @@ class ScriptedAgent:
         self.odd("text never ended: " + (prof.screen_text() or "")[:100].replace("\n", "|") + " @ " + self.state())
 
     def resolve_battle(self, policy_move=None, trainee=None, strong=None, want=None, heal_below=0.0, potion="Potion",
-                       smart=False):
+                       smart=True):
         """Fight the current battle to its end. trainee/strong: switch a weak trainee out for a strong
         species when low; want: throw balls at those species; heal_below: use a potion under that HP ratio;
         smart: switch a Pokémon below 30% HP for the healthiest team-mate when no potion is left."""
@@ -131,9 +131,11 @@ class ScriptedAgent:
                 r = battle("item", potion)
                 log("  heal:", r[:120])
                 continue
-            if smart and mine["hp"] < mine["max_hp"] * 0.3:
+            helpless = not any(pp > 0 for n, pp in mine["moves"] if n not in STATUS and n != mine.get("disabled") and n not in bad_moves)
+            if smart and (mine["hp"] < mine["max_hp"] * 0.3 or helpless):
                 cur = self.prof._u8(0xCC2F)
-                best = max(((i, p) for i, p in enumerate(party) if i != cur and p["hp"] > p["max_hp"] * 0.5),
+                best = max(((i, p) for i, p in enumerate(party) if i != cur and p["hp"] > p["max_hp"] * 0.5
+                            and any(pp > 0 for n, pp in p["moves"] if n not in STATUS)),
                            key=lambda ip: ip[1]["level"], default=None)
                 if best:
                     r = battle("switch", str(best[0] + 1))
@@ -141,33 +143,49 @@ class ScriptedAgent:
                     if not prof.in_battle():
                         return r
                     continue
+                if helpless and b["kind"] == "wild":
+                    r = battle("run")
+                    if not prof.in_battle():
+                        return r
             moves = [n for n, pp in mine["moves"] if pp > 0 and n != mine.get("disabled") and n not in bad_moves]
             pick = policy_move if policy_move in moves else next((m for m in moves if m not in STATUS), moves[0] if moves else "")
             if not trainee and not want and not heal_below and not smart:
                 r = battle("auto", pick)                  # routine fight: one call
             else:
                 r = battle("fight", pick)
+            head = r.split("\n", 1)[0]                     # the helper's own line; the hint below it also mentions battle('switch')
             if turns >= 30 or turns <= 3:
-                log("  battle turn", turns, pick, "->", r[:160])
-            if "needs a decision" in r:
-                if "learn" in r.lower() or "forget" in r.lower() or "delete" in r.lower():
+                log("  battle turn", turns, pick, "->", head[:200])
+            if "needs a decision" in head:
+                if "learn" in head.lower() or "forget" in head.lower() or "delete" in head.lower():
                     log("  learn prompt ->", self.learn_move()[:100])
                 else:
                     press("A")
-            elif "battle('switch'" in r:
-                alive = [i + 1 for i, p in enumerate(prof.party()) if p["hp"] > 0]
-                if alive:
-                    battle("switch", str(alive[0]))
-                else:
-                    press("A*3")
-            elif "is DISABLED" in r or r.startswith("no PP left"):
+            elif "battle('switch'" in head:
+                self.switch_after_faint()
+            elif "is DISABLED" in head or head.startswith("no PP left"):
                 bad_moves.add(pick)
-            elif r.startswith(("could not", "cannot", "no move", "unknown")):
-                self.odd("battle helper: " + r[:150])
+            elif head.startswith(("could not", "cannot", "no move", "unknown")):
+                self.odd("battle helper: " + head[:150])
                 press("A")
         if prof.in_battle():
             self.odd("battle did not end in 45 turns")
         return r if turns else "no battle"
+
+    def switch_after_faint(self) -> str:
+        """Answer 'Bring out which POKéMON?' with the healthiest alive party member."""
+        prof = self.prof
+        cur = prof._u8(0xCC2F)
+        alive = sorted(((p["hp"] / max(p["max_hp"], 1), i) for i, p in enumerate(prof.party()) if p["hp"] > 0 and i != cur), reverse=True)
+        r = ""
+        for _, i in alive[:3]:
+            r = self.battle("switch", str(i + 1)).split("\n", 1)[0]
+            self.log("  switch after faint ->", r[:120])
+            if "already out" not in r and "no will to fight" not in r and "fainted" not in r.split("—")[0]:
+                return r
+        if not alive:
+            self.press("A*3")
+        return r
 
     def learn_move(self) -> str:
         """Answer a 'learn new move' prompt: yes, forgetting the first status move (else the first move)."""

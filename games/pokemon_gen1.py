@@ -661,7 +661,9 @@ class PokemonGen1Profile(GameProfile):
                 if not matches:
                     return "which Pokémon? give its party number or name: " + ", ".join(f"{i + 1}={p['species']}" for i, p in enumerate(party))
                 idx = matches[0]
-            if party[idx]["hp"] == 0:
+            cur_idx = self._u8(D.PLAYER_MON_NUMBER)
+            cur_hp = b["mine"]["hp"] if b else None
+            if party[idx]["hp"] == 0 or (idx == cur_idx and cur_hp == 0):   # the party struct lags behind a faint
                 return f"{party[idx]['species']} has fainted; pick another"
             if kind == "main":
                 if not self._select_main(emu, (1, 0)):
