@@ -656,4 +656,5 @@ def test_unreachable_connection_is_explained(emu):
     finally:
         prof.find_path = real
     assert "north edge" in r and "no walkable route" in r and "exits" in r, r
-    assert "entered" in emu.walk("to Route 1")             # and the real route still works
+    r = emu.walk("to Route 1")                             # and the real route still works (Oak interrupts it)
+    assert "entered" in r or "dialogue appeared" in r, r
