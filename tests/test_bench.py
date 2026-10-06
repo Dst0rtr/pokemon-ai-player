@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from bench.report import CHAMPION, build_results_md, derive, rank_key
+from bench.report import CHAMPION, build_results_md, derive, dump_result, rank_key
 from bench.stream import ChunkStats
 
 FIX = Path(__file__).parent / "fixtures"
@@ -97,3 +97,11 @@ def test_claude_tokens_accumulate_per_message_without_result():
     assert st.tokens["input"] == 10 and st.tokens["cached_input"] == 2000 and st.tokens["output"] == 40   # m1 counted once
     st.feed({"type": "result", "usage": {"input_tokens": 11, "output_tokens": 41}, "total_cost_usd": 0.5, "session_id": "s"})
     assert st.tokens["input"] == 11 and st.tokens["output"] == 41 and st.cost_usd == 0.5
+
+
+def test_dump_result_round_trips_and_keeps_chunks_on_single_lines():
+    a = _result("a", "model-a", "claude", ["starter: Squirtle", "badge: Boulder"], 1, 1.5)
+    text = dump_result(a)
+    assert json.loads(text) == a
+    assert sum(1 for ln in text.splitlines() if ln.startswith('  {"n": 1')) == 1          # the chunk is one line
+    assert sum(1 for ln in text.splitlines() if ln.startswith('  {"name": "badge: Boulder"')) == 1

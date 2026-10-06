@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from bench.providers import make_provider  # noqa: E402
 from bench.stream import ChunkStats  # noqa: E402
-from bench.report import derive, write_results_md  # noqa: E402
+from bench.report import derive, dump_result, write_results_md  # noqa: E402
 
 PYTHON = str(ROOT / "venv" / "bin" / "python") if (ROOT / "venv" / "bin" / "python").exists() else sys.executable
 CHAMPION = "champion defeated (Hall of Fame)"
@@ -275,12 +275,16 @@ class Run:
         # Claude Code reports total_cost_usd for the whole (resumed) session, so the last figure is the total.
         self.state["cost_usd"] = round(max(costs) if self.provider.name == "claude" else sum(costs), 4) if costs else None
         self.state["cost_estimated"] = False
-        if len(costs) < len(self.state["chunks"]):           # some chunks ended without a cost figure: estimate
+        if not costs:                                        # the CLI reported no cost at all: estimate from list prices
             prices = _read_json(ROOT / "bench" / "prices.json").get(self.model)
             if prices:
                 est = sum(tok.get(k, 0) * prices.get(k, 0) / 1e6 for k in ("input", "cached_input", "cache_write", "output"))
                 self.state["cost_usd"] = round(est, 4)
                 self.state["cost_estimated"] = True
+        for c in self.state["chunks"][1:]:                   # keep the published file small: per-chunk essentials only
+            c.pop("mcp_servers", None)
+            if not c.get("errors"):
+                c.pop("errors", None)
         self.state["wall_seconds"] = round((datetime.fromisoformat(self.state["ended"]) - datetime.fromisoformat(self.state["started"])).total_seconds(), 1)
         self.save()
         metrics = self.checkpoint()
@@ -291,7 +295,7 @@ class Run:
         else:
             out = ROOT / "results" / f"{self.run_id}.json"
             out.parent.mkdir(exist_ok=True)
-        out.write_text(json.dumps(result, indent=1))
+        out.write_text(dump_result(result))
         self.log(f"results written to {out}; exit reason {reason}")
         if not self.args.smoke:
             write_results_md(ROOT / "results", ROOT / "RESULTS.md")

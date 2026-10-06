@@ -97,7 +97,8 @@ def rank_key(r: dict) -> tuple:
 
 
 def leaderboard(results: list[dict]) -> str:
-    head = ["#", "Model", "Provider", "Starter", "Badges", "Furthest"] + BADGES + E4 + ["Champion", "Active h", "Tool calls", "Tokens in / cached / out", "Cost", "Exit"]
+    head = (["#", "Model", "Provider", "Starter", "Badges", "Furthest"] + BADGES + E4[:-1]
+            + ["Rival (Champion)", "Hall of Fame", "Active h", "Tool calls", "Tokens in / cached / out", "Cost", "Exit"])
     rows = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
     for i, r in enumerate(sorted(results, key=rank_key), 1):
         d, h, m = r["derived"], r["harness"], r["metrics"]
@@ -142,11 +143,32 @@ def run_section(r: dict) -> str:
         out += ["**Agent notes**", ""] + [f"- {n}" for n in notes[-15:]] + [""]
     chunks = h.get("chunks") or []
     if chunks:
-        out += ["<details><summary>Chunks</summary>", "", "| # | Started | Minutes | Exit | Tool calls seen | Tokens in / cached / out | Cost |", "|---|---|---|---|---|---|---|"]
+        reasons: dict[str, int] = {}
         for c in chunks:
-            out.append(f"| {c['n']} | {c['started']} | {c['seconds'] / 60:.0f} | {c['exit_reason']} | {c['tool_calls_seen']} | {_tokens(c.get('tokens'))} | {c.get('cost_usd') if c.get('cost_usd') is not None else '—'} |")
-        out += ["", "</details>", ""]
+            reasons[c["exit_reason"]] = reasons.get(c["exit_reason"], 0) + 1
+        secs = sorted(c["seconds"] for c in chunks)
+        why = ", ".join(f"{n} {r}" for r, n in sorted(reasons.items(), key=lambda kv: -kv[1]))
+        out += [f"**CLI chunks:** {len(chunks)} (the CLI is restarted whenever the model ends its turn, a chunk rotates, "
+                f"stalls or is rate-limited): {why}; median {secs[len(secs) // 2] / 60:.1f} min, longest {secs[-1] / 60:.0f} min.", ""]
+        if len(chunks) <= 30:
+            out += ["<details><summary>Chunks</summary>", "", "| # | Started | Minutes | Exit | Tool calls seen | Tokens in / cached / out |", "|---|---|---|---|---|---|"]
+            for c in chunks:
+                out.append(f"| {c['n']} | {c['started']} | {c['seconds'] / 60:.0f} | {c['exit_reason']} | {c['tool_calls_seen']} | {_tokens(c.get('tokens'))} |")
+            out += ["", "</details>", ""]
     return "\n".join(out)
+
+
+def dump_result(result: dict) -> str:
+    """Indented JSON, but one line per chunk and per milestone so long runs stay reviewable and small."""
+    def lines(items):
+        return "[\n" + ",\n".join("  " + json.dumps(x, ensure_ascii=False) for x in items) + "\n ]" if items else "[]"
+    r = json.loads(json.dumps(result))
+    chunks = r.get("harness", {}).pop("chunks", [])
+    miles = r.get("metrics", {}).pop("milestones", [])
+    text = json.dumps(r, indent=1, ensure_ascii=False)
+    text = text.replace('"harness": {', '"harness": {\n  "chunks": ' + lines(chunks) + ",", 1)
+    text = text.replace('"metrics": {', '"metrics": {\n  "milestones": ' + lines(miles) + ",", 1)
+    return text + "\n"
 
 
 def load_results(results_dir: Path) -> list[dict]:
@@ -169,8 +191,9 @@ def build_results_md(results: list[dict]) -> str:
              "[Game Boy MCP server](README.md), with the same prompt, the same server flags and a budget of "
              "12 hours of active play or 20,000 tool calls. Time cells are `active hours:minutes · tool calls` "
              "when the milestone was reached; `—` means never. Ranking: Champion first (by time), then badges, "
-             "then the furthest story point, then fewer tool calls. Raw data: `results/*.json`; regenerate with "
-             "`python bench/report.py`.", ""]
+             "then the furthest story point, then fewer tool calls. Cost is the CLI's own API-equivalent figure "
+             "(runs on a subscription are not billed per token); `(est.)` marks an estimate from list prices. "
+             "Raw data: `results/*.json`; regenerate with `python bench/report.py`.", ""]
     if not results:
         return "\n".join(parts + ["_No runs yet._", ""])
     parts += [leaderboard(results), "", "## Runs", ""]
