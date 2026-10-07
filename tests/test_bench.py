@@ -32,7 +32,7 @@ def test_codex_stream_parses_thread_and_usage():
     for line in (FIX / "codex_stream.jsonl").read_text().splitlines():
         st.feed_line(line)
     assert st.session_id == "01a0d1b6-508b-7370-bbaa-e53155a86f9e"
-    assert st.tokens["input"] == 17566 and st.tokens["cached_input"] == 11136 and st.tokens["output"] == 5
+    assert st.tokens["input"] == 17566 - 11136 and st.tokens["cached_input"] == 11136 and st.tokens["output"] == 5
     assert st.cost_usd is None and st.turns == 1 and st.result_text == "pong"
     st.feed({"type": "item.started", "item": {"type": "mcp_tool_call", "server": "gameboy", "tool": "walk"}})
     st.feed({"type": "item.completed", "item": {"type": "mcp_tool_call", "server": "gameboy", "tool": "walk"}})

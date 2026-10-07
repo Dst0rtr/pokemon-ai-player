@@ -98,7 +98,7 @@ def rank_key(r: dict) -> tuple:
 
 def leaderboard(results: list[dict]) -> str:
     head = (["#", "Model", "Provider", "Starter", "Badges", "Furthest"] + BADGES + E4[:-1]
-            + ["Rival (Champion)", "Hall of Fame", "Active h", "Tool calls", "Tokens in / cached / out", "Cost", "Exit"])
+            + ["Rival (Champion)", "Hall of Fame", "Active h", "Tool calls", "Tokens uncached in / cache reads / out", "Cost", "Exit"])
     rows = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
     for i, r in enumerate(sorted(results, key=rank_key), 1):
         d, h, m = r["derived"], r["harness"], r["metrics"]
@@ -118,7 +118,11 @@ def run_section(r: dict) -> str:
            f"- CLI: `{h.get('cli')}` {h.get('cli_version')} · server commit `{h.get('server_commit')}` · prompt `{h.get('prompt_sha256')}`",
            f"- Started {h.get('started')} · ended {h.get('ended')} · active {_hm(m.get('real_seconds'))} h · wall {_hm(h.get('wall_seconds'))} h · paused {_hm(h.get('paused_seconds'))} h · exit: **{h.get('exit_reason')}**",
            f"- Tool calls {d['tool_calls']} · images {m.get('images_sent')} · reloads {m.get('loads', 0)} · black-outs {d['blackouts']} · in-game playtime {d.get('playtime')} · Pokédex {d.get('dex_owned')} owned · maps visited {d.get('maps_visited')}",
-           f"- Tokens in / cached / out: {_tokens(h.get('tokens'))} · cost {_cost(h)} · chunks {len(h.get('chunks', []))}", ""]
+           f"- Tokens uncached in / cache reads / out: {_tokens(h.get('tokens'))}"
+           + (f" (from {h['tokens_source']})" if h.get("tokens_source") else "") + f" · cost {_cost(h)} · chunks {len(h.get('chunks', []))}"
+           + (f" · save/load scumming: {m.get('tool_calls', {}).get('load_state', 0)} reloads" if m.get("tool_calls", {}).get("load_state", 0) > 100 else ""), ""]
+    if h.get("corrections"):
+        out += ["**Corrections:** " + " ".join(h["corrections"]), ""]
     if d["final_team"]:
         out += ["**Final team**", "", "| # | Pokémon | Lv | HP | Atk | Def | Spd | Spc | Moves |", "|---|---|---|---|---|---|---|---|---|"]
         for i, t in enumerate(d["final_team"], 1):

@@ -123,7 +123,9 @@ def _feed_codex(st: ChunkStats, obj: dict[str, Any]) -> None:
         st.turns += 1
         st.finished = True
         u = obj.get("usage") or {}
-        st.add_tokens(input=u.get("input_tokens", 0), cached_input=u.get("cached_input_tokens", 0),
+        # Codex counts cache reads inside input_tokens; report uncached input like Claude does.
+        st.add_tokens(input=max(int(u.get("input_tokens", 0) or 0) - int(u.get("cached_input_tokens", 0) or 0), 0),
+                      cached_input=u.get("cached_input_tokens", 0),
                       cache_write=u.get("cache_write_input_tokens", 0), output=u.get("output_tokens", 0),
                       reasoning=u.get("reasoning_output_tokens", 0))
     elif t in ("turn.failed", "error"):

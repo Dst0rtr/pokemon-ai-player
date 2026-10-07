@@ -91,3 +91,19 @@ gate before any model hours are spent.
 * Each run starts from power-on with its own ROM copy (no battery save, no autosave).
 * Outcomes vary with RNG and with the model's own choices (starter, team); one run per model is a
   sample, not a verdict.
+
+## Round one notes (October 2026)
+
+* **Call budgets reward save-state scumming.** `save_state`/`load_state` are tool calls like any other, and
+  gpt-5.6-sol spent about 9,000 of its 20,000 calls on 7,100 reloads (re-rolling battles and encounters).
+  It still reached the Champion's room. A future round may count only game actions toward the budget, or
+  cap reloads; until then the reload count is shown in each run's section.
+* **Codex cannot resume very long threads** (its remote compaction step fails); the harness falls back to
+  a fresh session. Codex also reports token usage only when a turn completes, so the harness reads the
+  usage back from `~/.codex/sessions/**/rollout-*.jsonl` after the run (`tokens_source` in the result).
+* **Token columns** are uncached input / cache reads / output for both providers (Codex counts cache reads
+  inside its input figure; the harness subtracts them). Claude Code's cost is the CLI's own cumulative
+  API-equivalent figure; Codex reports none.
+* **Model behaviour dominates.** Haiku 4.5 ended its turn about 2,200 times and declared the game
+  unwinnable after one badge; gpt-5.6-sol played continuously and took eight badges plus four Elite Four
+  wins in under five active hours.

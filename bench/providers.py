@@ -102,6 +102,33 @@ class CodexProvider(Provider):
         return [self.cli, "exec", "resume", session_id, "-m", self.model] + common + ["-"]
 
 
+def codex_rollout_usage(session_ids) -> dict:
+    """Sum token usage from Codex's local session rollouts (~/.codex/sessions/**/rollout-*-<thread>.jsonl).
+    `codex exec --json` reports usage only when a turn completes, so a chunk that was rotated or killed
+    loses it; the rollout logs a token_count event after every model call instead."""
+    import glob as _glob
+    totals = {"input": 0, "cached_input": 0, "cache_write": 0, "output": 0, "reasoning": 0}
+    found = 0
+    for sid in {s for s in session_ids if s}:
+        for f in _glob.glob(os.path.expanduser(f"~/.codex/sessions/**/rollout-*-{sid}.jsonl"), recursive=True):
+            found += 1
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if '"token_count"' not in line:
+                        continue
+                    try:
+                        u = json.loads(line)["payload"]["info"]["last_token_usage"]
+                    except (ValueError, KeyError, TypeError):
+                        continue
+                    cached = int(u.get("cached_input_tokens", 0) or 0)
+                    totals["input"] += max(int(u.get("input_tokens", 0) or 0) - cached, 0)   # uncached input, like Claude
+                    totals["cached_input"] += cached
+                    totals["cache_write"] += int(u.get("cache_write_input_tokens", 0) or 0)
+                    totals["output"] += int(u.get("output_tokens", 0) or 0)
+                    totals["reasoning"] += int(u.get("reasoning_output_tokens", 0) or 0)
+    return totals if found else {}
+
+
 PROVIDERS = {"claude": ClaudeProvider, "codex": CodexProvider}
 
 
