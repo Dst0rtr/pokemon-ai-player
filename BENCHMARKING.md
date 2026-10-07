@@ -10,7 +10,9 @@ Nothing needs to be called except `metrics("finalize")` at the end (or start the
 `--finalize-on-exit`); the tracker also checkpoints on every autosave and on shutdown, so a crashed
 run still leaves `metrics/<session>_checkpoint.json`.
 
-* real-time seconds (accumulated across launches of the same session), emulated frames, in-game playtime
+* active real seconds (accumulated across launches of the same session; a gap of more than five minutes
+  between tool calls counts as five minutes, so a stalled or disconnected client does not run the clock),
+  emulated frames, in-game playtime
 * tool calls (total and per tool), images sent, text characters sent, state reloads, agent notes
 * milestones with timestamp, frame, tool-call count and a snapshot of the team (levels, HP, moves, stats):
   * Pokémon: `game started`, `starter: Charmander`, `badge: Boulder`, `obtained: Pidgey`,
@@ -52,6 +54,10 @@ CLI session is resumed with `bench/CONTINUE.md`, and the server resumes from its
 same metrics session. The run ends on the Hall of Fame milestone, after 12 hours of active play or
 20,000 tool calls (whichever comes first), or after three CLI failures in a row. Rate-limit pauses
 are not counted as active time.
+
+If a resumed CLI session produces no tool call within five minutes (Codex, for example, cannot resume a
+very long thread when its remote compaction fails) the harness abandons that session and starts a fresh
+one with the continue prompt; the game state and the agent's notes live on the server, so nothing is lost.
 
 Providers: `claude` (Claude Code CLI, any Claude model id) and `codex` (OpenAI Codex CLI). Tokens
 and cost come from the CLI's own stream; when a chunk ends without a cost figure the cost is

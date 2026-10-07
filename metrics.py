@@ -27,6 +27,7 @@ log = logging.getLogger("gameboy.metrics")
 # List-valued snapshot keys worth keeping per milestone (the team at each badge etc.); other lists are dropped.
 _SNAPSHOT_LISTS = {"party", "team"}
 MAX_NOTES = 30
+IDLE_CAP = 300.0          # seconds: a gap between tool calls longer than this counts as 5 minutes (the client stalled)
 
 
 @dataclass
@@ -55,7 +56,9 @@ class MetricsTracker:
         self.session_id = session_id or f"{_slug(self.ai_model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self.start_time = time.time()          # start of this chunk
         self.first_start = self.start_time     # start of the whole session
-        self.prior_seconds = 0.0               # real seconds spent in earlier chunks
+        self.prior_seconds = 0.0               # active seconds spent in earlier chunks
+        self.active_seconds = 0.0              # active seconds in this chunk (idle gaps capped at IDLE_CAP)
+        self._last_tick = self.start_time
         self.end_time: Optional[float] = None
         self.frames = 0
         self.tool_calls: dict[str, int] = {}
@@ -92,6 +95,8 @@ class MetricsTracker:
             pass
         self.prior_seconds = float(d.get("real_seconds", 0) or 0)
         self.start_time = time.time()
+        self.active_seconds = 0.0
+        self._last_tick = self.start_time
         self.end_time = None
         self.frames = int(d.get("frames", 0) or 0)
         self.tool_calls = {k: int(v) for k, v in (d.get("tool_calls") or {}).items()}
@@ -110,6 +115,9 @@ class MetricsTracker:
         return True
 
     def record_call(self, tool: str, text_len: int, image: bool) -> None:
+        now = time.time()
+        self.active_seconds += min(now - self._last_tick, IDLE_CAP)
+        self._last_tick = now
         self.tool_calls[tool] = self.tool_calls.get(tool, 0) + 1
         self.text_chars_sent += text_len
         if image:
@@ -139,7 +147,9 @@ class MetricsTracker:
         return f"note saved ({len(self.notes)} notes; metrics('report') shows them)"
 
     def elapsed(self) -> float:
-        return self.prior_seconds + ((self.end_time or time.time()) - self.start_time)
+        """Active real seconds: wall time, with idle gaps longer than IDLE_CAP counted as IDLE_CAP."""
+        now = self.end_time or time.time()
+        return self.prior_seconds + self.active_seconds + min(max(now - self._last_tick, 0.0), IDLE_CAP)
 
     def budget_exhausted(self) -> Optional[str]:
         calls = sum(self.tool_calls.values())

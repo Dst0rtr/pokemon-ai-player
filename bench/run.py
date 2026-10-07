@@ -130,15 +130,18 @@ class Run:
     # ------------------------------------------------------------- one chunk
     def run_chunk(self) -> dict:
         n = len(self.state["chunks"]) + 1
-        first = self.state["cli_session"] is None
+        first = self.state["cli_session"] is None                 # no CLI session to resume: start a fresh one
+        fresh_continue = first and bool(self.state["chunks"])     # ...but the game is already in progress
         session = self.state["cli_session"] or (str(uuid.uuid4()) if self.provider.name == "claude" else None)
-        prompt_file = self.dir / ("prompt.md" if first else "continue.md")
+        prompt_file = self.dir / ("continue.md" if self.state["chunks"] else "prompt.md")
         cmd = self.provider.command(self.dir, prompt_file, session, first)
+        self._resuming = not first
         out_path, err_path = self.dir / "chunks" / f"{n:03d}.jsonl", self.dir / "chunks" / f"{n:03d}.stderr"
         (self.dir / "chunks" / f"{n:03d}.cmd").write_text(" ".join(cmd) + "\n")
         stats = ChunkStats(self.provider.name)
         started = time.time()
-        self.log(f"chunk {n}: {'start' if first else 'resume ' + str(session)} ({self.provider.cli} {self.model})")
+        self.log(f"chunk {n}: {'fresh session (continue)' if fresh_continue else 'start' if first else 'resume ' + str(session)} "
+                 f"({self.provider.cli} {self.model})")
         with open(out_path, "wb") as out, open(err_path, "wb") as err, open(prompt_file, "rb") as pin:
             self.proc = subprocess.Popen(cmd, stdin=pin, stdout=out, stderr=err, cwd=self.dir, env=self.provider.env(self.dir))
             exit_reason = self._watch(out_path, stats, started)
@@ -152,13 +155,20 @@ class Run:
         elif first and session:
             self.state["cli_session"] = session
         rec = {"n": n, "started": datetime.fromtimestamp(started).isoformat(timespec="seconds"), "seconds": round(seconds, 1),
-               "exit_code": code, "exit_reason": exit_reason, "cli_session": stats.session_id or session,
+               "exit_code": code, "exit_reason": exit_reason, "cli_session": stats.session_id or session, "fresh": first,
                "tool_calls_seen": stats.tool_calls, "tokens": stats.tokens, "cost_usd": stats.cost_usd,
                "turns": stats.turns, "errors": stats.errors[:5], "rate_limited": stats.rate_limited,
                "mcp_servers": stats.mcp_servers, "server_tool_calls_total": cp.get("tool_calls_total"),
                "milestones_total": len(cp.get("milestones", []))}
         self.state["chunks"].append(rec)
-        self.state["active_seconds"] += seconds
+        if stats.tool_calls or exit_reason in ("rotate", "budget_time", "budget_calls", "champion", "manual"):
+            self.state["active_seconds"] += seconds           # a chunk that never played is not active time
+        if not first and stats.tool_calls == 0 and exit_reason in ("stall", "resume_failed", "cli_error", "exited"):
+            # The CLI could not continue its own session (e.g. Codex's remote compaction of a huge thread
+            # failing): next time start a fresh session with the continue prompt; the server holds the game.
+            self.log(f"resume of {session} produced no tool calls: switching to a fresh CLI session")
+            self.state["cli_session"] = None
+            self.state["fresh_sessions"] = self.state.get("fresh_sessions", 0) + 1
         self.save()
         self.log(f"chunk {n} done: {exit_reason}, exit {code}, {seconds:.0f}s, {stats.tool_calls} tool calls seen, "
                  f"server total {cp.get('tool_calls_total')}, tokens {stats.tokens}, cost {stats.cost_usd}"
@@ -199,6 +209,8 @@ class Run:
                 reason = "rotate"
             elif time.time() - stats.last_activity >= self.args.stall_minutes * 60:
                 reason = "stall"
+            elif getattr(self, "_resuming", False) and stats.tool_calls == 0 and elapsed >= self.args.resume_timeout_minutes * 60:
+                reason = "resume_failed"
             else:
                 continue
             self._terminate()
@@ -248,11 +260,11 @@ class Run:
                 backoff = min(backoff * 2, 60)
                 continue
             backoff = 5
-            if rec["exit_code"] not in (0, None, -15) and rec["tool_calls_seen"] == 0:
+            if rec["tool_calls_seen"] == 0 and rec["exit_reason"] in ("cli_error", "stall", "resume_failed", "exited"):
                 fails += 1
-                if fails >= 3:
+                if fails >= 6:
                     return "cli_error"
-                self._pause(30)
+                self._pause(30 if fails < 3 else 300)
                 continue
             fails = 0
             if rec["exit_reason"] == "stall":
@@ -327,6 +339,8 @@ def main(argv=None) -> None:
     p.add_argument("--max-calls", type=int, default=20000)
     p.add_argument("--chunk-minutes", type=float, default=60)
     p.add_argument("--stall-minutes", type=float, default=15)
+    p.add_argument("--resume-timeout-minutes", type=float, default=5,
+                   help="a resumed CLI session with no tool call after this long is abandoned for a fresh session")
     p.add_argument("--max-chunks", type=int, default=0, help="stop after this many chunks (0 = unlimited)")
     p.add_argument("--poll-seconds", type=float, default=5)
     p.add_argument("--grace-seconds", type=float, default=60)

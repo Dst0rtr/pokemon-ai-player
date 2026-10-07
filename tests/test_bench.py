@@ -105,3 +105,16 @@ def test_dump_result_round_trips_and_keeps_chunks_on_single_lines():
     assert json.loads(text) == a
     assert sum(1 for ln in text.splitlines() if ln.startswith('  {"n": 1')) == 1          # the chunk is one line
     assert sum(1 for ln in text.splitlines() if ln.startswith('  {"name": "badge: Boulder"')) == 1
+
+
+def test_metrics_active_time_caps_idle_gaps(tmp_path):
+    import time
+    from metrics import IDLE_CAP, MetricsTracker
+    t = MetricsTracker("m", "rom", tmp_path)
+    t._last_tick = time.time() - 4000                      # the client went quiet for over an hour
+    assert t.elapsed() < IDLE_CAP + 1
+    t.record_call("walk", 10, False)
+    assert IDLE_CAP - 1 < t.active_seconds < IDLE_CAP + 1
+    t._last_tick = time.time() - 10
+    t.record_call("walk", 10, False)
+    assert IDLE_CAP + 8 < t.active_seconds < IDLE_CAP + 12  # short gaps count in full
