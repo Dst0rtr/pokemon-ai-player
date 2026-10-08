@@ -489,6 +489,9 @@ class Emulator:
                 else:
                     idle += 1
                 if f % 4 == 3:
+                    if prof.sliding():
+                        reason = "spinner"
+                        break
                     if getattr(prof, "in_battle", lambda: 0)():
                         reason = "battle started"
                         break
@@ -511,6 +514,15 @@ class Emulator:
                     if cur[0] != start_map:
                         reason = f"entered {prof.map_label(cur[0])}"
                         break
+        if reason == "spinner" or prof.sliding():
+            # A spinner tile carries the player (about 48 frames per tile) with input ignored: wait for
+            # the stop tile so the reported position is where the player really ends up.
+            for _ in range(600):
+                if not prof.sliding():
+                    break
+                self.tick(4)
+            cur = prof.position()
+            reason = f"slid on a spinner tile to ({cur[1]},{cur[2]})"
         if reason is None and steps < n:
             reason = "blocked"                     # ran out of time without finishing: treat as blocked
         if reason == "blocked":

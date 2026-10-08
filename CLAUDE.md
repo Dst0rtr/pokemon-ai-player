@@ -27,7 +27,7 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `bench/run.py` | benchmark harness: launches Claude Code / Codex headless in resumable chunks, budgets, rate-limit pauses, writes `results/<run>.json` |
 | `bench/report.py` | derives per-run summaries and renders `RESULTS.md` from `results/*.json` |
 | `bench/stream.py`, `bench/providers.py` | CLI event-stream parsers (tested on captured streams) and per-CLI command builders |
-| `tests/` | pytest (65): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
+| `tests/` | pytest (66): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 
@@ -128,6 +128,9 @@ after a walk), `hint:` (from `profile.hint()`), then an image only if the screen
   stats at +17, STAB, the ROM's `TypeEffects` chart at 0F:6474, accuracy, capped at the foe's HP) from the ROM
   `Moves` table (0E:4000, 6 bytes each); immune matchups score 0, two-turn moves half, Self-Destruct last;
   ties go to the move with more PP. Both tables are signature-checked, else the plain move order is used.
+* Spinner tiles (Viridian Gym, Rocket Hideout) set `wd736` (0xD736) bit 7 while they carry the player
+  (~48 frames per tile, `wJoyIgnore` 0xFF): `_walk_segment` stops, waits for the bit to clear and reports
+  "slid on a spinner tile to (x,y)". The test needs a local `saves/<rom>/viridian-gym.state` (gym entrance).
 * Pathfinding: other warps are never crossed en route; NPC sprites cost +40 instead of blocking
   (objects hidden by events keep their sprite slot); a cell that turns out solid while walking is
   remembered and the route re-planned. A "blocked" step waits while `wJoyIgnore` is set (a trainer who

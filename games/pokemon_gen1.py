@@ -111,6 +111,9 @@ class PokemonGen1Profile(GameProfile):
         """True while a cutscene controls the player (directional input ignored)."""
         return self.started() and not self.in_battle() and (self._u8(D.JOY_IGNORE) & 0xF0) != 0
 
+    def sliding(self) -> bool:
+        return self.started() and bool(self._u8(D.MOVEMENT_FLAGS) & 0x80)
+
     def busy(self) -> bool:
         # The game blocks on jingles (item/Pokémon received, level up...) before polling input again,
         # and battle animations (slide-in, throws, attacks) ignore input until a menu or prompt shows.

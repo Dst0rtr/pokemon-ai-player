@@ -714,3 +714,21 @@ def test_move_and_type_tables_match_the_rom(emu):
     assert t[57][1:3] == (95, 0x15)                                 # Surf
     assert p._type_chart[(0x15, 0x14)] == 2.0 and p._type_chart[(0x04, 0x02)] == 0.0
     assert p._type_chart[(0x00, 0x08)] == 0.0 and p._type_chart[(0x08, 0x18)] == 0.0   # Gen 1: Ghost can't hit Psychic
+
+
+def test_walk_waits_out_a_spinner_slide(emu):
+    """Viridian Gym's spinner tiles carry the player with input ignored; walk must report where the slide
+    ends, not a mid-slide position. Needs a local saves/<rom>/viridian-gym.state at the gym entrance (16,17)."""
+    import pytest
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "viridian-gym.state"
+    if not state.exists():
+        pytest.skip("no local viridian-gym.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    assert emu.profile.position() == (45, 16, 17) and not emu.profile.sliding()
+    r = emu.walk("left 3, up 2")
+    assert "slid on a spinner tile to (1,17)" in r
+    assert emu.profile.position() == (45, 1, 17) and not emu.profile.sliding()

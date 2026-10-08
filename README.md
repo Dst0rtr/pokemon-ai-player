@@ -15,7 +15,7 @@ Any other ROM works with the generic profile (button scripts, screenshots, save 
   and 1,400 tool calls per run).
 * A second scripted run (`examples/extended_run.py`) continues from the Boulder Badge through Mt. Moon
   to Cerulean City and Misty, covering caves, trainers, in-battle items, field moves and the world graph.
-* 65 automated tests, including a replay of the game's opening, an MCP client round-trip and the
+* 66 automated tests, including a replay of the game's opening, an MCP client round-trip and the
   benchmark harness's stream parsers.
 * A public **benchmark**: agent CLIs (Claude Code, Codex) play from power-on toward the Champion with
   the same prompt and budgets; see [RESULTS.md](RESULTS.md) and [BENCHMARKING.md](BENCHMARKING.md).

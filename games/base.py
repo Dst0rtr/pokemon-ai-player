@@ -48,6 +48,10 @@ class GameProfile:
         """True while a cutscene controls the player."""
         return False
 
+    def sliding(self) -> bool:
+        """True while the player is carried by the map (spinner tiles, ice) and input is ignored."""
+        return False
+
     # -- state -------------------------------------------------------------- #
     def status_line(self) -> str:
         """One short line describing where the player is / what is happening."""

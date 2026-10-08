@@ -20,7 +20,7 @@ dialogue/menus decoded from VRAM as text).
 | `games/pokemon_gen1.py` | Red/Blue/Yellow: status line, party/battle/items/map sections, screen text, milestones |
 | `games/gen1_data.py` | verified WRAM addresses, charmap, species/move/item/map tables |
 | `games/pyboy_wrapped.py` | score/lives for games PyBoy has wrappers for (Tetris, Mario Land, Kirby, Pinball) |
-| `tests/` | pytest (65): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
+| `tests/` | pytest (66): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 

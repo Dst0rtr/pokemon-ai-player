@@ -39,6 +39,7 @@ TILESET_BLOCKS_PTR = 0xD52C  # ROM pointer (in TILESET_BANK) to 16-byte block de
 OVERWORLD_MAP = 0xC6E8       # (width+3*2) x (height+3*2) block ids, 3-block border
 TILESET_COLLISION_PTR = 0xD530
 GRASS_TILE = 0xD535
+MOVEMENT_FLAGS = 0xD736     # wd736: bit 7 = spinning across spinner tiles (Viridian Gym, Rocket Hideout)
 JOY_IGNORE = 0xCD6B         # wJoyIgnore: bit set = that button is ignored; non-zero during scripted scenes
 IS_IN_BATTLE = 0xD057       # 0 none, 1 wild, 2 trainer, 0xFF lost
 BATTLE_TYPE = 0xD05A        # 0 normal, 1 old man, 2 safari
