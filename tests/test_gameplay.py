@@ -658,3 +658,59 @@ def test_unreachable_connection_is_explained(emu):
     assert "north edge" in r and "no walkable route" in r and "exits" in r, r
     r = emu.walk("to Route 1")                             # and the real route still works (Oak interrupts it)
     assert "entered" in r or "dialogue appeared" in r, r
+
+
+def _fake_battle(mem, D, my_moves, my_types, foe_types, foe_hp=100, my_stats=(50, 50, 50, 50), foe_stats=(50, 50, 50, 50)):
+    """Poke a battle into WRAM: my battle mon (level 30) with `my_moves` (20 PP each) against a level 30 foe."""
+    mem[D.IS_IN_BATTLE] = 1
+    for base, types, stats, hp in ((D.BATTLE_MON, my_types, my_stats, 90), (D.ENEMY_MON, foe_types, foe_stats, foe_hp)):
+        mem[base + 1], mem[base + 2] = hp >> 8, hp & 0xFF
+        mem[base + 15], mem[base + 16] = hp >> 8, hp & 0xFF
+        mem[base + 4], mem[base + 14] = 0, 30
+        mem[base + 5], mem[base + 6] = types
+        for k, v in enumerate(stats):
+            mem[base + 17 + 2 * k], mem[base + 18 + 2 * k] = v >> 8, v & 0xFF
+    for j in range(4):
+        mem[D.BATTLE_MON + 8 + j] = my_moves[j] if j < len(my_moves) else 0
+        mem[D.BATTLE_MON_PP + j] = 20
+    mem[D.PLAYER_DISABLED_MOVE] = 0
+
+
+def test_auto_move_uses_type_chart_and_skips_immune_moves(emu):
+    from games import gen1_data as D
+    mem = emu.pyboy.memory
+    p = emu.profile
+    W, F, G, N, GR, FL, GH, PS = 0x15, 0x14, 0x16, 0x00, 0x04, 0x02, 0x08, 0x18
+    try:
+        _fake_battle(mem, D, (91, 57, 33, 44), (W, W), (FL, FL))      # Dig, Surf, Tackle, Bite vs a Flying type
+        assert p._auto_move() == "Surf"                             # Ground is useless; STAB Surf beats Tackle/Bite
+        _fake_battle(mem, D, (91, 33), (W, W), (FL, FL))
+        assert p._auto_move() == "Tackle"                           # never the immune Dig while something else hits
+        _fake_battle(mem, D, (33, 52), (F, F), (G, G))               # Tackle, Ember vs Grass
+        assert p._auto_move() == "Ember"
+        _fake_battle(mem, D, (33, 93), (PS, PS), (GH, GH))            # Tackle vs Ghost is immune; Confusion hits
+        assert p._auto_move() == "Confusion"
+        _fake_battle(mem, D, (120, 33), (N, N), (W, W), foe_hp=200)  # Selfdestruct only as a last resort
+        assert p._auto_move() == "Tackle"
+        _fake_battle(mem, D, (55, 33), (GR, GR), (W, W), foe_hp=4)   # both KO: the more accurate one
+        assert p._auto_move() == "Water Gun"
+        assert p._auto_move("tackle") == "Tackle"                   # a named move always wins
+        _fake_battle(mem, D, (55, 10), (N, N), (N, N), foe_hp=4)     # both KO, both 100%: spare Water Gun's 3 PP
+        mem[D.BATTLE_MON_PP] = 3
+        assert p._auto_move() == "Scratch"
+        _fake_battle(mem, D, (91, 33), (W, W), (FL, FL))
+        p._move_table = {}                                          # a ROM without the tables: plain order
+        assert p._auto_move() == "Dig"
+    finally:
+        p._move_table = None
+        mem[D.IS_IN_BATTLE] = 0
+
+
+def test_move_and_type_tables_match_the_rom(emu):
+    from games import gen1_data as D
+    p = emu.profile
+    t = p._load_move_data()
+    assert t[91] == (D.EFFECT_CHARGE, 100, 0x04, 255)              # Dig: two-turn, 100 power, Ground
+    assert t[57][1:3] == (95, 0x15)                                 # Surf
+    assert p._type_chart[(0x15, 0x14)] == 2.0 and p._type_chart[(0x04, 0x02)] == 0.0
+    assert p._type_chart[(0x00, 0x08)] == 0.0 and p._type_chart[(0x08, 0x18)] == 0.0   # Gen 1: Ghost can't hit Psychic

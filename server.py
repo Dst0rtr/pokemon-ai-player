@@ -96,7 +96,7 @@ def build_server(emu: Emulator) -> FastMCP:
             return _respond("walk", head, None)
         return _observe("walk", head, screenshot, with_map=True)
 
-    @tool(description="Battle helper (Pokémon): action 'fight' (target = move name or 1-4), 'auto' (keep attacking with damaging moves until the battle ends, a question appears, or HP is low; target = preferred move), 'run', 'switch' (target = party number or name; also answers 'Bring out which POKéMON?'), 'item' (target = item name, optionally 'Potion: Pidgey' to pick who gets it; in the Safari Zone it throws a Safari Ball), 'bait' / 'rock' (Safari Zone). Returns what happened plus HP changes; stops on YES/NO or learn-move prompts so you can answer with press().")
+    @tool(description="Battle helper (Pokémon): action 'fight' (target = move name or 1-4), 'auto' (keep attacking with the best move for the matchup - type chart, STAB, accuracy, never one the foe is immune to - until the battle ends, a question appears, or HP is low; target = preferred move), 'run', 'switch' (target = party number or name; also answers 'Bring out which POKéMON?'), 'item' (target = item name, optionally 'Potion: Pidgey' to pick who gets it; in the Safari Zone it throws a Safari Ball), 'bait' / 'rock' (Safari Zone). Returns what happened plus HP changes; stops on YES/NO or learn-move prompts so you can answer with press().")
     def battle(action: str = "fight", target: str = "", screenshot: bool = False) -> list:
         if (blocked := _guard("battle")) is not None:
             return blocked

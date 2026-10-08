@@ -67,6 +67,8 @@ class PokemonGen1Profile(GameProfile):
         self._reported_owned: set[int] = set()  # dex numbers whose capture was already reported
         self._block_cache: dict[tuple[int, int, int], bytes] = {}
         self._coll_cache: dict[int, frozenset] = {}
+        self._move_table: Optional[dict] = None   # move id -> (effect, power, type, accuracy); {} = not this ROM
+        self._type_chart: dict[tuple[int, int], float] = {}
         self.world: dict[int, dict] = {}        # visited map id -> {"warps": [(x,y,dest)], "conns": [(side,dest)]}
         self._starter_reported = False
 
@@ -538,6 +540,75 @@ class PokemonGen1Profile(GameProfile):
             emu.press(script, settle=1)
         return self._main_menu_cursor(self.screen_text() or "") == target
 
+    def _load_move_data(self) -> dict:
+        if self._move_table is None:
+            self._move_table = {}
+            bank, a = D.MOVES_TABLE
+            raw = bytes(self.mem[bank, a:a + 6 * 165])
+            tb, ta = D.TYPE_EFFECTS_TABLE
+            chart = bytes(self.mem[tb, ta:ta + 3 * 90])
+            if raw.startswith(D.MOVES_SIGNATURE) and chart.startswith(D.TYPE_EFFECTS_SIGNATURE):
+                for i in range(165):
+                    mid, eff, power, typ, acc, _ = raw[6 * i:6 * i + 6]
+                    self._move_table[mid] = (eff, power, typ, acc)
+                for i in range(0, len(chart) - 2, 3):
+                    if chart[i] == 0xFF:
+                        break
+                    self._type_chart[(chart[i], chart[i + 1])] = chart[i + 2] / 10
+        return self._move_table
+
+    def _auto_move(self, target: str = "") -> str:
+        """The move battle('auto') uses: `target` if named, else the damaging move with the best expected
+        damage this turn (Gen 1 formula from the battle structs' stats, STAB, type chart, accuracy, capped
+        at the enemy's HP), skipping moves the enemy is immune to, two-turn moves at half value and
+        Self-Destruct/Explosion unless nothing else works; among equally good moves, the one with most PP."""
+        b = self.battle()
+        if not b or not b["mine"]["moves"]:
+            return ""
+        mine, foe = b["mine"], b["enemy"]
+        ids = self._bytes(D.BATTLE_MON + 8, 4)
+        usable = [(n, pp, ids[j]) for j, (n, pp) in enumerate(mine["moves"]) if pp > 0 and n != mine.get("disabled")]
+        wanted = next((n for n, _, _ in usable if target and self._norm(target) in self._norm(n)), None)
+        dmg = [(n, mid, pp) for n, pp, mid in usable if n not in _STATUS_MOVES]
+        fallback = wanted or (dmg[0][0] if dmg else (usable[0][0] if usable else ""))
+        table = self._load_move_data()
+        if wanted or not dmg or not table:
+            return fallback
+        st = lambda base, k: self._u16(base + 17 + 2 * k)          # noqa: E731  attack, defense, speed, special
+        lvl, foe_hp = mine["level"], max(foe["hp"], 1)
+        my_types = {self._u8(D.BATTLE_MON + 5), self._u8(D.BATTLE_MON + 6)}
+        foe_types = {self._u8(D.ENEMY_MON + 5), self._u8(D.ENEMY_MON + 6)}
+        asleep = self._u8(D.ENEMY_MON + 4) & 0x07
+
+        def score(mid: int) -> float:
+            eff, power, typ, acc = table.get(mid, (0, 0, 0, 255))
+            mult = 1.0
+            for t in foe_types:
+                mult *= self._type_chart.get((typ, t), 1.0)
+            if mult == 0 or (eff == D.EFFECT_DREAM_EATER and not asleep):
+                return 0.0
+            if eff == D.EFFECT_FIXED:
+                dmg_ = {82: 40, 49: 20}.get(mid, lvl)              # Dragon Rage, SonicBoom; else = level
+            elif eff == D.EFFECT_SUPER_FANG:
+                dmg_ = foe_hp / 2
+            elif eff == D.EFFECT_OHKO:
+                dmg_ = foe_hp if st(D.BATTLE_MON, 2) >= st(D.ENEMY_MON, 2) else 0   # fails on a faster foe
+            else:
+                special = typ >= D.SPECIAL_TYPES_FROM
+                atk = st(D.BATTLE_MON, 3 if special else 0)
+                dfn = max(st(D.ENEMY_MON, 3 if special else 1), 1)
+                dmg_ = ((2 * lvl // 5 + 2) * power * atk / dfn / 50 + 2) * (1.5 if typ in my_types else 1) * mult
+            value = min(dmg_, foe_hp) * acc / 255
+            if eff in (D.EFFECT_CHARGE, D.EFFECT_FLY) or (eff == D.EFFECT_HYPER_BEAM and dmg_ < foe_hp):
+                value /= 2
+            if eff == D.EFFECT_SELF_KO:
+                value *= 0.01
+            return value
+
+        # equal value (typically: several moves knock out) -> the one with the most PP left
+        best = max(dmg, key=lambda m: (round(score(m[1]), 1), m[2]))
+        return best[0] if score(best[1]) > 0 else fallback
+
     def battle_auto(self, emu, target: str = "") -> str:
         """Fight with damaging moves until the battle ends, a prompt appears, or HP gets low."""
         logs: list[str] = []
@@ -549,13 +620,7 @@ class PokemonGen1Profile(GameProfile):
             b = self.battle()
             if b and b["mine"]["max_hp"] and b["mine"]["hp"] <= b["mine"]["max_hp"] // 4 and turn:
                 return " | ".join(logs) + f" — stopped: {b['mine']['species']} is low on HP ({b['mine']['hp']}/{b['mine']['max_hp']}); switch, use an item, run, or battle('auto') again to keep going"
-            move = ""
-            if b and b["mine"]["moves"]:
-                usable = [(n, pp) for n, pp in b["mine"]["moves"] if pp > 0 and n != b["mine"].get("disabled")]
-                wanted = next((n for n, _ in usable if target and self._norm(target) in self._norm(n)), None)
-                dmg = [n for n, _ in usable if n not in _STATUS_MOVES]
-                move = wanted or (dmg[0] if dmg else (usable[0][0] if usable else ""))
-            r = self.battle_action(emu, "fight", move)
+            r = self.battle_action(emu, "fight", self._auto_move(target) if b else "")
             logs.append(r)
             if ("needs a decision" in r or "prompt" in r or "battle('switch'" in r or "battle over" in r
                     or "battle is over" in r or r.startswith(("cannot", "could not", "no move", "no PP"))):

@@ -92,6 +92,18 @@ TYPES = {0: "Normal", 1: "Fighting", 2: "Flying", 3: "Poison", 4: "Ground", 5: "
          25: "Ice", 26: "Dragon"}
 
 
+# ROM tables (Red/Blue): pokered `Moves` (6 bytes: id, effect, power, type, accuracy/255, pp) and
+# `TypeEffects` ((attacker, defender, x10 multiplier) triples, 0xFF-terminated). Checked against their
+# first entries before use, so another version simply falls back to the plain move order.
+MOVES_TABLE = (0x0E, 0x4000)
+MOVES_SIGNATURE = bytes([1, 0, 0x28, 0, 0xFF, 0x23])          # Pound: no effect, 40 power, Normal, 100%, 35 PP
+TYPE_EFFECTS_TABLE = (0x0F, 0x6474)
+TYPE_EFFECTS_SIGNATURE = bytes([0x15, 0x14, 0x14])            # Water -> Fire x2.0
+SPECIAL_TYPES_FROM = 0x14                                     # Fire and above use Special; below, Attack/Defense
+EFFECT_SELF_KO, EFFECT_DREAM_EATER, EFFECT_OHKO, EFFECT_CHARGE = 0x07, 0x08, 0x26, 0x27
+EFFECT_SUPER_FANG, EFFECT_FIXED, EFFECT_FLY, EFFECT_HYPER_BEAM = 0x28, 0x29, 0x2B, 0x50
+
+
 def status_name(b: int, hp: int = 1) -> str:
     if hp == 0:
         return "FNT"

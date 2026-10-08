@@ -15,7 +15,7 @@ Any other ROM works with the generic profile (button scripts, screenshots, save 
   and 1,400 tool calls per run).
 * A second scripted run (`examples/extended_run.py`) continues from the Boulder Badge through Mt. Moon
   to Cerulean City and Misty, covering caves, trainers, in-battle items, field moves and the world graph.
-* 57 automated tests, including a replay of the game's opening, an MCP client round-trip and the
+* 65 automated tests, including a replay of the game's opening, an MCP client round-trip and the
   benchmark harness's stream parsers.
 * A public **benchmark**: agent CLIs (Claude Code, Codex) play from power-on toward the Champion with
   the same prompt and budgets; see [RESULTS.md](RESULTS.md) and [BENCHMARKING.md](BENCHMARKING.md).
@@ -69,7 +69,7 @@ Then point your MCP client at `server.py` (see [QUICKSTART.md](QUICKSTART.md)):
 |---|---|
 | `press(buttons, screenshot=true)` | Button script: `A B START SELECT UP DOWN LEFT RIGHT`, `A*5` repeats, `UP:16` holds, `W60` waits. Each press waits for text and animations to finish |
 | `walk(path, screenshot=true, on_battle="stop")` | Steps (`"up 5, right 3"`) or goals: `"to 23,25"`, `"to Viridian Mart"`, `"to north edge"`, `"to Pewter City"` (routes through maps you have visited). Stops when blocked, at doors, or when a battle/dialogue starts and says why. `on_battle="run"` or `"auto"` resolves wild encounters and keeps going |
-| `battle(action, target)` | Pokémon: `fight` (move name or 1-4), `auto` (whole routine battle), `run`, `switch` (party number or name), `item` (item name, or `"Potion: Pidgey"`), `bait` / `rock` (Safari Zone). Reports messages and HP changes, marks moves locked by Disable; stops at YES/NO or learn-move prompts |
+| `battle(action, target)` | Pokémon: `fight` (move name or 1-4), `auto` (whole routine battle, picking the best move for the type matchup), `run`, `switch` (party number or name), `item` (item name, or `"Potion: Pidgey"`), `bait` / `rock` (Safari Zone). Reports messages and HP changes, marks moves locked by Disable; stops at YES/NO or learn-move prompts |
 | `talk()` | Interact with what you face and read the whole conversation, including cutscenes; stops at any choice |
 | `shop(item, qty)` | Pokémon: buy from a clerk by item name; reports money and bag |
 | `manage(action, target, target2)` | Pokémon: `lead` (put a Pokémon first), `swap`, `use` (item, optional Pokémon; TMs/HMs with `"Charmander: Growl"` naming the move to forget), `field` (Cut / Surf / Strength / Flash / Fly / Dig / Teleport from the party menu), `save` (in-game save) |
