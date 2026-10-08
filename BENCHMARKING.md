@@ -107,3 +107,17 @@ gate before any model hours are spent.
 * **Model behaviour dominates.** Haiku 4.5 ended its turn about 2,200 times and declared the game
   unwinnable after one badge; gpt-5.6-sol played continuously and took eight badges plus four Elite Four
   wins in under five active hours.
+
+## Claude Fable 5.1 (October 2026)
+
+* `claude-fable-5-1` via Claude Code, same prompt and budgets: Squirtle start, all eight badges by 2:51 active
+  hours, Victory Road's boulder puzzles took another 1.5 hours, then the Elite Four and the Champion in one pass:
+  **Hall of Fame at 4:23 active hours and 3,904 tool calls** with 19 reloads and no black-outs. The Claude
+  subscription's session limit paused the run for 75 minutes (not counted as active time).
+* **Claude Code's stream undercounts output tokens** (each streamed assistant message carries a partial output
+  count) and a rotated chunk never sees the final cost figure. The harness now reads token usage back from the
+  CLI's session transcripts (`~/.claude/projects/*/<session>.jsonl`, `tokens_source` in the result), and when the
+  session's last working chunk reported no cost it uses the list-price estimate if that is higher than the last
+  reported figure (marked `(est.)`). Checked on this run: the estimate up to the last reported figure was $106.88
+  against the CLI's $107.36. The Haiku 4.5 result is unchanged (its transcript matches its stream totals and its
+  CLI figure is higher than the estimate).

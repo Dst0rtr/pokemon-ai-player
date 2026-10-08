@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from bench.providers import codex_rollout_usage, make_provider  # noqa: E402
+from bench.providers import claude_transcript_usage, codex_rollout_usage, estimate_cost, make_provider  # noqa: E402
 from bench.stream import ChunkStats  # noqa: E402
 from bench.report import derive, dump_result, write_results_md  # noqa: E402
 
@@ -53,6 +53,29 @@ def _read_json(path: Path) -> dict:
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return {}
+
+
+def run_cost(provider: str, chunks: list[dict], tokens: dict, prices: dict | None) -> tuple[float | None, bool]:
+    """(cost_usd, estimated). Claude Code reports a cumulative cost per CLI session, but a chunk that is
+    rotated or killed reports none, so the last figure only covers the whole session when the session's
+    last working chunk reported one. Otherwise the list-price estimate is used when it is higher (or nothing
+    was reported), so a missing last figure never hides the cost of the chunks after it."""
+    worked = [c for c in chunks if any((c.get("tokens") or {}).values())]
+    costs = [c["cost_usd"] for c in chunks if c.get("cost_usd") is not None]
+    if provider == "claude":
+        per_session: dict = {}
+        for c in chunks:
+            per_session.setdefault(c.get("cli_session"), []).append(c)
+        last_worked = {c.get("cli_session"): c for c in worked}
+        complete = all(c.get("cost_usd") is not None for c in last_worked.values())
+        reported = sum(max((c["cost_usd"] for c in cs if c.get("cost_usd") is not None), default=0)
+                       for cs in per_session.values())
+    else:
+        complete, reported = bool(costs), sum(costs)
+    est = estimate_cost(tokens, prices) if prices and not (costs and complete) else None
+    if est is not None and (not costs or est > reported):
+        return round(est, 4), True
+    return (round(reported, 4) if costs else None), False
 
 
 class Run:
@@ -282,22 +305,19 @@ class Run:
         self.state["exit_reason"] = reason
         self.state["ended"] = datetime.now().isoformat(timespec="seconds")
         tok = {k: sum(int((c.get("tokens") or {}).get(k, 0)) for c in self.state["chunks"]) for k in ("input", "cached_input", "cache_write", "output", "reasoning")}
-        costs = [c["cost_usd"] for c in self.state["chunks"] if c.get("cost_usd") is not None]
         if self.provider.name == "codex":                   # the stream loses usage for rotated chunks: use the rollouts
             recovered = codex_rollout_usage([c.get("cli_session") for c in self.state["chunks"]])
             if recovered and sum(recovered.values()) > sum(tok.values()):
                 tok = recovered
                 self.state["tokens_source"] = "codex session rollouts"
+        if self.provider.name == "claude":                  # the stream undercounts output: use the transcripts
+            recovered = claude_transcript_usage([c.get("cli_session") for c in self.state["chunks"]])
+            if recovered and sum(recovered.values()) > sum(tok.values()):
+                tok = recovered
+                self.state["tokens_source"] = "claude session transcripts"
         self.state["tokens"] = tok
-        # Claude Code reports total_cost_usd for the whole (resumed) session, so the last figure is the total.
-        self.state["cost_usd"] = round(max(costs) if self.provider.name == "claude" else sum(costs), 4) if costs else None
-        self.state["cost_estimated"] = False
-        if not costs:                                        # the CLI reported no cost at all: estimate from list prices
-            prices = _read_json(ROOT / "bench" / "prices.json").get(self.model)
-            if prices:
-                est = sum(tok.get(k, 0) * prices.get(k, 0) / 1e6 for k in ("input", "cached_input", "cache_write", "output"))
-                self.state["cost_usd"] = round(est, 4)
-                self.state["cost_estimated"] = True
+        self.state["cost_usd"], self.state["cost_estimated"] = run_cost(
+            self.provider.name, self.state["chunks"], tok, _read_json(ROOT / "bench" / "prices.json").get(self.model))
         for c in self.state["chunks"][1:]:                   # keep the published file small: per-chunk essentials only
             c.pop("mcp_servers", None)
             if not c.get("errors"):

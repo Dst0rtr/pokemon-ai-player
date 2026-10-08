@@ -118,3 +118,34 @@ def test_metrics_active_time_caps_idle_gaps(tmp_path):
     t._last_tick = time.time() - 10
     t.record_call("walk", 10, False)
     assert IDLE_CAP + 8 < t.active_seconds < IDLE_CAP + 12  # short gaps count in full
+
+
+def test_claude_transcript_usage_counts_each_message_once(tmp_path):
+    from bench.providers import claude_transcript_usage
+    d = tmp_path / "-some-run-dir"
+    d.mkdir()
+    u1 = {"input_tokens": 3, "cache_read_input_tokens": 100, "cache_creation_input_tokens": 10, "output_tokens": 40,
+          "output_tokens_details": {"thinking_tokens": 7}}
+    u2 = {"input_tokens": 1, "cache_read_input_tokens": 200, "cache_creation_input_tokens": 0, "output_tokens": 5}
+    lines = [{"type": "user", "message": {"role": "user"}},
+             {"type": "assistant", "message": {"id": "m1", "usage": u1}},
+             {"type": "assistant", "message": {"id": "m1", "usage": u1}},   # one entry per content block
+             {"type": "assistant", "message": {"id": "m2", "usage": u2}}]
+    (d / "sess.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\nnot json\n")
+    tok = claude_transcript_usage(["sess", None], root=str(tmp_path))
+    assert tok == {"input": 4, "cached_input": 300, "cache_write": 10, "output": 45, "reasoning": 7}
+    assert claude_transcript_usage(["missing"], root=str(tmp_path)) == {}
+
+
+def test_run_cost_estimates_when_the_last_claude_chunk_reported_none():
+    from bench.run import run_cost
+    prices = {"input": 10.0, "cached_input": 0.25, "cache_write": 20.0, "output": 50.0}
+    tok = {"input": 0, "cached_input": 4_000_000, "cache_write": 0, "output": 0}
+    c = lambda cost, t=1, s="a": {"cost_usd": cost, "tokens": {"input": t}, "cli_session": s}  # noqa: E731
+    assert run_cost("claude", [c(None), c(2.0), c(3.0)], tok, prices) == (3.0, False)
+    assert run_cost("claude", [c(2.0), c(2.0, t=0)], tok, prices) == (2.0, False)   # idle rate-limit chunk
+    assert run_cost("claude", [c(0.5), c(None)], tok, prices) == (1.0, True)
+    assert run_cost("claude", [c(2.0), c(None)], tok, prices) == (2.0, False)  # estimate below the CLI figure
+    assert run_cost("claude", [c(2.0), c(None)], tok, None) == (2.0, False)
+    assert run_cost("claude", [c(2.0, s="a"), c(1.5, s="b")], tok, prices) == (3.5, False)  # fresh-session fallback
+    assert run_cost("codex", [c(None)], tok, None) == (None, False)

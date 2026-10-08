@@ -27,7 +27,7 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `bench/run.py` | benchmark harness: launches Claude Code / Codex headless in resumable chunks, budgets, rate-limit pauses, writes `results/<run>.json` |
 | `bench/report.py` | derives per-run summaries and renders `RESULTS.md` from `results/*.json` |
 | `bench/stream.py`, `bench/providers.py` | CLI event-stream parsers (tested on captured streams) and per-CLI command builders |
-| `tests/` | pytest (57): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
+| `tests/` | pytest (63): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 

@@ -129,6 +129,43 @@ def codex_rollout_usage(session_ids) -> dict:
     return totals if found else {}
 
 
+def claude_transcript_usage(session_ids, root: str = "~/.claude/projects") -> dict:
+    """Sum token usage from Claude Code's session transcripts (<root>/*/<session>.jsonl).
+    The stream's per-message usage carries only a partial output count, and a rotated chunk never sees
+    the final result event; the transcript stores each assistant message's final usage (repeated once per
+    content block, so it is counted once per message id)."""
+    import glob as _glob
+    totals = {"input": 0, "cached_input": 0, "cache_write": 0, "output": 0, "reasoning": 0}
+    found = 0
+    for sid in {s for s in session_ids if s}:
+        for f in _glob.glob(os.path.join(os.path.expanduser(root), "*", f"{sid}.jsonl")):
+            found += 1
+            usage: dict[str, dict] = {}
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if '"usage"' not in line:
+                        continue
+                    try:
+                        e = json.loads(line)
+                        msg = e["message"]
+                        if e.get("type") == "assistant" and msg.get("usage"):
+                            usage[msg.get("id") or str(len(usage))] = msg["usage"]
+                    except (ValueError, KeyError, TypeError, AttributeError):
+                        continue
+            for u in usage.values():
+                totals["input"] += int(u.get("input_tokens", 0) or 0)
+                totals["cached_input"] += int(u.get("cache_read_input_tokens", 0) or 0)
+                totals["cache_write"] += int(u.get("cache_creation_input_tokens", 0) or 0)
+                totals["output"] += int(u.get("output_tokens", 0) or 0)
+                totals["reasoning"] += int((u.get("output_tokens_details") or {}).get("thinking_tokens", 0) or 0)
+    return totals if found else {}
+
+
+def estimate_cost(tokens: dict, prices: dict) -> float:
+    """USD at list prices (per million tokens) for the token columns the harness records."""
+    return sum(tokens.get(k, 0) * prices.get(k, 0) / 1e6 for k in ("input", "cached_input", "cache_write", "output"))
+
+
 PROVIDERS = {"claude": ClaudeProvider, "codex": CodexProvider}
 
 

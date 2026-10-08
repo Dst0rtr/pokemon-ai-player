@@ -4,10 +4,168 @@ Each row is one autonomous playthrough of Pokémon Red from power-on by an agent
 
 | # | Model | Provider | Starter | Badges | Furthest | Boulder | Cascade | Thunder | Rainbow | Soul | Marsh | Volcano | Earth | Lorelei | Bruno | Agatha | Lance | Rival (Champion) | Hall of Fame | Active h | Tool calls | Tokens uncached in / cache reads / out | Cost | Exit |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `gpt-5.6-sol` | codex | Bulbasaur | 8 | defeated: Lance | 0:11 · 178 | 0:19 · 315 | 0:42 · 610 | 1:08 · 947 | 2:33 · 17998 | 3:22 · 18669 | 3:58 · 19128 | 4:03 · 19196 | 4:24 · 19564 | 4:24 · 19577 | 4:43 · 19846 | 4:44 · 19857 | — | — | 4.9 | 20000 | 2.3M / 419.1M / 376k | — | budget_calls |
-| 2 | `claude-haiku-4-5-20251001` | claude | Squirtle | 1 | reached: Mt. Moon 1F | 1:07 · 1347 | — | — | — | — | — | — | — | — | — | — | — | — | — | 5.2 | 20000 | 0.1M / 766.6M / 1611k | $171.62 | budget_calls |
+| 1 | `claude-fable-5-1` | claude | Squirtle | 8 | champion defeated (Hall of Fame) | 0:07 · 152 | 0:21 · 460 | 0:42 · 966 | 2:04 · 2336 | 2:00 · 2255 | 2:16 · 2701 | 2:35 · 3013 | 2:51 · 3119 | 4:21 · 3838 | 4:21 · 3852 | 4:21 · 3863 | 4:22 · 3880 | 4:23 · 3901 | 4:23 · 3904 | 4.4 | 3904 | 0.0M / 342.7M / 1135k | $195.78 (est.) | champion |
+| 2 | `gpt-5.6-sol` | codex | Bulbasaur | 8 | defeated: Lance | 0:11 · 178 | 0:19 · 315 | 0:42 · 610 | 1:08 · 947 | 2:33 · 17998 | 3:22 · 18669 | 3:58 · 19128 | 4:03 · 19196 | 4:24 · 19564 | 4:24 · 19577 | 4:43 · 19846 | 4:44 · 19857 | — | — | 4.9 | 20000 | 2.3M / 419.1M / 376k | — | budget_calls |
+| 3 | `claude-haiku-4-5-20251001` | claude | Squirtle | 1 | reached: Mt. Moon 1F | 1:07 · 1347 | — | — | — | — | — | — | — | — | — | — | — | — | — | 5.2 | 20000 | 0.1M / 766.6M / 1611k | $171.62 | budget_calls |
 
 ## Runs
+
+### claude-fable-5-1 via claude (claude_claude-fable-5-1_20261007_214515)
+
+- CLI: `claude` 2.1.293 (Claude Code) · server commit `8d3f6fa` · prompt `49106d19e201a25e`
+- Started 2026-10-07T21:45:15 · ended 2026-10-08T03:24:52 · active 4:23 h · wall 5:39 h · paused 1:15 h · exit: **champion**
+- Tool calls 3904 · images 193 · reloads 19 · black-outs 0 · in-game playtime 8:23:40 · Pokédex 10 owned · maps visited 138
+- Tokens uncached in / cache reads / out: 0.0M / 342.7M / 1135k (from claude session transcripts) · cost $195.78 (est.) · chunks 9
+
+**Final team**
+
+| # | Pokémon | Lv | HP | Atk | Def | Spd | Spc | Moves |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Blastoise | 66 | 70/218 | 142 | 173 | 152 | 154 | Blizzard, Surf, Take Down, Dig |
+| 2 | Snorlax | 30 | 142/142 | 77 | 48 | 26 | 46 | Strength, Mega Punch, Rest, Thunderbolt |
+| 3 | DUX (Farfetch'd) | 13 | 37/37 | 21 | 21 | 22 | 23 | Razor Wind, Fly, Toxic, Cut |
+
+**Milestones** (first occurrence; time is active server time)
+
+| Time | Calls | Playtime | Milestone |
+|---|---|---|---|
+| 0:00 | 14 | 0:00:02 | game started |
+| 0:00 | 17 | 0:00:12 | reached: Pallet Town |
+| 0:00 | 29 | 0:01:42 | obtained: Squirtle |
+| 0:00 | 29 | 0:01:42 | starter: Squirtle |
+| 0:01 | 36 | 0:03:58 | got Squirtle, beat rival 1 |
+| 0:01 | 39 | 0:04:10 | reached: Route 1 |
+| 0:01 | 40 | 0:05:03 | reached: Viridian City |
+| 0:01 | 51 | 0:07:55 | got Pokédex |
+| 0:02 | 67 | 0:10:53 | reached: Route 2 |
+| 0:03 | 80 | 0:17:04 | obtained: Kakuna |
+| 0:06 | 125 | 0:29:35 | obtained: Pidgey |
+| 0:06 | 126 | 0:29:41 | reached: Pewter City |
+| 0:07 | 152 | 0:35:36 | badge: Boulder |
+| 0:07 | 153 | 0:35:36 | beat Brock (Boulder Badge) |
+| 0:07 | 162 | 0:36:42 | reached: Route 3 |
+| 0:08 | 181 | 0:44:06 | evolved: Squirtle → Wartortle |
+| 0:08 | 191 | 0:46:21 | reached: Route 4 |
+| 0:08 | 199 | 0:47:06 | reached: Mt. Moon 1F |
+| 0:15 | 241 | 0:54:56 | obtained: Zubat |
+| 0:17 | 313 | 1:08:10 | reached: Cerulean City |
+| 0:17 | 314 | 1:08:10 | cleared Mt. Moon (Helix Fossil) |
+| 0:18 | 352 | 1:13:34 | reached: Route 24 |
+| 0:19 | 399 | 1:21:51 | reached: Route 25 |
+| 0:21 | 460 | 1:35:46 | badge: Cascade |
+| 0:21 | 461 | 1:35:46 | beat Misty (Cascade Badge) |
+| 0:23 | 530 | 1:43:21 | got S.S. Ticket from Bill |
+| 0:26 | 552 | 1:46:08 | reached: Route 5 |
+| 0:26 | 556 | 1:46:40 | reached: Route 6 |
+| 0:28 | 618 | 2:01:12 | reached: Vermilion City |
+| 0:29 | 631 | 2:02:22 | reached: Vermilion Dock |
+| 0:30 | 664 | 2:10:15 | reached: Route 11 |
+| 0:31 | 678 | 2:11:58 | obtained: Diglett |
+| 0:33 | 700 | 2:15:49 | obtained: Spearow |
+| 0:33 | 710 | 2:17:05 | evolved: Spearow → Farfetch'd |
+| 0:42 | 966 | 2:32:21 | badge: Thunder |
+| 0:42 | 967 | 2:32:22 | beat Lt. Surge (Thunder Badge) |
+| 0:43 | 986 | 2:34:07 | reached: Route 9 |
+| 0:43 | 1014 | 2:38:38 | reached: Route 10 |
+| 0:43 | 1031 | 2:39:44 | reached: Rock Tunnel 1F |
+| 0:44 | 1048 | 2:45:38 | reached: Rock Tunnel B1F |
+| 0:49 | 1169 | 3:21:14 | evolved: Wartortle → Blastoise |
+| 0:51 | 1181 | 3:24:18 | reached: Lavender Town |
+| 0:51 | 1204 | 3:26:19 | cleared Rock Tunnel, reached Lavender (Blastoise L36) |
+| 0:52 | 1246 | 3:27:12 | reached: Route 8 |
+| 0:53 | 1264 | 3:31:17 | reached: Route 7 |
+| 0:53 | 1265 | 3:31:26 | reached: Celadon City |
+| 1:02 | 1379 | 3:37:06 | reached: Rocket Hideout B1F |
+| 1:36 | 1736 | 4:04:33 | beat Giovanni at Rocket Hideout |
+| 1:37 | 1762 | 4:07:05 | reached: Pokémon Tower 1F |
+| 1:39 | 1847 | 4:19:41 | got Poké Flute |
+| 1:39 | 1849 | 4:19:53 | reached: Route 12 |
+| 1:41 | 1886 | 4:26:01 | obtained: Snorlax |
+| 1:43 | 1902 | 4:28:35 | reached: Route 13 |
+| 1:44 | 1923 | 4:35:49 | reached: Route 14 |
+| 1:53 | 2124 | 5:00:08 | reached: Route 15 |
+| 1:54 | 2148 | 5:09:20 | reached: Fuchsia City |
+| 1:54 | 2150 | 5:09:46 | reached Fuchsia City |
+| 1:54 | 2159 | 5:10:41 | reached: Safari Zone Gate |
+| 1:54 | 2163 | 5:11:03 | reached: Safari Zone Center |
+| 1:55 | 2168 | 5:11:32 | reached: Safari Zone East |
+| 1:55 | 2169 | 5:12:14 | reached: Safari Zone North |
+| 1:55 | 2170 | 5:13:36 | reached: Safari Zone West |
+| 1:59 | 2212 | 5:17:17 | HM03 Surf + Gold Teeth from Safari Zone |
+| 2:00 | 2255 | 5:26:14 | badge: Soul |
+| 2:00 | 2257 | 5:26:33 | beat Koga (Soul Badge) |
+| 2:04 | 2336 | 5:37:59 | badge: Rainbow |
+| 2:04 | 2337 | 5:37:59 | beat Erika (Rainbow Badge) - 5 badges |
+| 2:04 | 2357 | 5:39:25 | reached: Route 16 |
+| 2:06 | 2401 | 5:43:10 | reached: Saffron City |
+| 2:06 | 2402 | 5:43:20 | reached: Silph Co. 1F |
+| 2:12 | 2588 | 6:04:19 | beat Giovanni at Silph Co. |
+| 2:16 | 2701 | 6:20:22 | badge: Marsh |
+| 2:16 | 2702 | 6:20:22 | beat Sabrina (Marsh Badge) - 6 badges |
+| 2:16 | 2725 | 6:21:48 | reached: Route 21 |
+| 2:17 | 2739 | 6:24:20 | reached: Cinnabar Island |
+| 2:17 | 2748 | 6:25:16 | reached: Pokémon Mansion 1F |
+| 2:32 | 2929 | 6:48:12 | got Secret Key (Pokémon Mansion) |
+| 2:35 | 3013 | 6:54:34 | badge: Volcano |
+| 2:35 | 3014 | 6:54:35 | beat Blaine (Volcano Badge) - 7 badges |
+| 2:51 | 3119 | 7:07:36 | badge: Earth |
+| 2:51 | 3121 | 7:07:51 | beat Giovanni (Earth Badge) - 8 badges |
+| 2:53 | 3177 | 7:15:34 | reached: Route 22 |
+| 2:54 | 3207 | 7:20:53 | reached: Route 23 |
+| 2:55 | 3237 | 7:23:02 | reached: Victory Road 1F |
+| 3:58 | 3556 | 7:26:21 | reached: Victory Road 2F |
+| 4:02 | 3593 | 7:28:24 | reached: Victory Road 3F |
+| 4:12 | 3727 | 7:52:20 | cleared Victory Road |
+| 4:12 | 3729 | 7:52:36 | reached: Indigo Plateau |
+| 4:16 | 3730 | 7:52:36 | reached Indigo Plateau |
+| 4:16 | 3731 | 7:52:42 | reached: Indigo Plateau Lobby |
+| 4:19 | 3800 | 7:58:51 | reached: Lorelei's Room |
+| 4:21 | 3838 | 8:05:23 | defeated: Lorelei |
+| 4:21 | 3844 | 8:06:05 | reached: Bruno's Room |
+| 4:21 | 3852 | 8:07:53 | defeated: Bruno |
+| 4:21 | 3855 | 8:07:59 | reached: Agatha's Room |
+| 4:21 | 3863 | 8:10:12 | defeated: Agatha |
+| 4:21 | 3867 | 8:10:55 | reached: Lance's Room |
+| 4:22 | 3880 | 8:17:01 | defeated: Lance |
+| 4:22 | 3883 | 8:17:25 | beat Elite Four (Lorelei, Bruno, Agatha, Lance) |
+| 4:22 | 3885 | 8:17:30 | reached: Champion's Room |
+| 4:23 | 3901 | 8:22:23 | defeated: Champion |
+| 4:23 | 3902 | 8:22:23 | beat Champion Blue |
+| 4:23 | 3903 | 8:23:18 | reached: Hall of Fame |
+| 4:23 | 3904 | 8:23:40 | champion defeated (Hall of Fame) |
+
+**Agent notes**
+
+- Viridian Mart sells no Potions (only Poké Ball/Antidote/Parlyz/Burn Heal). Forest Bug Catcher at (2,18) in west column before north gate. Poison can faint Pokémon in overworld.
+- Mt. Moon: only 1F top-left ladder (5,5) leads through: B1F→(21,17)→B2F main→fossils→(5,7)→B1F exit (27,3). Other ladders are dead ends. ASCII map shows some ledges as walkable; trust pathfinder 'no route'.
+- Team: Wartortle solo carry (Bite/Water Gun/Bubblebeam/Tackle). Have S.S. Ticket, Helix Fossil, Nugget (unsold). Next: Route 5 -> Underground Path -> Route 6 -> Vermilion: S.S. Anne (Cut) then Lt. Surge.
+- Erika too dangerous for solo Blastoise L38 (Victreebel Razor Leaf crits 72, Sleep Powder; Vileplume Mega Drain). Postpone Erika until Blastoise has Ice Beam/Blizzard or L45+. Mega Kick TM05 only 5 PP. Celadon Gym trees regrow; gym needs Cut at (35,32) and inside (5,7).
+- Rocket Hideout: spinners slide over floor until a dotted stop tile; walk tool reports positions mid-slide. B2F elevator region entered via stop (8,11)->right2,down3,right1 -> slide to (15,18); then left 4 onto (11,18) down-arrow -> (11,20); then right3,down2 ... (10,25) east to (16,25), up col 16 to
+- battle auto wastes PP: keeps using Dig vs Flying types (immune) until all PP gone. Vs Flying/Normal use fight Bite/BubbleBeam explicitly. Route 14 trainers down to (12,31) beaten; remaining: bikers at (4,30),(4,31),(5,39),(6,49) + Route 15.
+- DUX (Farfetch'd) knows Fly+Cut; Snorlax has Strength+Thunderbolt. Plan: Saffron (Silph Co, Sabrina) -> Fly Pallet -> Surf Route 21 -> Cinnabar (Mansion key, Blaine) -> Fly Viridian -> Giovanni -> Victory Road -> E4. Lavender west exit to Route 8 is at (0,8).
+- Saffron Gym pads: entrance(11,15)<->BR(19,17); BR(15,15)<->TR(19,3); TR(15,3)<->MR(15,9); MR(19,9)<->BR(19,15); BR(15,17)<->BL(5,15); BL(1,15)<->TR(19,5). Sabrina room pad (11,11). Beaten: TR(17,1), MR(17,7), BR(17,13), BL(3,13) trainers.
+- 8 badges done. Viridian Gym route: entrance->(14,12)->(14,11)->middle->(10,3)->(10,2)->row2 west->(7,3)->(7,4)->Giovanni (2,1). Next: Celadon 2F TM09/TM01 for PP, Indigo mart Full Restores, Route 22/23 -> Victory Road (Strength on Snorlax) -> E4.
+- VR1F solved: switch at (17,13). Push boulder B (5,15) down, right along row 16 to (9,16), stand on door tile (9,17) (enter it from (8,17) facing right), push up x2 to (9,14), right x7 to (16,14), up x2 from (16,15) to (16,12), right from (15,12) to (17,12), down from (17,11) to (17,13). Opens gate (
+- VR2F: ignore boulder (5,5). Push SW boulder (4,14) left to (3,14), down to (3,16), left to switch (1,16) -> opens (6-7,8-9). Then route (5,8)->row 8->(13,8)->(13,12)->(16,12)->(16,7)->ladder (23,7) to 3F. Exit pocket (25-28,7-9) with doors (29,7)/(29,8) only reachable from 3F via ladder (27,7).
+- VR3F: switch (3,5) via boulder (22,3) pushed left row 3, up to (20,1), left row 1 to (6,1), down to (6,2), left row 2 to (2,2), down to (2,5), right to (3,5) -> opens gate (7,10). Boulder (22,15) pushed right into hole (23,15) -> reveals 2F boulder (23,16); push it left to switch (9,16) -> opens 2F 
+
+**CLI chunks:** 9 (the CLI is restarted whenever the model ends its turn, a chunk rotates, stalls or is rate-limited): 4 rotate, 4 rate_limited, 1 champion; median 20.9 min, longest 60 min.
+
+<details><summary>Chunks</summary>
+
+| # | Started | Minutes | Exit | Tool calls seen | Tokens in / cached / out |
+|---|---|---|---|---|---|
+| 1 | 2026-10-07T21:45:15 | 60 | rotate | 1351 | 0.0M / 63.7M / 5k |
+| 2 | 2026-10-07T22:45:19 | 60 | rotate | 899 | 0.0M / 91.4M / 2k |
+| 3 | 2026-10-07T23:45:26 | 21 | rate_limited | 518 | 0.0M / 38.3M / 93k |
+| 4 | 2026-10-08T00:11:20 | 0 | rate_limited | 0 | 0.0M / 0.0M / 0k |
+| 5 | 2026-10-08T00:21:25 | 0 | rate_limited | 0 | 0.0M / 0.0M / 0k |
+| 6 | 2026-10-08T00:41:31 | 0 | rate_limited | 0 | 0.0M / 0.0M / 0k |
+| 7 | 2026-10-08T01:21:37 | 60 | rotate | 635 | 0.0M / 96.9M / 1k |
+| 8 | 2026-10-08T02:21:45 | 60 | rotate | 435 | 0.0M / 40.8M / 1k |
+| 9 | 2026-10-08T03:21:51 | 3 | champion | 85 | 0.0M / 11.5M / 1k |
+
+</details>
 
 ### gpt-5.6-sol via codex (codex_gpt-5.6-sol_20261006_135640)
 
