@@ -70,14 +70,26 @@ a 12 h / 20,000-call budget, and publishes `results/<run>.json` plus [RESULTS.md
 costs, outputs and troubleshooting are in [BENCHMARKING.md](BENCHMARKING.md#running-a-benchmark-copy-paste).
 Jev's key lives in `~/.typesafe-api-key` (chmod 600, never in the repo) and is loaded per command:
 
+Pick a play mode with `--mode`:
+
+| `--mode` | What decides each action | LLM calls | Use it when |
+|---|---|---|---|
+| `jev-solo` | Jev picks from code-listed options; code holds the objective graph, map routes, heal/train rules, stuck recovery | none | the final exam / headline Jev result: can Jev finish with code scaffolding only? Stuck = fail |
+| `jev-assist` | as jev-solo, but an LLM (`--fallback-model haiku\|sonnet\|opus`) picks the action when Jev is unsure (confidence < 0.3) or code detects stuck/looping; every fallback logged | only on fallbacks, capped by `--fallback-budget-usd` (default $25) / `--max-fallbacks` | improving the scaffolding: the fallbacks show where Jev cannot decide (self-improvement loop) |
+| `jev-hybrid` | Jev picks actions; an LLM (`--model`, default Haiku) sets the objective every 40 steps and when Jev is stuck | every ~40 steps | comparing code objectives with LLM objectives |
+| `jev-scripted` | Jev picks actions toward a short fixed route list, no rules or recovery | none | an ablation: how much the scaffolding matters (for a fully scripted, AI-free baseline use `examples/reference_run.py`) |
+| `jev-battles` | the LLM agent CLI plays (Claude Code + `--model`), Jev decides each `battle('auto')` turn | the whole run | testing Jev as a battle module inside an LLM run |
+| `llm` + `--provider claude\|codex` | an agent CLI alone with the MCP tools and the shared prompt | the whole run | the main leaderboard: model vs. model, no code help |
+
 ```bash
-venv/bin/python bench/run.py --provider claude --model claude-haiku-4-5-20251001          # any Claude model
-venv/bin/python bench/run.py --provider codex --model gpt-5.6-sol                         # any Codex model
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant solo      # no LLM
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist    # + Haiku fallback
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant hybrid    # + Haiku planner
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant battles   # Haiku plays, Jev battles
-venv/bin/python bench/run.py --provider jev --mock                                         # offline check, no key
+venv/bin/python bench/run.py --mode llm --provider claude --model haiku                    # any Claude model
+venv/bin/python bench/run.py --mode llm --provider codex --model gpt-5.6-sol               # any Codex model
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo       # Jev, no LLM
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-assist --fallback-model haiku
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-hybrid
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-scripted
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-battles
+venv/bin/python bench/run.py --mode jev-solo --mock                                         # offline check, no key
 ```
 
 Add `--smoke` for a few-minute checklist run first.

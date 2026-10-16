@@ -30,7 +30,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from bench.providers import claude_transcript_usage, codex_rollout_usage, estimate_cost, make_provider  # noqa: E402
+from bench.providers import (MODES, claude_transcript_usage, codex_rollout_usage, estimate_cost, make_provider,  # noqa: E402
+                             resolve_mode, resolve_model)
 from bench.stream import ChunkStats  # noqa: E402
 from bench.report import derive, dump_result, write_results_md  # noqa: E402
 from bench.jev import read_jsonl, summarize, summarize_fallbacks  # noqa: E402
@@ -104,10 +105,11 @@ class Run:
     def __init__(self, a: argparse.Namespace):
         self.args = a
         agent_args = [f"--replan-every={a.replan_every}", f"--confidence-threshold={a.confidence_threshold}",
-                      f"--fallback-threshold={a.fallback_threshold}", f"--stuck-fail-steps={a.stuck_fail_steps}"]
+                      f"--fallback-threshold={a.fallback_threshold}", f"--stuck-fail-steps={a.stuck_fail_steps}",
+                      f"--fallback-budget-usd={a.fallback_budget_usd}", f"--max-fallbacks={a.max_fallbacks}"]
         self.segment = load_segment(a.segment) if a.segment else None
         self.provider = make_provider(a.provider, a.model, variant=a.variant, jev_model=a.jev_model, mock=a.mock,
-                                      agent_args=agent_args)
+                                      agent_args=agent_args, fallback_model=a.fallback_model)
         self.model = self.provider.model
         if a.resume_run:
             self.dir = Path(a.resume_run).resolve()
@@ -124,6 +126,10 @@ class Run:
             "server_commit": _git_commit(), "budget": {"hours": a.budget_hours, "max_calls": a.max_calls},
             "chunks": [], "active_seconds": 0.0, "paused_seconds": 0.0, "exit_reason": None, "cli_session": None,
         }
+        self.state.setdefault("mode", a.mode)
+        if self.provider.name == "jev" and a.variant == "assist":
+            self.state.setdefault("fallback", {"model": a.fallback_model, "budget_usd": a.fallback_budget_usd,
+                                               "max_fallbacks": a.max_fallbacks, "threshold": a.fallback_threshold})
         if self.segment:
             self.state.setdefault("segment", self.segment)
         if a.iteration is not None:
@@ -475,8 +481,19 @@ class Run:
 
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(description="Game Boy MCP benchmark runner")
-    p.add_argument("--provider", required=True, choices=["claude", "codex", "jev"])
-    p.add_argument("--model", default="", help="CLI model; for jev: the planner (hybrid) or CLI (battles) model")
+    p.add_argument("--mode", choices=list(MODES), default="",
+                   help="what decides each action: jev-solo (Jev, no LLM), jev-assist (Jev + LLM fallback when unsure/stuck), "
+                        "jev-hybrid (Jev actions, LLM objectives), jev-scripted (Jev actions on a fixed route list), "
+                        "jev-battles (LLM CLI plays, Jev decides battle turns), llm (an agent CLI alone: --provider claude|codex)")
+    p.add_argument("--provider", choices=["claude", "codex", "jev"], default="",
+                   help="claude / codex for --mode llm; jev is implied by the jev-* modes")
+    p.add_argument("--model", default="", help="CLI model (haiku/sonnet/opus/fable or a full id); for jev: the planner "
+                                               "(hybrid) or CLI (battles) model")
+    p.add_argument("--fallback-model", default="haiku", help="jev-assist: model for uncertain/stuck decisions: "
+                                                             "haiku, sonnet, opus or a full Claude model id")
+    p.add_argument("--fallback-budget-usd", type=float, default=25.0,
+                   help="jev-assist: stop calling the fallback model after this much spend (0 = no cap); Jev plays on alone")
+    p.add_argument("--max-fallbacks", type=int, default=0, help="jev-assist: at most this many fallbacks (0 = no cap)")
     p.add_argument("--variant", default="solo", choices=["solo", "assist", "hybrid", "scripted", "battles"],
                    help="jev: solo = Jev + code only, no LLM, stuck = fail (final exam); assist = solo + Haiku fallback per "
                         "uncertain/stuck decision, logged to fallbacks.jsonl; hybrid = Haiku planner; scripted = short route; "
@@ -502,6 +519,8 @@ def main(argv=None) -> None:
     p.add_argument("--resume-run", help="continue an interrupted run directory")
     p.add_argument("--smoke", action="store_true", help="two 4-minute chunks with tiny budgets; prints a checklist")
     a = p.parse_args(argv)
+    a.provider, a.variant, a.mode = resolve_mode(a.mode, a.provider, a.variant)
+    a.model, a.fallback_model = resolve_model(a.model), resolve_model(a.fallback_model)
     if a.provider == "jev" and not a.mock and not os.environ.get("TYPESAFE_API_KEY"):
         raise SystemExit("TYPESAFE_API_KEY is not set (Jev needs it); use --mock for an offline run")
     if a.provider == "jev" and a.mock and not a.smoke and not a.resume_run:

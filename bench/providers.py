@@ -194,11 +194,12 @@ class JevProvider(Provider):
     track = "jev"
 
     def __init__(self, model: str, variant: str = "solo", mock: bool = False, planner_model: str = "",
-                 agent_args: Optional[list[str]] = None):
+                 agent_args: Optional[list[str]] = None, fallback_model: str = ""):
         super().__init__(model)
         self.variant = variant
         self.mock = mock
         self.planner_model = planner_model or ClaudeProvider.default_model
+        self.fallback_model = fallback_model or self.planner_model
         self.agent_args = list(agent_args or [])
         self._server_cmd: list[str] = []
 
@@ -211,7 +212,7 @@ class JevProvider(Provider):
         if self.variant == "hybrid":
             return f"{self.model} + {self.planner_model} planner"
         if self.variant == "assist":
-            return f"{self.model} + {self.planner_model} fallback"
+            return f"{self.model} + {self.fallback_model} fallback"
         return self.model
 
     def version(self) -> str:
@@ -225,7 +226,7 @@ class JevProvider(Provider):
         root = Path(__file__).resolve().parent
         cmd = [self._server_cmd[0], str(root / "jev_agent.py"), "--run-dir", str(run_dir), "--session-id", run_dir.name,
                "--variant", self.variant, "--jev-model", self.model, "--planner-model", self.planner_model,
-               "--fallback-model", self.planner_model] + self.agent_args
+               "--fallback-model", self.fallback_model] + self.agent_args
         if self.mock:
             cmd.append("--mock")
         return cmd + ["--"] + self._server_cmd
@@ -262,10 +263,38 @@ class JevBattlesProvider(ClaudeProvider):
 
 PROVIDERS = {"claude": ClaudeProvider, "codex": CodexProvider, "jev": JevProvider}
 JEV_VARIANTS = ("solo", "assist", "hybrid", "scripted", "battles")
+# play modes (run.py --mode): what decides each action. "llm" = an agent CLI alone (--provider claude or codex).
+MODES = {"jev-solo": ("jev", "solo"), "jev-assist": ("jev", "assist"), "jev-hybrid": ("jev", "hybrid"),
+         "jev-scripted": ("jev", "scripted"), "jev-battles": ("jev", "battles"), "llm": ("", "")}
+MODEL_ALIASES = {"haiku": "claude-haiku-4-5-20251001", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5",
+                 "fable": "claude-fable-5-1"}
+
+
+def resolve_model(name: str) -> str:
+    """haiku / sonnet / opus / fable -> the Claude model id; anything else is passed through."""
+    return MODEL_ALIASES.get((name or "").lower(), name or "")
+
+
+def resolve_mode(mode: str, provider: str, variant: str) -> tuple[str, str, str]:
+    """(provider, variant, mode label) from --mode, or from --provider/--variant when no mode is given."""
+    if mode:
+        if mode not in MODES:
+            raise SystemExit(f"unknown mode '{mode}'; choose from {', '.join(MODES)}")
+        prov, var = MODES[mode]
+        if mode == "llm":
+            if provider not in ("claude", "codex"):
+                raise SystemExit("--mode llm needs --provider claude or --provider codex")
+            return provider, variant, "llm"
+        if provider and provider != prov:
+            raise SystemExit(f"--mode {mode} runs Jev; drop --provider {provider}")
+        return prov, var, mode
+    if not provider:
+        raise SystemExit("choose a play mode: --mode " + "|".join(MODES) + " (or --provider claude|codex|jev)")
+    return provider, variant, (f"jev-{variant}" if provider == "jev" else "llm")
 
 
 def make_provider(name: str, model: str = "", variant: str = "solo", jev_model: str = "", mock: bool = False,
-                  agent_args: Optional[list[str]] = None) -> Provider:
+                  agent_args: Optional[list[str]] = None, fallback_model: str = "") -> Provider:
     cls = PROVIDERS.get(name)
     if cls is None:
         raise SystemExit(f"unknown provider '{name}'; choose from {', '.join(PROVIDERS)}")
@@ -277,7 +306,7 @@ def make_provider(name: str, model: str = "", variant: str = "solo", jev_model: 
             raise SystemExit("claude is not installed or not on PATH (needed by the jev-" + variant + " variant)")
         if variant == "battles":
             return JevBattlesProvider(model or ClaudeProvider.default_model, jev_model or JevProvider.default_model, mock)
-        return JevProvider(jev_model or JevProvider.default_model, variant, mock, model, agent_args)
+        return JevProvider(jev_model or JevProvider.default_model, variant, mock, model, agent_args, fallback_model)
     if shutil.which(cls.cli) is None:
         raise SystemExit(f"{cls.cli} is not installed or not on PATH")
     return cls(model or cls.default_model)

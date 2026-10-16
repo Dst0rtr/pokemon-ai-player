@@ -48,7 +48,7 @@ python server.py --rom Pokemon-Red_Version.gb --ai-model NAME [--resume]
 python examples/extended_run.py Pokemon-Red_Version.gb       # ~15 s from the local after-brock state; expect "0 oddities"
 python bench/run.py --provider claude --model claude-haiku-4-5-20251001 --smoke   # harness checklist (uses the real CLI)
 python bench/run.py --provider codex --model gpt-5.6-sol      # a full 12 h / 20k-call benchmark run -> results/, RESULTS.md
-python bench/run.py --provider jev --variant solo --mock       # Jev track offline (MockJev); real runs need TYPESAFE_API_KEY
+python bench/run.py --mode jev-solo --mock                    # Jev track offline (MockJev); real runs need TYPESAFE_API_KEY
 ```
 
 Clients must run the interpreter that has the dependencies (use the venv path in the config).

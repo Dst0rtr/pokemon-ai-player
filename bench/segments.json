@@ -10,6 +10,12 @@
     "goal": "reached: Cerulean City",
     "initial_milestones": []
   },
+  "mt-moon": {
+    "state": "saves/Pokemon-Red_Version/mt-moon.state",
+    "goal": "reached: Cerulean City",
+    "initial_milestones": [],
+    "_made_by": "examples/extended_run.py stage 1 up to travel('Mt. Moon 1F') from after-brock: Mt. Moon 1F (14,35), Charmeleon L22, Butterfree L15, Pidgey L10"
+  },
   "cerulean": {
     "state": "saves/Pokemon-Red_Version/cerulean.state",
     "goal": "badge: Cascade",

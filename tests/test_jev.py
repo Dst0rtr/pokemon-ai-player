@@ -725,3 +725,26 @@ def test_agent_offers_route_and_concrete_warps_instead_of_nearest_ladder(nav, tm
     stuck = J.parse("walked\nf1 Mt. Moon 1F (14,35) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
     agent.nav_feedback(o, J.Option(opts[0].label, "walk", {"path": "up 1"}), stuck, key)
     assert agent.s["nav_blocked"][key] > agent.s["step"]
+
+
+def test_assist_fallback_budget_cap(tmp_path, capsys):
+    (tmp_path / "data").mkdir()
+    a = _agent_args(tmp_path, "assist", fallback_threshold=0.99, fallback_gap=1, max_steps=6, max_fallbacks=1)
+    agent = Agent(a, FakeServer(), J.JevPolicy(J.MockJev()), chooser=J.MockChooser())
+    asyncio.run(agent.run())
+    assert agent.s["fallbacks"] == 1 and agent.s["fallback_capped"]
+    events = [json.loads(x) for x in capsys.readouterr().out.splitlines()]
+    assert sum(e["type"] == "fallback_cap" for e in events) == 1
+
+
+def test_play_modes_and_model_aliases():
+    from bench.providers import MODES, resolve_mode, resolve_model
+    assert set(MODES) == {"jev-solo", "jev-assist", "jev-hybrid", "jev-scripted", "jev-battles", "llm"}
+    assert resolve_mode("jev-assist", "", "solo") == ("jev", "assist", "jev-assist")
+    assert resolve_mode("llm", "codex", "solo")[::2] == ("codex", "llm")
+    assert resolve_mode("", "jev", "hybrid")[2] == "jev-hybrid" and resolve_mode("", "claude", "solo")[2] == "llm"
+    for bad in [("llm", "jev"), ("jev-solo", "claude"), ("", "")]:
+        with pytest.raises(SystemExit):
+            resolve_mode(bad[0], bad[1], "solo")
+    assert resolve_model("opus") == "claude-opus-5-5" and resolve_model("Sonnet") == "claude-sonnet-5-5"
+    assert resolve_model("haiku") == "claude-haiku-4-5-20251001" and resolve_model("gpt-5.6-sol") == "gpt-5.6-sol"

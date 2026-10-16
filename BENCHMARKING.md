@@ -22,6 +22,19 @@ results as `results/*.json` and [RESULTS.md](RESULTS.md).
 * Segment runs (`--segment`) need the local save states named in `bench/segments.json` under
   `saves/Pokemon-Red_Version/` (gitignored). `power-on` needs none.
 
+### Play modes
+
+Every run picks one play mode with `--mode` (`--provider`/`--variant` still work; the mode is recorded in the result).
+
+| `--mode` | What decides each action | LLM calls | Use it when |
+|---|---|---|---|
+| `jev-solo` | Jev picks from code-listed options; code holds the objective graph, map routes, heal/train rules, stuck recovery | none | the final exam / headline Jev result: can Jev finish with code scaffolding only? Stuck = fail |
+| `jev-assist` | as jev-solo, but an LLM (`--fallback-model haiku\|sonnet\|opus`) picks the action when Jev is unsure (confidence < 0.3) or code detects stuck/looping; every fallback logged | only on fallbacks, capped by `--fallback-budget-usd` (default $25) / `--max-fallbacks` | improving the scaffolding: the fallbacks show where Jev cannot decide (self-improvement loop) |
+| `jev-hybrid` | Jev picks actions; an LLM (`--model`, default Haiku) sets the objective every 40 steps and when Jev is stuck | every ~40 steps | comparing code objectives with LLM objectives |
+| `jev-scripted` | Jev picks actions toward a short fixed route list, no rules or recovery | none | an ablation: how much the scaffolding matters (for a fully scripted, AI-free baseline use `examples/reference_run.py`) |
+| `jev-battles` | the LLM agent CLI plays (Claude Code + `--model`), Jev decides each `battle('auto')` turn | the whole run | testing Jev as a battle module inside an LLM run |
+| `llm` + `--provider claude\|codex` | an agent CLI alone with the MCP tools and the shared prompt | the whole run | the main leaderboard: model vs. model, no code help |
+
 ### One command per mode
 
 Add `--smoke` to any of these first: short chunks and small budgets, then a pass/fail checklist (a few minutes,
@@ -30,22 +43,24 @@ comes first.
 
 ```bash
 # Jev, no LLM at all (the final exam; stuck for 2,000 steps = fail)
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant solo
-# Jev + a Claude Haiku 4.5 fallback on uncertain or stuck decisions (the self-improvement run mode)
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist --segment after-brock --iteration 2
-# Jev picks actions, Claude Haiku 4.5 plans objectives
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant hybrid
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo
+# Jev + an LLM fallback on uncertain or stuck decisions (the self-improvement run mode)
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-assist --fallback-model haiku --fallback-budget-usd 25 --segment mt-moon --iteration 3
+# Jev picks actions, an LLM plans objectives
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-hybrid --model haiku
+# Jev picks actions toward a fixed route list (ablation)
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-scripted
 # Claude Code + Haiku plays; Jev decides every battle('auto') turn
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant battles
-# any Claude model through Claude Code
-venv/bin/python bench/run.py --provider claude --model claude-haiku-4-5-20251001
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-battles --model haiku
+# any Claude model through Claude Code (aliases: haiku, sonnet, opus, fable)
+venv/bin/python bench/run.py --mode llm --provider claude --model claude-haiku-4-5-20251001
 # any OpenAI model through the Codex CLI
-venv/bin/python bench/run.py --provider codex --model gpt-5.6-sol
+venv/bin/python bench/run.py --mode llm --provider codex --model gpt-5.6-sol
 # offline check of the Jev track (MockJev, no network, no key, never a result)
-venv/bin/python bench/run.py --provider jev --variant solo --mock
+venv/bin/python bench/run.py --mode jev-solo --mock
 ```
 
-Useful flags: `--segment NAME` (start from a fixed save state, stop at its goal), `--iteration N` (label for the
+Useful flags: `--segment NAME` (start from a fixed save state, stop at its goal; see `bench/segments.json`), `--iteration N` (label for the
 improvement table), `--budget-hours`, `--max-calls`, `--resume-run bench/runs/<run_id>` (continue an interrupted
 run), `--jev-model jev-preview`. Run `venv/bin/python bench/run.py -h` for the rest. Runs are sequential: start
 the next one only after the previous one has exited.
@@ -190,12 +205,12 @@ code scaffolding and are reported in a **separate table** in `RESULTS.md`.
 
 ```bash
 # the key is read from TYPESAFE_API_KEY only; load it per command, never store it in the repo
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --smoke                     # jev-solo
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant hybrid --smoke
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant battles --smoke
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist --smoke
-venv/bin/python bench/run.py --provider jev --variant solo --mock     # offline: MockJev, no network, never a result
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev    # a full 12 h / 20k-call jev-solo run
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --smoke
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-hybrid --smoke
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-battles --smoke
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-assist --smoke
+venv/bin/python bench/run.py --mode jev-solo --mock     # offline: MockJev, no network, never a result
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo    # a full 12 h / 20k-call jev-solo run
 ```
 
 How it plays (`bench/jev_agent.py`, `bench/jev.py`, `bench/jev_solo.py`): the agent is an MCP client of
@@ -245,19 +260,19 @@ Variants (`--variant`):
 
 ```bash
 # iteration N: run from a fixed segment state (bench/segments.json; its sha256 is recorded) until the segment goal
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist --segment after-brock --iteration 1
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-assist --segment after-brock --iteration 1
 # analysis: cluster the fallbacks and write the Opus prompt (dry run); --call sends it to claude-opus-5-5
 venv/bin/python bench/improve.py analyze bench/runs/<run_id> --iteration 1            # -> bench/iterations/it1/{clusters.json,prompt.md}
 venv/bin/python bench/improve.py analyze bench/runs/<run_id> --iteration 1 --call     # -> summary.md, proposal.patch, analysis.json (cost)
 # apply on a new branch jev-iter-2 (refuses main; nothing committed), review, run the tests, rerun the same segment
 venv/bin/python bench/improve.py apply --iteration 1
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist --segment after-brock --iteration 2
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-assist --segment after-brock --iteration 2
 venv/bin/python bench/improve.py compare --segment after-brock                       # fallbacks/1k, badges, time, cost per iteration
 # final exam once fallbacks are ~0: strict solo, no LLM, stuck = fail
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant solo --segment after-brock --iteration 2
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --segment after-brock --iteration 2
 ```
 
-Segments (`bench/segments.json`): `power-on` → Boulder Badge, `after-brock` → Cerulean City (Mt. Moon),
+Segments (`bench/segments.json`): `power-on` → Boulder Badge, `after-brock` → Cerulean City, `mt-moon` (1F entrance) → Cerulean City,
 `cerulean` → Cascade Badge, `viridian-gym` → Earth Badge. The states are local files (gitignored); a run
 ends with exit reason `segment_goal` when the goal milestone appears. The Opus prompt contains the
 largest clusters (trigger × graph node × map × situation) with sample events and the full source of

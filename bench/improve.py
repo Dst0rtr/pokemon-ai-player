@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 from bench.jev import read_jsonl  # noqa: E402
 
 OPUS = "claude-opus-5-5"
-SCAFFOLDING = ["bench/jev_solo.py", "bench/jev.py", "bench/jev_agent.py"]
+SCAFFOLDING = ["bench/jev_solo.py", "bench/jev.py", "bench/jev_agent.py", "bench/jev_nav.py"]
 
 PROMPT = """You are improving the code scaffolding that lets Jev (TypeSafe's "System One" decision model) play Pokémon Red.
 Jev cannot write text or call tools: every step, code lists the legal actions as a closed set, sends Jev a JSON `state`
@@ -58,7 +58,9 @@ Reply in two parts:
 A short human-readable report: per cluster, the diagnosis, the proposed change and the expected effect on fallbacks.
 ## Patch
 One ```diff fenced block with a unified diff (paths relative to the repository root, a/ and b/ prefixes) that applies
-cleanly to the files shown. Change only bench/jev_solo.py, bench/jev.py and bench/jev_agent.py. Keep the code style.
+cleanly to the files shown. Change only bench/jev_solo.py, bench/jev.py, bench/jev_agent.py and bench/jev_nav.py.
+Keep the code style.
+{notes}
 
 # Clusters
 {clusters}
@@ -107,10 +109,12 @@ def load_events(run_dirs: list[str]) -> list[dict]:
     return events
 
 
-def build_prompt(clusters: list[dict], n_runs: int, max_clusters: int = 12) -> str:
+def build_prompt(clusters: list[dict], n_runs: int, max_clusters: int = 12, notes: str = "") -> str:
     source = "\n\n".join(f"## {f}\n```python\n{(ROOT / f).read_text()}\n```" for f in SCAFFOLDING)
     text = json.dumps(clusters[:max_clusters], ensure_ascii=False, indent=1)
-    return PROMPT.format(n_runs=n_runs, clusters=text, source=source)
+    notes = f"\n# Changes already made since these runs (do not re-propose them; the source below includes them)\n{notes.strip()}\n" \
+        if notes.strip() else ""
+    return PROMPT.format(n_runs=n_runs, clusters=text, source=source, notes=notes)
 
 
 def split_reply(reply: str) -> tuple[str, str]:
@@ -142,7 +146,7 @@ def analyze(a: argparse.Namespace, runner=subprocess.run) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     clusters = build_clusters(events, a.per_cluster)
     (out / "clusters.json").write_text(json.dumps(clusters, ensure_ascii=False, indent=1))
-    prompt = build_prompt(clusters, len(a.runs), a.max_clusters)
+    prompt = build_prompt(clusters, len(a.runs), a.max_clusters, Path(a.notes).read_text() if getattr(a, "notes", None) else "")
     (out / "prompt.md").write_text(prompt)
     print(f"{len(events)} fallback events in {len(clusters)} clusters from {len(a.runs)} run(s) -> {out}")
     for c in clusters[:10]:
@@ -225,6 +229,7 @@ def main(argv=None) -> None:
     an.add_argument("--call", action="store_true", help="actually call the model (costs money; needs Bijan's go)")
     an.add_argument("--per-cluster", type=int, default=4, help="sample events per cluster in the prompt")
     an.add_argument("--max-clusters", type=int, default=12)
+    an.add_argument("--notes", help="file describing fixes made since the runs (added to the prompt)")
     ap = sub.add_parser("apply")
     ap.add_argument("--iteration", type=int, required=True)
     ap.add_argument("--branch", help="default: jev-iter-<N+1>")

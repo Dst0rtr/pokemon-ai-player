@@ -37,7 +37,7 @@ python server.py --rom Pokemon-Red_Version.gb --ai-model NAME [--resume]
 python examples/extended_run.py Pokemon-Red_Version.gb       # ~15 s from the local after-brock state; expect "0 oddities"
 python bench/run.py --provider claude --model claude-haiku-4-5-20251001 --smoke   # harness checklist (uses the real CLI)
 python bench/run.py --provider codex --model gpt-5.6-sol      # a full 12 h / 20k-call benchmark run -> results/, RESULTS.md
-python bench/run.py --provider jev --variant solo --mock       # Jev track offline (MockJev); real runs need TYPESAFE_API_KEY
+python bench/run.py --mode jev-solo --mock                    # Jev track offline (MockJev); real runs need TYPESAFE_API_KEY
 ```
 
 Clients must run the interpreter that has the dependencies (use the venv path in the config).
@@ -45,7 +45,18 @@ Clients must run the interpreter that has the dependencies (use the venv path in
 
 ## Running a benchmark unattended
 
-Full details: `BENCHMARKING.md` ("Running a benchmark"). Checklist for a coding agent:
+Full details: `BENCHMARKING.md` ("Running a benchmark"). Every run takes a play mode, `--mode`:
+
+| `--mode` | What decides each action | LLM calls | Use it when |
+|---|---|---|---|
+| `jev-solo` | Jev picks from code-listed options; code holds the objective graph, map routes, heal/train rules, stuck recovery | none | the final exam / headline Jev result: can Jev finish with code scaffolding only? Stuck = fail |
+| `jev-assist` | as jev-solo, but an LLM (`--fallback-model haiku\|sonnet\|opus`) picks the action when Jev is unsure (confidence < 0.3) or code detects stuck/looping; every fallback logged | only on fallbacks, capped by `--fallback-budget-usd` (default $25) / `--max-fallbacks` | improving the scaffolding: the fallbacks show where Jev cannot decide (self-improvement loop) |
+| `jev-hybrid` | Jev picks actions; an LLM (`--model`, default Haiku) sets the objective every 40 steps and when Jev is stuck | every ~40 steps | comparing code objectives with LLM objectives |
+| `jev-scripted` | Jev picks actions toward a short fixed route list, no rules or recovery | none | an ablation: how much the scaffolding matters (for a fully scripted, AI-free baseline use `examples/reference_run.py`) |
+| `jev-battles` | the LLM agent CLI plays (Claude Code + `--model`), Jev decides each `battle('auto')` turn | the whole run | testing Jev as a battle module inside an LLM run |
+| `llm` + `--provider claude\|codex` | an agent CLI alone with the MCP tools and the shared prompt | the whole run | the main leaderboard: model vs. model, no code help |
+
+Checklist for a coding agent:
 
 1. Gate: `venv/bin/python -m pytest tests -q` passes and `venv/bin/python examples/reference_run.py Pokemon-Red_Version.gb`
    prints "0 oddities". Do not spend model hours if either fails.
@@ -53,17 +64,18 @@ Full details: `BENCHMARKING.md` ("Running a benchmark"). Checklist for a coding 
    (`tail bench/runs/<run_id>/harness.log` shows one line per chunk). The harness enforces the 12 h / 20k-call
    budget, resumes chunks and pauses on rate limits by itself.
 3. Jev runs: the key is in `~/.typesafe-api-key`. Load it only as a per-command prefix,
-   `TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant solo`.
+   `TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo`.
    Never print it, echo it, write it to a file, `.env`, a log or a commit.
 4. `--smoke` (minutes, cents) is always fine. A full run, a multi-hour segment run or an Opus analysis
    (`bench/improve.py analyze ... --call`) needs the owner's go-ahead.
 5. Exit reasons in `harness.log`: `champion`, `segment_goal`, `budget_calls`, `budget_time`, `stuck` (Jev made no
    progress for `--stuck-fail-steps`), `cli_error`. A full run writes `results/<run_id>.json` and regenerates
    `RESULTS.md`; commit those only when asked, never `bench/runs/`.
-6. Self-improvement loop (Jev): `bench/run.py --variant assist --segment S --iteration N` →
+6. Self-improvement loop (Jev): `bench/run.py --mode jev-assist --segment S --iteration N` →
    `bench/improve.py analyze bench/runs/<run_id> --iteration N [--call]` → review `bench/iterations/itN/` →
    `bench/improve.py apply --iteration N` (new branch, never main) → tests → rerun with `--iteration N+1` →
-   `bench/improve.py compare --segment S`. The strict exam is `--variant solo` (no LLM, stuck = fail).
+   `bench/improve.py compare --segment S`. The strict exam is `--mode jev-solo` (no LLM, stuck = fail). Keep
+   `--fallback-budget-usd` set so an unattended assist run cannot overspend.
 7. Known game quirk: after Oak's "Don't go away yet!" the game ignores directions until a menu opens and closes
    (press START, then B). The Jev agent does this itself.
 

@@ -81,7 +81,8 @@ class Agent:
                      "maps": {}, "history": [], "last_save_step": 0, "plan_badges": 0, "battle_seen_step": -1,
                      "last_objective": "", "grids": {}, "said": {}, "pending_fallbacks": [], "fallbacks": 0,
                      "last_fallback_step": -10**9, "screens": {}, "screens_at": -1, "reloads": 0,
-                     "last_reload_step": -10**9, "nav_taken": {}, "nav_blocked": {}, "nav_at": -1}.items():
+                     "last_reload_step": -10**9, "nav_taken": {}, "nav_blocked": {}, "nav_at": -1,
+                     "fallback_cost": 0.0, "fallback_capped": False}.items():
             self.s.setdefault(k, v)
         self.director = SoloDirector(self.s) if a.variant in ("solo", "assist") else None
         self.party: list[dict] = []
@@ -330,7 +331,10 @@ class Agent:
         if self.chooser is not None and not dec.record.get("forced"):
             trigger = self.fallback_trigger(dec, loop_dropped, kind == "overworld", screen_stuck)
             if trigger and self.s["step"] - self.s["last_fallback_step"] >= self.a.fallback_gap:
-                await self.fallback(trigger, dec, o, objective, opts, facts, kind)
+                if self.fallback_allowed():
+                    await self.fallback(trigger, dec, o, objective, opts, facts, kind)
+                else:
+                    dec.record["fallback_capped"] = trigger
         opt = dec.option
         screen["tried"] = (screen["tried"] + [opt.label])[-20:]
         reply = await self.tool(opt.tool, **opt.args)
@@ -454,6 +458,16 @@ class Agent:
             return Option("recovery: reload the last progress checkpoint", "load_state", {"slot": "jev-progress"})
         return None
 
+    def fallback_allowed(self) -> bool:
+        """The fallback budget cap (cost and/or count): once used up, Jev plays on alone (logged once)."""
+        over = (self.a.fallback_budget_usd and self.s["fallback_cost"] >= self.a.fallback_budget_usd) or \
+            (self.a.max_fallbacks and self.s["fallbacks"] >= self.a.max_fallbacks)
+        if over and not self.s["fallback_capped"]:
+            self.s["fallback_capped"] = True
+            emit({"type": "fallback_cap", "step": self.s["step"], "fallbacks": self.s["fallbacks"],
+                  "cost_usd": round(self.s["fallback_cost"], 4)})
+        return not over
+
     async def fallback(self, trigger: str, dec, o: Obs, objective: str, opts: list[Option], facts, kind: str) -> None:
         """Ask Claude for this one decision and record a structured fallback event."""
         self.s["last_fallback_step"] = self.s["step"]
@@ -462,6 +476,7 @@ class Agent:
         fb = self.chooser.choose(trigger, objective, state, opts, probs)
         self.planner_calls += 1
         self.planner_cost += fb.cost_usd
+        self.s["fallback_cost"] += fb.cost_usd
         for k in self.planner_tokens:
             self.planner_tokens[k] += int(fb.tokens.get(k, 0))
         chosen = next((x for x in opts if x.label == fb.label), None)
@@ -601,6 +616,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fallback-model", default=PLANNER_MODEL, help="assist: the model asked when Jev is unsure or stuck")
     p.add_argument("--fallback-threshold", type=float, default=0.3, help="assist: fall back below this Jev confidence")
     p.add_argument("--fallback-gap", type=int, default=3, help="assist: minimum steps between fallbacks")
+    p.add_argument("--fallback-budget-usd", type=float, default=0.0,
+                   help="assist: stop asking the fallback model once its cost reaches this (0 = no cap); Jev plays on alone")
+    p.add_argument("--max-fallbacks", type=int, default=0, help="assist: at most this many fallbacks per run (0 = no cap)")
     p.add_argument("--fallback-outcome-steps", type=int, default=10, help="assist: record the outcome this many steps later")
     p.add_argument("--stuck-fail-steps", type=int, default=2000,
                    help="solo (final exam): stop as 'stuck' after this many steps without progress (0 = never)")
