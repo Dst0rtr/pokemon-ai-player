@@ -34,7 +34,7 @@ press() script: A B START SELECT UP DOWN LEFT RIGHT; "A*5" repeats, "UP:16" hold
 Progress is auto-saved; save_state/load_state give checkpoints. Metrics are recorded automatically; metrics("note", text) keeps a reminder for yourself (shown by metrics("report")); call metrics("finalize") when you stop."""
 
 
-def build_server(emu: Emulator) -> FastMCP:
+def build_server(emu: Emulator, battle_advisor=None) -> FastMCP:
     name = "gameboy"
     instructions = GUIDE
     server = FastMCP(name, instructions=instructions)
@@ -100,7 +100,12 @@ def build_server(emu: Emulator) -> FastMCP:
     def battle(action: str = "fight", target: str = "", screenshot: bool = False) -> list:
         if (blocked := _guard("battle")) is not None:
             return blocked
-        head = emu.battle(action, target)
+        if battle_advisor is not None and (action or "").lower().strip() == "auto" and emu.profile.in_battle():
+            emu._ensure()
+            head = battle_advisor.auto(emu, target)       # benchmark variant: Jev picks each turn (bench/jev.py)
+            emu._settle()
+        else:
+            head = emu.battle(action, target)
         return _observe("battle", head, screenshot)
 
     @tool(description="Talk / interact: presses A at whatever you face (NPC, sign, PC, nurse, clerk) and reads the whole conversation, stopping when a choice (YES/NO, shop menu, list) appears or the text ends. Also use it to finish a conversation that is already open.")
@@ -214,6 +219,9 @@ def main(argv: Optional[list[str]] = None) -> None:
     p.add_argument("--finalize-on-exit", action="store_true", help="write the final metrics report when the server exits")
     p.add_argument("--log-file", help="also append the log to this file")
     p.add_argument("--log-level", default="INFO")
+    p.add_argument("--battle-advisor", choices=["jev", "mock-jev"], help="benchmark: battle('auto') turns are picked by Jev")
+    p.add_argument("--jev-model", default="jev-latest")
+    p.add_argument("--jev-log", help="JSONL file for the battle advisor's decisions")
     args = p.parse_args(argv)
 
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
@@ -228,8 +236,19 @@ def main(argv: Optional[list[str]] = None) -> None:
         base_dir=args.data_dir, session_id=args.session_id, max_tool_calls=args.max_tool_calls,
         max_real_seconds=args.max_real_seconds, finalize_on_exit=args.finalize_on_exit,
     )
+    advisor = None
+    if args.battle_advisor:
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from bench.jev import BattleAdvisor, JevError, make_client
+        try:
+            client = make_client(args.jev_model, args.battle_advisor == "mock-jev")
+        except JevError as e:
+            log.error("battle advisor: %s", e)
+            raise SystemExit(f"--battle-advisor {args.battle_advisor}: {e}")
+        advisor = BattleAdvisor(client, Path(args.jev_log or Path(args.data_dir or ".") / "jev_decisions.jsonl"))
     log.info(emu.boot(resume=args.resume))
-    server = build_server(emu)
+    server = build_server(emu, advisor)
     if emu.profile.agent_hints:
         server._mcp_server.instructions = GUIDE + "\n\n" + emu.profile.agent_hints
     atexit.register(emu.stop)

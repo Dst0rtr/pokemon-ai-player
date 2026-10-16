@@ -1,5 +1,5 @@
 {
-  "_comment": "USD per million tokens, list prices used only to ESTIMATE cost when a CLI reports none. input, cached_input (cache read), cache_write (Claude Code writes 1-hour cache entries: 2x input), output.",
+  "_comment": "USD per million tokens, list prices used only to ESTIMATE cost when a CLI reports none. input, cached_input (cache read), cache_write (Claude Code writes 1-hour cache entries: 2x input), output. Jev (TypeSafe): input only, output tokens are free (docs.typesafe.ai/models).",
   "claude-haiku-4-5-20251001": {
     "input": 1.0,
     "cached_input": 0.1,
@@ -17,5 +17,29 @@
     "cached_input": 0.25,
     "cache_write": 20.0,
     "output": 50.0
+  },
+  "jev-latest": {
+    "input": 0.042,
+    "cached_input": 0.042,
+    "cache_write": 0.0,
+    "output": 0.0
+  },
+  "jev-1.13.0": {
+    "input": 0.042,
+    "cached_input": 0.042,
+    "cache_write": 0.0,
+    "output": 0.0
+  },
+  "jev-1.14.0": {
+    "input": 0.042,
+    "cached_input": 0.042,
+    "cache_write": 0.0,
+    "output": 0.0
+  },
+  "jev-preview": {
+    "input": 0.042,
+    "cached_input": 0.042,
+    "cache_write": 0.0,
+    "output": 0.0
   }
 }

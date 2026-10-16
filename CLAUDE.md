@@ -27,7 +27,10 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `bench/run.py` | benchmark harness: launches Claude Code / Codex headless in resumable chunks, budgets, rate-limit pauses, writes `results/<run>.json` |
 | `bench/report.py` | derives per-run summaries and renders `RESULTS.md` from `results/*.json` |
 | `bench/stream.py`, `bench/providers.py` | CLI event-stream parsers (tested on captured streams) and per-CLI command builders |
-| `tests/` | pytest (66): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
+| `bench/jev.py` | Jev (TypeSafe System One) HTTP client + mock, reply parsers, candidate actions, policy, outcome labels, calibration summary, Haiku planner, battle advisor |
+| `bench/jev_agent.py` | the Jev player: MCP client of `server.py`, launched per chunk by `run.py`; variants solo/hybrid/scripted |
+| `bench/jev_solo.py` | jev-solo (no LLM): whole-game objective graph, facts, heal/train/HM rules, stuck recovery |
+| `tests/` | pytest (89): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report, Jev track (mocked, no network) |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 
@@ -44,6 +47,7 @@ python server.py --rom Pokemon-Red_Version.gb --ai-model NAME [--resume]
 python examples/extended_run.py Pokemon-Red_Version.gb       # ~15 s from the local after-brock state; expect "0 oddities"
 python bench/run.py --provider claude --model claude-haiku-4-5-20251001 --smoke   # harness checklist (uses the real CLI)
 python bench/run.py --provider codex --model gpt-5.6-sol      # a full 12 h / 20k-call benchmark run -> results/, RESULTS.md
+python bench/run.py --provider jev --variant solo --mock       # Jev track offline (MockJev); real runs need TYPESAFE_API_KEY
 ```
 
 Clients must run the interpreter that has the dependencies (use the venv path in the config).
@@ -137,6 +141,9 @@ after a walk), `hint:` (from `profile.hint()`), then an image only if the screen
   spotted the player is walking over) and reports "dialogue appeared" instead.
 * Party menus remember their cursor: helpers read the `▶` row (on TM lists it sits on the entry's
   second row) instead of assuming the top. In-battle item use shows "Use item on which POKéMON?".
+* Jev track: Jev only picks among options code enumerates; `--variant solo` must never call an LLM (a test patches
+  `subprocess` to enforce it). After Oak's "Don't go away yet!" push-back the game can ignore directions until a menu
+  opens and closes (START, B); the Jev agent unsticks with that and retries the walk.
 * Metrics: a session resumes from `metrics/<id>_checkpoint.json` when `--session-id` is reused; frames
   never rewind on `load_state` (reloads are milestones); the world graph persists in `saves/<rom>/world.json`.
 

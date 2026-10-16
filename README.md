@@ -93,7 +93,7 @@ python3 server.py --rom GAME.gb [--ai-model NAME] [--profile auto|generic|pokemo
                   [--scale 1-4] [--resume] [--autosave-every N] [--no-fast-text]
                   [--no-screenshot-files] [--allow-memory-write] [--charmap map.json] [--data-dir DIR]
                   [--session-id ID] [--max-tool-calls N] [--max-real-seconds S] [--finalize-on-exit]
-                  [--log-file FILE]
+                  [--log-file FILE] [--battle-advisor jev|mock-jev --jev-model M --jev-log FILE]
 ```
 
 * `--resume` continues from `saves/<rom>/autosave.state`.
@@ -105,6 +105,7 @@ python3 server.py --rom GAME.gb [--ai-model NAME] [--profile auto|generic|pokemo
 * `--session-id` continues one metrics session across launches (with `--resume`); `--max-tool-calls` /
   `--max-real-seconds` end a benchmark run cleanly (`BUDGET EXHAUSTED`); `--finalize-on-exit` writes the
   final report when the server stops.
+* `--battle-advisor` (benchmark use only): `battle('auto')` turns are picked by Jev (needs `TYPESAFE_API_KEY`).
 
 ## Layout
 
@@ -120,7 +121,8 @@ games/pyboy_wrapped.py  Tetris / Super Mario Land / Kirby / Pinball via PyBoy wr
 examples/reference_run.py  scripted agent that plays to Brock with the public tools (also a regression run)
 examples/extended_run.py   scripted agent: Boulder Badge -> Mt. Moon -> Cerulean -> Misty
 examples/_agentlib.py      helpers shared by the scripted agents
-bench/                  benchmark harness: run.py (drives Claude Code / Codex headless), report.py (RESULTS.md)
+bench/                  benchmark harness: run.py (drives Claude Code / Codex headless, or the Jev agent), report.py (RESULTS.md),
+                        jev.py / jev_agent.py / jev_solo.py (TypeSafe Jev player, a separate code-scaffolded track)
 results/                one JSON per published benchmark run; RESULTS.md is generated from them
 tests/                  pytest suite: parsers, ROM-driven gameplay, opening replay, MCP round-trip, harness
 ```

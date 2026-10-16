@@ -7,6 +7,7 @@ autosave and continues the same metrics session each time.
     venv/bin/python bench/run.py --provider claude --model claude-haiku-4-5-20251001
     venv/bin/python bench/run.py --provider codex --model gpt-5.6-sol --budget-hours 12 --max-calls 20000
     venv/bin/python bench/run.py --provider claude --smoke          # two short chunks, prints a checklist
+    venv/bin/python bench/run.py --provider jev [--variant solo|hybrid|scripted|battles] [--mock] [--smoke]
 
 Everything a run produces lives in bench/runs/<run_id>/ (gitignored); the final results/<run_id>.json
 is what gets committed, and bench/report.py turns those into RESULTS.md.
@@ -32,6 +33,7 @@ sys.path.insert(0, str(ROOT))
 from bench.providers import claude_transcript_usage, codex_rollout_usage, estimate_cost, make_provider  # noqa: E402
 from bench.stream import ChunkStats  # noqa: E402
 from bench.report import derive, dump_result, write_results_md  # noqa: E402
+from bench.jev import read_jsonl, summarize  # noqa: E402
 
 PYTHON = str(ROOT / "venv" / "bin" / "python") if (ROOT / "venv" / "bin" / "python").exists() else sys.executable
 CHAMPION = "champion defeated (Hall of Fame)"
@@ -81,13 +83,15 @@ def run_cost(provider: str, chunks: list[dict], tokens: dict, prices: dict | Non
 class Run:
     def __init__(self, a: argparse.Namespace):
         self.args = a
-        self.provider = make_provider(a.provider, a.model)
+        agent_args = [f"--replan-every={a.replan_every}", f"--confidence-threshold={a.confidence_threshold}"]
+        self.provider = make_provider(a.provider, a.model, variant=a.variant, jev_model=a.jev_model, mock=a.mock,
+                                      agent_args=agent_args)
         self.model = self.provider.model
         if a.resume_run:
             self.dir = Path(a.resume_run).resolve()
             self.run_id = self.dir.name
         else:
-            self.run_id = f"{a.provider}_{_slug(self.model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            self.run_id = f"{self.provider.label}_{_slug(self.model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             self.dir = ROOT / "bench" / "runs" / self.run_id
         self.state_path = self.dir / "harness.json"
         self.state = _read_json(self.state_path) or {
@@ -96,6 +100,10 @@ class Run:
             "server_commit": _git_commit(), "budget": {"hours": a.budget_hours, "max_calls": a.max_calls},
             "chunks": [], "active_seconds": 0.0, "paused_seconds": 0.0, "exit_reason": None, "cli_session": None,
         }
+        if self.provider.track != "cli":
+            self.state.update(track=self.provider.track, variant=self.provider.variant,
+                              display_model=getattr(self.provider, "display_model", self.model), mock=bool(a.mock),
+                              jev_model=getattr(self.provider, "jev_model", self.model))
         self.max_seconds = a.budget_hours * 3600
         self.stop_requested = False
         self.proc: subprocess.Popen | None = None
@@ -110,9 +118,10 @@ class Run:
             shutil.copy(self.args.rom, rom)
         prompt = ROOT / "bench" / "PROMPT.md"
         cont = ROOT / "bench" / "CONTINUE.md"
-        shutil.copy(prompt, self.dir / "prompt.md")
-        shutil.copy(cont, self.dir / "continue.md")
-        self.state["prompt_sha256"] = hashlib.sha256(prompt.read_bytes()).hexdigest()[:16]
+        suffix = self.provider.prompt_suffix()
+        (self.dir / "prompt.md").write_text(prompt.read_text() + suffix)
+        (self.dir / "continue.md").write_text(cont.read_text() + suffix)
+        self.state["prompt_sha256"] = hashlib.sha256((self.dir / "prompt.md").read_bytes()).hexdigest()[:16]
         self.provider.prepare(self.dir, self.server_cmd())
         self.save()
 
@@ -120,7 +129,8 @@ class Run:
         return [PYTHON, str(ROOT / "server.py"), "--rom", str(self.dir / "rom.gb"), "--data-dir", str(self.dir / "data"),
                 "--ai-model", self.model, "--session-id", self.run_id, "--resume", "--autosave-every", "5",
                 "--no-screenshot-files", "--max-tool-calls", str(self.args.max_calls),
-                "--max-real-seconds", str(int(self.max_seconds)), "--log-file", str(self.dir / "data" / "server.log")]
+                "--max-real-seconds", str(int(self.max_seconds)), "--log-file", str(self.dir / "data" / "server.log")
+                ] + self.provider.server_args(self.dir)
 
     def save(self) -> None:
         self.state_path.write_text(json.dumps(self.state, indent=1))
@@ -155,13 +165,13 @@ class Run:
         n = len(self.state["chunks"]) + 1
         first = self.state["cli_session"] is None                 # no CLI session to resume: start a fresh one
         fresh_continue = first and bool(self.state["chunks"])     # ...but the game is already in progress
-        session = self.state["cli_session"] or (str(uuid.uuid4()) if self.provider.name == "claude" else None)
+        session = self.state["cli_session"] or (str(uuid.uuid4()) if self.provider.parser == "claude" else None)
         prompt_file = self.dir / ("continue.md" if self.state["chunks"] else "prompt.md")
         cmd = self.provider.command(self.dir, prompt_file, session, first)
         self._resuming = not first
         out_path, err_path = self.dir / "chunks" / f"{n:03d}.jsonl", self.dir / "chunks" / f"{n:03d}.stderr"
         (self.dir / "chunks" / f"{n:03d}.cmd").write_text(" ".join(cmd) + "\n")
-        stats = ChunkStats(self.provider.name)
+        stats = ChunkStats(self.provider.parser)
         started = time.time()
         self.log(f"chunk {n}: {'fresh session (continue)' if fresh_continue else 'start' if first else 'resume ' + str(session)} "
                  f"({self.provider.cli} {self.model})")
@@ -305,19 +315,23 @@ class Run:
         self.state["exit_reason"] = reason
         self.state["ended"] = datetime.now().isoformat(timespec="seconds")
         tok = {k: sum(int((c.get("tokens") or {}).get(k, 0)) for c in self.state["chunks"]) for k in ("input", "cached_input", "cache_write", "output", "reasoning")}
-        if self.provider.name == "codex":                   # the stream loses usage for rotated chunks: use the rollouts
+        if self.provider.parser == "codex":                 # the stream loses usage for rotated chunks: use the rollouts
             recovered = codex_rollout_usage([c.get("cli_session") for c in self.state["chunks"]])
             if recovered and sum(recovered.values()) > sum(tok.values()):
                 tok = recovered
                 self.state["tokens_source"] = "codex session rollouts"
-        if self.provider.name == "claude":                  # the stream undercounts output: use the transcripts
+        if self.provider.parser == "claude":                # the stream undercounts output: use the transcripts
             recovered = claude_transcript_usage([c.get("cli_session") for c in self.state["chunks"]])
             if recovered and sum(recovered.values()) > sum(tok.values()):
                 tok = recovered
                 self.state["tokens_source"] = "claude session transcripts"
         self.state["tokens"] = tok
         self.state["cost_usd"], self.state["cost_estimated"] = run_cost(
-            self.provider.name, self.state["chunks"], tok, _read_json(ROOT / "bench" / "prices.json").get(self.model))
+            self.provider.parser, self.state["chunks"], tok, _read_json(ROOT / "bench" / "prices.json").get(self.model))
+        if self.provider.track == "jev":
+            self.state["jev"] = self.jev_summary()
+            if self.provider.variant == "battles":       # the CLI's cost does not include the server-side Jev calls
+                self.state["cost_usd"] = round((self.state["cost_usd"] or 0) + self.state["jev"]["jev_cost_usd"], 4)
         for c in self.state["chunks"][1:]:                   # keep the published file small: per-chunk essentials only
             c.pop("mcp_servers", None)
             if not c.get("errors"):
@@ -338,7 +352,49 @@ class Run:
             write_results_md(ROOT / "results", ROOT / "RESULTS.md")
         return out
 
+    def jev_summary(self) -> dict:
+        objectives = read_jsonl(self.dir / "data" / "jev_objectives.jsonl")
+        out = summarize(read_jsonl(self.dir / "data" / "jev_decisions.jsonl"),
+                        [o for o in objectives if o.get("source") == "planner"])
+        out["objective_changes"] = len(objectives)
+        out["jev_marked_done"] = sum(1 for o in objectives if o.get("source") == "jev")
+        agent = _read_json(self.dir / "jev_agent.json")
+        if agent:
+            out["steps"] = agent.get("step")
+            out["final_objective"] = agent.get("last_objective") or agent.get("objective")
+        return out
+
+    def smoke_report_jev(self) -> None:
+        chunks = self.state["chunks"]
+        cp = self.checkpoint()
+        j = self.state.get("jev") or self.jev_summary()
+        c1 = chunks[0] if chunks else {}
+        c2 = chunks[1] if len(chunks) > 1 else {}
+        ok = lambda b: "x" if b else " "  # noqa: E731
+        print(f"\nSMOKE CHECKLIST (jev-{self.provider.variant}{', MOCK Jev' if self.args.mock else ''})")
+        print(f"  [{ok(c1.get('tool_calls_seen'))}] agent connected to the server and played in chunk 1 ({c1.get('tool_calls_seen')} tool calls)")
+        print(f"  [{ok(j['jev_calls'])}] Jev answered: {j['jev_calls']} calls, models {j['models']}, latency p50 {j['latency_ms']['p50']} ms "
+              f"p95 {j['latency_ms']['p95']} ms, {j['input_tokens']} input tokens, ${j['jev_cost_usd']:.4f}")
+        print(f"  [{ok(j['scored'])}] decisions labelled for calibration: {j['scored']} (accuracy {j['accuracy']}, ECE {j['ece']})")
+        if self.provider.variant == "hybrid":
+            print(f"  [{ok(j['planner_calls'] and not j['planner_errors'])}] planner: {j['planner_calls']} calls, "
+                  f"{j['planner_errors']} errors, ${j['planner_cost_usd']:.4f}")
+        if self.provider.variant == "solo":
+            print(f"  [{ok(not j['planner_calls'])}] no LLM called (planner calls {j['planner_calls']}); objective changes {j['objective_changes']}")
+        if self.provider.variant == "battles":
+            print(f"  [{ok(c1.get('tool_calls_seen'))}] Claude CLI played; Jev battle turns {j['jev_calls']} (0 is possible if no battle came up)")
+        print(f"  [{ok(self.state.get('cost_usd') is not None)}] run cost recorded: {self.state.get('cost_usd')}")
+        print(f"  [{ok(c2 and c2.get('tool_calls_seen'))}] chunk 2 continued playing ({c2.get('tool_calls_seen')} tool calls)")
+        print(f"  [{ok(c2 and cp.get('chunks', 1) >= 2)}] server metrics session continued across chunks (chunks={cp.get('chunks')})")
+        print(f"  [{ok(cp.get('tool_calls_total'))}] server checkpoint: {cp.get('tool_calls_total')} calls, milestones "
+              f"{[m.get('name') for m in cp.get('milestones', [])][:12]}")
+        errs = [e for c in chunks for e in c.get("errors", [])]
+        print(f"  [{ok(not errs)}] no errors" + (f": {errs[:3]}" if errs else ""))
+        print("  see", self.dir, "(data/jev_decisions.jsonl, data/jev_objectives.jsonl, chunks/)\n")
+
     def smoke_report(self) -> None:
+        if self.provider.track == "jev" and self.provider.parser == "jev":
+            return self.smoke_report_jev()
         chunks = self.state["chunks"]
         cp = self.checkpoint()
         print("\nSMOKE CHECKLIST")
@@ -357,8 +413,14 @@ class Run:
 
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(description="Game Boy MCP benchmark runner")
-    p.add_argument("--provider", required=True, choices=["claude", "codex"])
-    p.add_argument("--model", default="")
+    p.add_argument("--provider", required=True, choices=["claude", "codex", "jev"])
+    p.add_argument("--model", default="", help="CLI model; for jev: the planner (hybrid) or CLI (battles) model")
+    p.add_argument("--variant", default="solo", choices=["solo", "hybrid", "scripted", "battles"],
+                   help="jev: solo = Jev + code only (no LLM); hybrid = Haiku planner; scripted = short route; battles = Haiku run, Jev battles")
+    p.add_argument("--jev-model", default="jev-latest")
+    p.add_argument("--mock", action="store_true", help="jev: offline MockJev/MockPlanner (no network); never a benchmark result")
+    p.add_argument("--replan-every", type=int, default=40, help="jev-hybrid: planner at least every N steps")
+    p.add_argument("--confidence-threshold", type=float, default=0.3, help="jev-hybrid: replan below this Jev confidence")
     p.add_argument("--rom", default=str(ROOT / "Pokemon-Red_Version.gb"))
     p.add_argument("--budget-hours", type=float, default=12.0)
     p.add_argument("--max-calls", type=int, default=20000)
@@ -372,8 +434,14 @@ def main(argv=None) -> None:
     p.add_argument("--resume-run", help="continue an interrupted run directory")
     p.add_argument("--smoke", action="store_true", help="two 4-minute chunks with tiny budgets; prints a checklist")
     a = p.parse_args(argv)
+    if a.provider == "jev" and not a.mock and not os.environ.get("TYPESAFE_API_KEY"):
+        raise SystemExit("TYPESAFE_API_KEY is not set (Jev needs it); use --mock for an offline run")
+    if a.provider == "jev" and a.mock and not a.smoke and not a.resume_run:
+        a.smoke = True                                    # a mock run is a harness check, never a published result
     if a.smoke:
         a.chunk_minutes, a.max_chunks, a.budget_hours, a.max_calls, a.stall_minutes = 4, 2, 0.5, 400, 5
+        if a.provider == "jev" and a.variant != "battles":
+            a.chunk_minutes, a.max_calls, a.stall_minutes = (0.4 if a.mock else 2), 3000, 2
     run = Run(a)
     run.prepare()
 

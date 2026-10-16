@@ -49,6 +49,8 @@ class ChunkStats:
             _feed_claude(self, obj)
         elif self.provider == "codex":
             _feed_codex(self, obj)
+        elif self.provider == "jev":
+            _feed_jev(self, obj)
 
     def add_tokens(self, **kw: int) -> None:
         for k, v in kw.items():
@@ -135,3 +137,30 @@ def _feed_codex(st: ChunkStats, obj: dict[str, Any]) -> None:
         if "rate limit" in low or "429" in low or "usage limit" in low or "quota" in low:
             st.rate_limited = True
             st.rate_limit_note = msg[:200]
+
+
+# ---------------------------------------------------------------- Jev agent (bench/jev_agent.py)
+def _feed_jev(st: ChunkStats, obj: dict[str, Any]) -> None:
+    t = obj.get("type")
+    if t == "start":
+        st.session_id = obj.get("session_id") or st.session_id
+        st.last_activity = time.time()
+    elif t == "tool_call":
+        st.tool_calls += 1
+        st.last_activity = time.time()
+    elif t == "usage":                                   # cumulative for the chunk: the latest one wins
+        st.turns = int(obj.get("step", st.turns) or 0)
+        st.tokens = {k: 0 for k in TOKEN_KEYS}
+        st.add_tokens(**{k: v for k, v in (obj.get("tokens") or {}).items() if k in TOKEN_KEYS})
+        if obj.get("cost_usd") is not None:
+            st.cost_usd = float(obj["cost_usd"])
+    elif t == "objective" and obj.get("error"):
+        st.errors.append(f"planner: {str(obj['error'])[:300]}")
+    elif t == "error":
+        st.errors.append(str(obj.get("message"))[:300])
+        if obj.get("rate_limited"):
+            st.rate_limited = True
+            st.rate_limit_note = str(obj.get("message"))[:200]
+    elif t == "result":
+        st.finished = True
+        st.result_text = str(obj.get("reason") or "")

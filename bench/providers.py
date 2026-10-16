@@ -19,6 +19,24 @@ class Provider:
     name = "base"
     cli = "cli"
     default_model = ""
+    stream = ""                 # which bench/stream.py parser reads the output ("" = same as name)
+    track = "cli"               # "jev" rows get code scaffolding and are reported separately
+    variant = ""
+
+    @property
+    def label(self) -> str:
+        return self.name
+
+    @property
+    def parser(self) -> str:
+        return self.stream or self.name
+
+    def server_args(self, run_dir: Path) -> list[str]:
+        """Extra server flags for this provider."""
+        return []
+
+    def prompt_suffix(self) -> str:
+        return ""
 
     def __init__(self, model: str):
         self.model = model
@@ -166,13 +184,95 @@ def estimate_cost(tokens: dict, prices: dict) -> float:
     return sum(tokens.get(k, 0) * prices.get(k, 0) / 1e6 for k in ("input", "cached_input", "cache_write", "output"))
 
 
-PROVIDERS = {"claude": ClaudeProvider, "codex": CodexProvider}
+class JevProvider(Provider):
+    """Jev plays through bench/jev_agent.py (an MCP client of the server, launched like a CLI per chunk).
+    `model` is the Jev model; variants: solo (no LLM at all), hybrid (Claude planner), scripted."""
+    name = "jev"
+    cli = "jev-agent"
+    default_model = "jev-latest"
+    stream = "jev"
+    track = "jev"
+
+    def __init__(self, model: str, variant: str = "solo", mock: bool = False, planner_model: str = "",
+                 agent_args: Optional[list[str]] = None):
+        super().__init__(model)
+        self.variant = variant
+        self.mock = mock
+        self.planner_model = planner_model or ClaudeProvider.default_model
+        self.agent_args = list(agent_args or [])
+        self._server_cmd: list[str] = []
+
+    @property
+    def label(self) -> str:
+        return f"jev-{self.variant}"
+
+    @property
+    def display_model(self) -> str:
+        return f"{self.model} + {self.planner_model}" if self.variant == "hybrid" else self.model
+
+    def version(self) -> str:
+        from bench.jev_agent import AGENT_VERSION
+        return f"jev_agent.py v{AGENT_VERSION}" + (" (mock Jev)" if self.mock else "")
+
+    def prepare(self, run_dir: Path, server_cmd: list[str]) -> None:
+        self._server_cmd = server_cmd
+
+    def command(self, run_dir, prompt_file, session_id, first):
+        root = Path(__file__).resolve().parent
+        cmd = [self._server_cmd[0], str(root / "jev_agent.py"), "--run-dir", str(run_dir), "--session-id", run_dir.name,
+               "--variant", self.variant, "--jev-model", self.model, "--planner-model", self.planner_model] + self.agent_args
+        if self.mock:
+            cmd.append("--mock")
+        return cmd + ["--"] + self._server_cmd
 
 
-def make_provider(name: str, model: str = "") -> Provider:
+class JevBattlesProvider(ClaudeProvider):
+    """The normal Claude Code run (Haiku by default), but the server's battle('auto') asks Jev for every turn."""
+    name = "jev"
+    stream = "claude"
+    track = "jev"
+    variant = "battles"
+
+    def __init__(self, model: str, jev_model: str = "jev-latest", mock: bool = False):
+        super().__init__(model)
+        self.jev_model = jev_model
+        self.mock = mock
+
+    @property
+    def label(self) -> str:
+        return "jev-battles"
+
+    @property
+    def display_model(self) -> str:
+        return f"{self.model} + {self.jev_model} (battles)"
+
+    def server_args(self, run_dir: Path) -> list[str]:
+        return ["--battle-advisor", "mock-jev" if self.mock else "jev", "--jev-model", self.jev_model,
+                "--jev-log", str(run_dir / "data" / "jev_decisions.jsonl")]
+
+    def prompt_suffix(self) -> str:
+        return ("\nIn this run battle('auto') is decided turn by turn by a separate battle model: use battle('auto') for "
+                "every battle turn unless you need a specific item or switch.\n")
+
+
+PROVIDERS = {"claude": ClaudeProvider, "codex": CodexProvider, "jev": JevProvider}
+JEV_VARIANTS = ("solo", "hybrid", "scripted", "battles")
+
+
+def make_provider(name: str, model: str = "", variant: str = "solo", jev_model: str = "", mock: bool = False,
+                  agent_args: Optional[list[str]] = None) -> Provider:
     cls = PROVIDERS.get(name)
     if cls is None:
         raise SystemExit(f"unknown provider '{name}'; choose from {', '.join(PROVIDERS)}")
+    if name == "jev":
+        if variant not in JEV_VARIANTS:
+            raise SystemExit(f"unknown jev variant '{variant}'; choose from {', '.join(JEV_VARIANTS)}")
+        needs_claude = variant == "battles" or (variant == "hybrid" and not mock)
+        if needs_claude and shutil.which("claude") is None:
+            raise SystemExit("claude is not installed or not on PATH (needed by the jev-" + variant + " variant)")
+        if variant == "battles":
+            return JevBattlesProvider(model or ClaudeProvider.default_model, jev_model or JevProvider.default_model, mock)
+        return JevProvider(jev_model or JevProvider.default_model, variant, mock, model, agent_args)
     if shutil.which(cls.cli) is None:
         raise SystemExit(f"{cls.cli} is not installed or not on PATH")
     return cls(model or cls.default_model)

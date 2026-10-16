@@ -114,7 +114,8 @@ def leaderboard(results: list[dict]) -> str:
 
 def run_section(r: dict) -> str:
     d, h, m = r["derived"], r["harness"], r["metrics"]
-    out = [f"### {h.get('model')} via {h.get('provider')} ({r['run_id']})", "",
+    title = f"jev-{h['variant']}: {h.get('display_model') or h.get('model')}" if h.get("track") == "jev" else f"{h.get('model')} via {h.get('provider')}"
+    out = [f"### {title} ({r['run_id']})", "",
            f"- CLI: `{h.get('cli')}` {h.get('cli_version')} · server commit `{h.get('server_commit')}` · prompt `{h.get('prompt_sha256')}`",
            f"- Started {h.get('started')} · ended {h.get('ended')} · active {_hm(m.get('real_seconds'))} h · wall {_hm(h.get('wall_seconds'))} h · paused {_hm(h.get('paused_seconds'))} h · exit: **{h.get('exit_reason')}**",
            f"- Tool calls {d['tool_calls']} · images {m.get('images_sent')} · reloads {m.get('loads', 0)} · black-outs {d['blackouts']} · in-game playtime {d.get('playtime')} · Pokédex {d.get('dex_owned')} owned · maps visited {d.get('maps_visited')}",
@@ -162,6 +163,82 @@ def run_section(r: dict) -> str:
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------- Jev track
+JEV_SCAFFOLDING = {
+    "solo": "Jev + code only, no LLM anywhere. Code enumerates the legal actions every step, reads progress (badges, bag, "
+            "moves, maps, milestones) and walks a whole-game objective graph; it also heals, trains to level targets, teaches "
+            "HMs, clears obstacles and runs stuck recovery. Jev picks every action and answers yes/no checks "
+            "(\"stuck?\", \"objective done?\" where code cannot see a story event).",
+    "hybrid": "Claude Haiku sets the objective (every N steps, on low Jev confidence, when Jev says stuck, after a badge); "
+              "code enumerates the actions; Jev picks every action.",
+    "scripted": "A short code-side objective list (no rules, no recovery); code enumerates the actions; Jev picks every action.",
+    "battles": "The normal Claude Code run (same tools and prompt plus one line), except battle('auto') turns are picked by Jev "
+               "from the legal moves/switches/items.",
+}
+
+
+def is_jev(r: dict) -> bool:
+    return (r.get("harness") or {}).get("track") == "jev"
+
+
+def _ms(x) -> str:
+    return "—" if x is None else f"{x:.0f}"
+
+
+def jev_leaderboard(results: list[dict]) -> str:
+    head = ["#", "Variant", "Model", "Badges", "Furthest", "Hall of Fame", "Active h", "Tool calls", "Jev calls",
+            "Jev latency p50 / p95 ms", "Jev cost", "LLM cost", "Total cost", "Correct", "ECE", "Exit"]
+    rows = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
+    for i, r in enumerate(sorted(results, key=rank_key), 1):
+        d, h, m = r["derived"], r["harness"], r["metrics"]
+        j = h.get("jev") or {}
+        lat = j.get("latency_ms") or {}
+        jc = j.get("jev_cost_usd")
+        total = h.get("cost_usd")
+        llm = None if total is None or jc is None else max(total - jc, 0.0)
+        acc = j.get("accuracy")
+        cells = [str(i), f"jev-{h.get('variant')}" + (" (mock)" if h.get("mock") else ""), f"`{h.get('display_model') or h.get('model')}`",
+                 str(d["badges"]), d["furthest"], _cell(d["milestone_times"].get(CHAMPION)),
+                 f"{(m.get('real_seconds') or 0) / 3600:.1f}", str(d["tool_calls"]), str(j.get("jev_calls", "—")),
+                 f"{_ms(lat.get('p50'))} / {_ms(lat.get('p95'))}", "—" if jc is None else f"${jc:,.2f}",
+                 "—" if llm is None else f"${llm:,.2f}", _cost(h), "—" if acc is None else f"{acc:.0%}",
+                 "—" if j.get("ece") is None else f"{j['ece']:.3f}", h.get("exit_reason") or "—"]
+        rows.append("| " + " | ".join(cells) + " |")
+    return "\n".join(rows)
+
+
+def calibration_table(j: dict) -> str:
+    cal = j.get("calibration") or []
+    if not cal:
+        return "_No labelled Jev decisions._"
+    out = ["| Jev confidence | Decisions | Mean confidence | Mean p(choice) | Correct | |", "|---|---|---|---|---|---|"]
+    for b in cal:
+        bar = "█" * round(b["accuracy"] * 20)
+        out.append(f"| {b['lo']:.1f}–{b['hi']:.1f} | {b['n']} | {b['mean_conf']:.2f} | {b['mean_p']:.2f} | {b['accuracy']:.0%} | `{bar:<20}` |")
+    return "\n".join(out)
+
+
+def jev_section(r: dict) -> str:
+    h = r["harness"]
+    j = h.get("jev") or {}
+    lat = j.get("latency_ms") or {}
+    out = [run_section(r), f"**Jev ({h.get('variant')})** — {JEV_SCAFFOLDING.get(h.get('variant'), '')}", "",
+           f"- Decisions {j.get('decisions')} (asked Jev {j.get('jev_calls')}, forced by code {j.get('forced')}, labelled {j.get('scored')}) · "
+           f"models {', '.join(j.get('models') or []) or '—'} · input tokens {j.get('input_tokens')} · Jev ${j.get('jev_cost_usd', 0):.4f}",
+           f"- Jev latency mean {_ms(lat.get('mean'))} ms · p50 {_ms(lat.get('p50'))} · p95 {_ms(lat.get('p95'))} · max {_ms(lat.get('max'))}",
+           f"- Planner calls {j.get('planner_calls', 0)} (${j.get('planner_cost_usd', 0):.4f}, errors {j.get('planner_errors', 0)}) · "
+           f"objective changes {j.get('objective_changes', 0)} · objectives Jev marked done {j.get('jev_marked_done', 0)}"
+           + (f" · final objective: {j['final_objective']}" if j.get("final_objective") else ""), ""]
+    if j.get("by_kind"):
+        out += ["| Decision kind | Labelled | Correct | Mean confidence |", "|---|---|---|---|"]
+        out += [f"| {k} | {v['n']} | {v['accuracy']:.0%} | {v['mean_conf']:.2f} |" for k, v in j["by_kind"].items()]
+        out.append("")
+    out += ["**Confidence vs. correctness** (\"correct\" = the chosen action was accepted and did what it is for: a move that "
+            "hurt the foe at least as much as the turn hurt us, a walk that moved or started something new, a press that changed "
+            f"the screen; ECE against p(choice) = {j.get('ece')})", "", calibration_table(j), ""]
+    return "\n".join(out)
+
+
 def dump_result(result: dict) -> str:
     """Indented JSON, but one line per chunk and per milestone so long runs stay reviewable and small."""
     def lines(items):
@@ -198,11 +275,25 @@ def build_results_md(results: list[dict]) -> str:
              "then the furthest story point, then fewer tool calls. Cost is the CLI's own API-equivalent figure "
              "(runs on a subscription are not billed per token); `(est.)` marks an estimate from list prices. "
              "Raw data: `results/*.json`; regenerate with `python bench/report.py`.", ""]
+    cli = [r for r in results if not is_jev(r)]
+    jev = [r for r in results if is_jev(r)]
     if not results:
         return "\n".join(parts + ["_No runs yet._", ""])
-    parts += [leaderboard(results), "", "## Runs", ""]
-    for r in sorted(results, key=rank_key):
+    parts += [leaderboard(cli) if cli else "_No agent CLI runs yet._", ""]
+    if jev:
+        parts += ["## Jev track (code-scaffolded, not comparable with the table above)", "",
+                  "Jev (TypeSafe's System One model) answers typed questions; it cannot write text or call tools. In these runs "
+                  "code does what an agent CLI does for itself: it reads the server's replies, lists the legal actions as a "
+                  "closed set every step and executes the one Jev picks. **jev-solo uses heavy code scaffolding**: a "
+                  "whole-game objective graph, progress checks, healing/training/HM rules and stuck recovery are written in "
+                  "code, and no LLM is called. Cost is Jev's input tokens ($0.042/MTok, output free) plus any LLM the "
+                  "variant uses.", "", "Variants: " + " ".join(f"**{k}**: {v}" for k, v in JEV_SCAFFOLDING.items()), "",
+                  jev_leaderboard(jev), ""]
+    parts += ["## Runs", ""]
+    for r in sorted(cli, key=rank_key):
         parts += [run_section(r)]
+    for r in sorted(jev, key=rank_key):
+        parts += [jev_section(r)]
     return "\n".join(parts)
 
 

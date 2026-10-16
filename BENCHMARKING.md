@@ -59,7 +59,8 @@ If a resumed CLI session produces no tool call within five minutes (Codex, for e
 very long thread when its remote compaction fails) the harness abandons that session and starts a fresh
 one with the continue prompt; the game state and the agent's notes live on the server, so nothing is lost.
 
-Providers: `claude` (Claude Code CLI, any Claude model id) and `codex` (OpenAI Codex CLI). Tokens
+Providers: `claude` (Claude Code CLI, any Claude model id), `codex` (OpenAI Codex CLI) and `jev` (see
+the Jev track below; it is reported separately because it gets code scaffolding). Tokens
 and cost come from the CLI's own stream; when a chunk ends without a cost figure the cost is
 estimated from `bench/prices.json` and marked as such.
 
@@ -91,6 +92,67 @@ gate before any model hours are spent.
 * Each run starts from power-on with its own ROM copy (no battery save, no autosave).
 * Outcomes vary with RNG and with the model's own choices (starter, team); one run per model is a
   sample, not a verdict.
+
+## Jev track (TypeSafe System One)
+
+Jev (`jev-latest`, docs.typesafe.ai) answers typed questions about a `state`: a Choice over options we
+define (with a probability per option and a `confidence`), a yes/no Noul, or a Score. It cannot write
+text or call tools, so it cannot drive the MCP server the way an agent CLI does. Jev runs therefore get
+code scaffolding and are reported in a **separate table** in `RESULTS.md`.
+
+```bash
+# the key is read from TYPESAFE_API_KEY only; load it per command, never store it in the repo
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --smoke                     # jev-solo
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant hybrid --smoke
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant battles --smoke
+venv/bin/python bench/run.py --provider jev --variant solo --mock     # offline: MockJev, no network, never a result
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev    # a full 12 h / 20k-call jev-solo run
+```
+
+How it plays (`bench/jev_agent.py`, `bench/jev.py`, `bench/jev_solo.py`): the agent is an MCP client of
+`server.py`, launched by `run.py` like a CLI (same chunks, budgets, autosave resume and metrics session;
+it prints a JSON event stream). Every step it parses the server's reply, classifies the situation
+(intro, prompt, dialogue, battle, overworld), lists the legal actions as a closed set (walk to each exit,
+connection, objective waypoint or nearby person/object; each usable move, switch, item, run; menu
+presses) and asks Jev one Choice: "which action makes progress toward `objective`?". The option order
+is shuffled per question (Jev 1.13 leans toward the first option). Situations with a single sensible
+action (continue a dialogue, press A through battle text) are executed by code and logged as `forced`.
+
+Variants (`--variant`):
+
+* **solo** (default, the main Jev track): no LLM is called at any point. Long-horizon structure is code:
+  a whole-game objective graph (`jev_solo.GRAPH`, 33 nodes from the intro to the Champion) whose `done`
+  tests read badges, bag contents (key items, HMs, ever-held items), moves the party knows, maps visited
+  and milestones; rules that override the objective (heal at a Poké Center under 35% team HP, train to a
+  per-gym level target, teach an HM as soon as it is in the bag, use Cut/Surf/Strength when the hint
+  says an obstacle is in front); stuck recovery (frontier exploration of unvisited exits after 60 idle
+  steps, longer walks and menu resets after 150, START/B menu reset after 15 steps without moving, reload
+  the last `jev-progress` checkpoint after 45). Jev picks every action and answers Nouls: "are we
+  stuck?" and, for story events code cannot see (Silph Co. cleared), "is this objective done?" (three
+  answers >= 0.8 in a row mark it done).
+* **hybrid**: Claude Haiku 4.5 (`claude -p`, no tools) sets the objective and waypoints at the start,
+  every 40 steps, after a badge, when Jev's confidence falls below 0.3 or its "stuck" Noul reaches 0.7
+  (then Jev is asked again with the new objective). Jev picks every action.
+* **scripted**: a short code-side objective list (`jev.ROUTE`) with no rules and no recovery.
+* **battles**: the normal Claude Code + Haiku run (same tools; the prompt gains one line), but the
+  server's `battle('auto')` asks Jev for every turn (`server.py --battle-advisor jev`).
+
+Where Jev alone cannot decide, and what code does instead: Jev never produces arguments, so every
+destination, move and menu path is enumerated by code; arithmetic (HP fractions, level targets, damage)
+stays in code (Jev is not a calculator); story progress is read from game data, not judged, except the
+few `jev_check` nodes; the START/B reset after Oak's "Don't go away yet!" push-back (the game ignores
+directions until a menu opens and closes; seen with mock runs, it can affect any agent) is a code fix.
+
+Logged per decision (`bench/runs/<id>/data/jev_decisions.jsonl`): situation kind, number of options,
+choice, p(choice), confidence, top-two ratio, option position, latency, input tokens, cost, model
+version, the reply head and an outcome label. **Correct** is a proxy: the action was accepted and did
+what it is for (a battle action that hurt the foe at least as much, as a share of max HP, as the turn
+hurt us, or ended the battle; a walk that moved the player or started something new; a press that
+changed the screen); refusals, black-outs and a result already seen twice in the last 12 actions count
+as wrong. `report.py` bins decisions by Jev's confidence into a calibration table (accuracy vs. mean
+confidence and mean p(choice), ECE) and adds Jev latency p50/p95, Jev cost ($0.042 per million input
+tokens, output free) and LLM cost per run. Objective changes (graph, rules, planner, Jev "done") are in
+`data/jev_objectives.jsonl`.
 
 ## Round one notes (October 2026)
 
