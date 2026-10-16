@@ -352,3 +352,98 @@ def map_header(rom: bytes, map_id: int) -> tuple[int, int, int, int]:
 
 def map_name(idx: int) -> str:
     return MAPS.get(idx, f"Map#{idx}")
+
+
+# ---------------------------------------------------------------- static world data straight from the ROM
+# pokered Tilesets table (bank 3): bank, blocks ptr, gfx ptr, collision ptr, 3 talking-over tiles, grass tile,
+# animation flag = 12 bytes per tileset. Verified against wTilesetBank.. (0xD52B) of loaded maps (a test checks it).
+TILESET_HEADERS = 0xC7BE
+CONNECTION_SIDES = (("north", 3), ("south", 2), ("west", 1), ("east", 0))   # wCurMapConnections bits
+
+
+def _rom_off(bank: int, ptr: int) -> int:
+    return ptr if ptr < 0x4000 else bank * 0x4000 + (ptr - 0x4000)
+
+
+def _u16(rom: bytes, off: int) -> int:
+    return rom[off] | (rom[off + 1] << 8)
+
+
+def _header_off(rom: bytes, map_id: int) -> tuple[int, int]:
+    bank = rom[MAP_HEADER_BANKS + map_id]
+    return bank, _rom_off(bank, _u16(rom, MAP_HEADER_PTRS + 2 * map_id))
+
+
+def map_connections(rom: bytes, map_id: int) -> list[tuple[str, int, int, int]]:
+    """Edge connections of a map from its ROM header: (side, dest map, y alignment, x alignment). Crossing the
+    `side` edge puts the player at y = y_align (north/south) or x = x_align (west/east) on the destination map, and
+    shifts the other coordinate by the alignment of that axis (pokered connection struct, 11 bytes)."""
+    bank, off = _header_off(rom, map_id)
+    flags, p, out = rom[off + 9], off + 10, []
+    for side, bit in CONNECTION_SIDES:
+        if flags & (1 << bit):
+            out.append((side, rom[p], rom[p + 7], rom[p + 8]))
+            p += 11
+    return out
+
+
+def map_warps(rom: bytes, map_id: int) -> list[tuple[int, int, int, int]]:
+    """Warps of a map from its ROM object data: (x, y, destination warp index, destination map). Destination map
+    0xFF means "the last outdoor map" (resolved at run time from wLastMap). Same format as wWarpEntries (0xD3AF)."""
+    bank, off = _header_off(rom, map_id)
+    n = bin(rom[off + 9] & 0x0F).count("1")
+    obj = _rom_off(bank, _u16(rom, off + 10 + 11 * n))
+    count = min(rom[obj + 1], 32)
+    out = []
+    for i in range(count):
+        y, x, dw, dm = rom[obj + 2 + 4 * i: obj + 6 + 4 * i]
+        out.append((x, y, dw, dm))
+    return out
+
+
+def map_tiles(rom: bytes, map_id: int) -> tuple[int, list[list[int]]]:
+    """(tileset, collision tile of every 2x2-tile cell) from the ROM block data, as full_map_tiles() does from WRAM.
+    Event-driven block changes (opened doors, cut trees) are not in the ROM."""
+    bank, off = _header_off(rom, map_id)
+    tileset, h, w = rom[off], rom[off + 1], rom[off + 2]
+    blocks = _rom_off(bank, _u16(rom, off + 3))
+    th = TILESET_HEADERS + 12 * tileset
+    tbank, tblocks = rom[th], _u16(rom, th + 1)
+    grid = []
+    for y in range(h * 2):
+        row = []
+        for x in range(w * 2):
+            blk = rom[blocks + (y // 2) * w + (x // 2)]
+            b = _rom_off(tbank, tblocks + blk * 16)
+            row.append(rom[b + ((y % 2) * 2 + 1) * 4 + (x % 2) * 2])
+        grid.append(row)
+    return tileset, grid
+
+
+def tileset_walkable(rom: bytes, tileset: int) -> frozenset:
+    th = TILESET_HEADERS + 12 * tileset
+    p, out = _rom_off(rom[th], _u16(rom, th + 5)), []
+    for i in range(0x180):
+        if rom[p + i] == 0xFF:
+            break
+        out.append(rom[p + i])
+    return frozenset(out)
+
+
+def map_cells(rom: bytes, map_id: int) -> list[list[str]]:
+    """Walkability chars of a whole map from the ROM, same alphabet as Pokemon.full_map_cells(): `.` walkable,
+    `,` grass, `#` solid, `~` water, `T` cut tree, `v<>` ledges."""
+    tileset, tiles = map_tiles(rom, map_id)
+    walkable = tileset_walkable(rom, tileset)
+    grass = rom[TILESET_HEADERS + 12 * tileset + 10]
+    ledges = LEDGE_TILES if tileset == 0 else {}
+    water = WATER_TILE if tileset in WATER_TILESETS else -1
+    tree = CUT_TREE_TILES.get(tileset, -1)
+    out = []
+    for trow in tiles:
+        row = []
+        for t in trow:
+            row.append("," if t == grass else LEDGE_CHAR[ledges[t]] if t in ledges else "." if t in walkable
+                       else "~" if t == water else "T" if t == tree else "#")
+        out.append(row)
+    return out

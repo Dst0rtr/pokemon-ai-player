@@ -26,6 +26,7 @@ import signal
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -33,9 +34,13 @@ from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, Claud
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import STUCK_Q, SoloDirector  # noqa: E402
+from bench.jev_nav import WorldNav, map_id  # noqa: E402
+from games import gen1_data as D  # noqa: E402
 from bench import jev as J  # noqa: E402
 
 AGENT_VERSION = "2"
+NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
+NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
 SCREEN_LOOP = 3                                 # a non-map screen seen this often without progress is a loop
 IDLE_RELOAD = 500                               # steps without progress before the checkpoint is reloaded
 FROZEN_RE = re.compile(r"no walkable route from|^walked \w+ 0/\d+ — stopped: blocked")
@@ -54,9 +59,11 @@ def has_status(text: str) -> bool:
 
 
 class Agent:
-    def __init__(self, a: argparse.Namespace, call_tool, policy: JevPolicy, planner=None, chooser=None):
+    def __init__(self, a: argparse.Namespace, call_tool, policy: JevPolicy, planner=None, chooser=None,
+                 nav: Optional[WorldNav] = None):
         if a.variant == "solo" and (planner is not None or chooser is not None):
             raise ValueError("jev-solo must not have a planner or a fallback: no LLM may be called")
+        self.nav = nav if a.variant in ("solo", "assist") else None   # static warp/edge graph from the ROM
         self.chooser = chooser                         # jev-assist: per-decision fallback (Claude Haiku)
         self.fallback_log = Path(a.run_dir) / "fallbacks.jsonl"
         self.a = a
@@ -74,7 +81,7 @@ class Agent:
                      "maps": {}, "history": [], "last_save_step": 0, "plan_badges": 0, "battle_seen_step": -1,
                      "last_objective": "", "grids": {}, "said": {}, "pending_fallbacks": [], "fallbacks": 0,
                      "last_fallback_step": -10**9, "screens": {}, "screens_at": -1, "reloads": 0,
-                     "last_reload_step": -10**9}.items():
+                     "last_reload_step": -10**9, "nav_taken": {}, "nav_blocked": {}, "nav_at": -1}.items():
             self.s.setdefault(k, v)
         self.director = SoloDirector(self.s) if a.variant in ("solo", "assist") else None
         self.party: list[dict] = []
@@ -264,8 +271,12 @@ class Agent:
             self.s["last_objective"] = objective
 
         opts = self.options(o, ex, cn, targets)
+        route_key = ""
         if self.director and kind == "overworld":
             opts = self.director.extra_options(o, facts, self.party, ex, cn, why) + opts
+            nav_opts, route_key = self.nav_options(o, targets, facts)
+            if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
+                opts = nav_opts + [x for x in opts if not (x.tool == "walk" and NAME_WALK_RE.match(x.args.get("path", "")))]
             seen, uniq = set(), []
             for x in opts:
                 if x.label.lower() not in seen:
@@ -335,6 +346,8 @@ class Agent:
                 break                                    # did not get there, or something else started
             reply = await self.tool(tool, **args)
         after = parse(reply)
+        if self.nav and o.map and opt.tool == "walk":
+            self.nav_feedback(o, opt, after, route_key)
         if o.map and (opt.label.startswith("talk to") or opt.tool == "talk"):
             m = re.search(r"\((\d+),(\d+)\)", opt.label) if opt.label.startswith("talk to the person") else None
             key = f"{m[1]},{m[2]}" if m else f"facing {o.pos} {o.facing}"
@@ -370,6 +383,51 @@ class Agent:
         if loop_dropped:
             return "loop"
         return ""
+
+    # ------------------------------------------------------------- navigation (static warp graph, no LLM)
+    def nav_options(self, o: Obs, targets: list[str], facts) -> tuple[list[Option], str]:
+        """The next hop of the shortest route to the objective's last target map, plus one option per warp on this
+        map (by coordinates, so a ladder is never confused with another ladder to the same floor)."""
+        cur = map_id(o.map) if o.map else None
+        if self.nav is None or cur is None or not o.pos:
+            return [], ""
+        if self.s["nav_at"] != self.s.get("last_progress_step", 0):
+            self.s["nav_taken"], self.s["nav_at"] = {}, self.s.get("last_progress_step", 0)
+        opts, route_key = [], ""
+        goal = next((map_id(t) for t in reversed(targets) if map_id(t) is not None), None)
+        moves = set(facts.moves) if facts else set()
+        surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
+        cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
+        if goal is not None and goal != cur:
+            blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
+            route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked)
+            if route:
+                h = route[0]
+                args = ({"path": f"to {h.side} edge", "on_battle": "stop"} if h.kind == "edge"
+                        else {"path": f"to {h.x},{h.y}", "on_battle": "stop"})
+                via = " → ".join(x.dest_name for x in route)
+                opts.append(Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args,
+                                   f"next hop of the shortest route in the game's map data: {via} ({len(route)} hops)"))
+                route_key = f"{h.map}:{h.x},{h.y}" if h.kind == "warp" else f"{h.map}:{h.side}"
+        visited = set(self.s["visited"])
+        for i, (x, y, _, _) in enumerate(self.nav.map(cur)["warps"]):
+            dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
+            name = dests.pop() if len(dests) == 1 else "outside"
+            new = "" if name in visited else " (not visited yet)"
+            opts.append(Option(f"walk to the warp at ({x},{y}) → {name}{new}", "walk",
+                               {"path": f"to {x},{y}", "on_battle": "stop"}, "this particular door, ladder or stairway"))
+        return opts, route_key
+
+    def nav_feedback(self, o: Obs, opt: Option, after: Obs, route_key: str) -> None:
+        """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
+        m = re.fullmatch(r"to (\d+),(\d+)", opt.args.get("path", ""))
+        cur = map_id(o.map)
+        if m and after.map and after.map != o.map and cur is not None:
+            key = f"{cur}:{m[1]},{m[2]}"
+            self.s["nav_taken"][key] = self.s["nav_taken"].get(key, 0) + 1
+        elif route_key and opt.label.startswith("follow the map route") and after.mode == "overworld" \
+                and after.map == o.map and after.pos == o.pos:
+            self.s["nav_blocked"][route_key] = self.s["step"] + NAV_BLOCK_STEPS
 
     def screen_entry(self, o: Obs) -> dict:
         """Per-screen visit counter and options tried there, reset whenever the director sees progress."""
@@ -473,6 +531,16 @@ class Agent:
         return self.stop or "terminated"
 
 
+def load_nav(a: argparse.Namespace, server_cmd: list[str]) -> Optional[WorldNav]:
+    """The static world graph from the ROM the server plays (its --rom argument, relative to the run directory)."""
+    rom = a.rom or (server_cmd[server_cmd.index("--rom") + 1] if "--rom" in server_cmd[:-1] else "")
+    path = Path(rom) if Path(rom).is_absolute() else Path(a.run_dir) / rom
+    try:
+        return WorldNav(path.read_bytes()) if rom else None
+    except OSError:
+        return None
+
+
 async def amain(a: argparse.Namespace, server_cmd: list[str]) -> int:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
@@ -505,7 +573,7 @@ async def amain(a: argparse.Namespace, server_cmd: list[str]) -> int:
                 res = await session.call_tool(name, args)
                 return "\n".join(c.text for c in res.content if getattr(c, "type", "") == "text")
 
-            agent = Agent(a, call_tool, policy, planner, chooser)
+            agent = Agent(a, call_tool, policy, planner, chooser, nav=load_nav(a, server_cmd))
             reason = "error"
             try:
                 reason = await agent.run()
@@ -542,6 +610,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--confidence-threshold", type=float, default=0.3, help="hybrid: replan when Jev's confidence is below this")
     p.add_argument("--stuck-threshold", type=float, default=0.7, help="hybrid: replan when Jev's 'stuck' noul is at least this")
     p.add_argument("--min-replan-gap", type=int, default=5, help="hybrid: steps between confidence/stuck-triggered replans")
+    p.add_argument("--rom", default="", help="ROM for the static map graph (default: the server's --rom)")
     p.add_argument("--max-steps", type=int, default=0)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--mock", action="store_true", help="offline: MockJev (and MockPlanner for hybrid), no network")

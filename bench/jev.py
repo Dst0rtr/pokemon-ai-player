@@ -172,7 +172,7 @@ def heuristic_policy(state: Any, labels: list[str]) -> str:
         prefer.append("press DOWN then A")
     if "▶CONTINUE" in screen:
         prefer.append("press DOWN then A")
-    prefer += ["auto-battle", "teach ", "explore unvisited", "walk to ", "walk up to the person", "press A", "talk to"]
+    prefer += ["auto-battle", "teach ", "follow the map route", "explore unvisited", "walk to ", "walk up to the person", "press A", "talk to"]
     recent = " ".join(state.get("recent_actions") or []) if isinstance(state, dict) else ""
     fresh = [lab for lab in labels if recent.count(lab + " ->") < 2] or labels
     for want in prefer:

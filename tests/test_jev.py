@@ -642,3 +642,86 @@ def test_assist_reports_a_repeated_prompt_as_stuck(tmp_path):
     assert agent.fallback_trigger(dec, False, False, screen_stuck=True) == "stuck"
     assert agent.fallback_trigger(dec, True, False) == "loop"
     assert agent.fallback_trigger(dec, False, False) == ""
+
+
+# ---------------------------------------------------------------- static warp graph (bench/jev_nav.py)
+@requires_rom
+def test_rom_world_data_matches_wram(emu):
+    """map_warps / map_cells / map_connections read from the ROM equal what the game loads into WRAM."""
+    from games import gen1_data as D
+    rom = emu.rom_path.read_bytes()
+    m, p = emu.pyboy.memory, emu.profile
+    mid = m[D.CUR_MAP]
+    wram = [(m[D.WARPS + 4 * i + 1], m[D.WARPS + 4 * i], m[D.WARPS + 4 * i + 2], m[D.WARPS + 4 * i + 3])
+            for i in range(m[D.NUM_WARPS])]
+    assert D.map_warps(rom, mid) == wram and wram
+    assert D.map_cells(rom, mid) == p.full_map_cells()
+    assert [(s, d) for s, d, _, _ in D.map_connections(rom, mid)] == list(p.connections())
+    ts = m[D.CUR_TILESET]
+    assert bytes(rom[D.TILESET_HEADERS + 12 * ts: D.TILESET_HEADERS + 12 * ts + 11]) == bytes(m[0xD52B + i] for i in range(11))
+
+
+@pytest.fixture(scope="module")
+def nav(rom_path):
+    from bench.jev_nav import WorldNav
+    return WorldNav(rom_path.read_bytes())
+
+
+def _route(nav, src, pos, goal, **kw):
+    from bench.jev_nav import map_id
+    r = nav.route(map_id(src), pos, map_id(goal), **kw)
+    return None if r is None else [(h.kind, h.x, h.y, h.dest_name) for h in r]
+
+
+@requires_rom
+def test_nav_routes_through_multi_floor_dungeons(nav):
+    from bench.jev_nav import map_id
+    mm = _route(nav, "Mt. Moon 1F", (14, 35), "Cerulean City")       # iteration 2 bounced between B1F and B2F here
+    assert [d for *_, d in mm] == ["Mt. Moon B1F", "Mt. Moon B2F", "Mt. Moon B1F", "Route 4", "Cerulean City"]
+    assert mm[0][:3] == ("warp", 5, 5) and mm[1][:3] == ("warp", 21, 17)   # not the nearest ladder to B1F
+    # warps are reciprocal: B1F's ladder (21,17) goes to B2F and B2F's arrival ladder leads back to it
+    b1, b2 = map_id("Mt. Moon B1F"), map_id("Mt. Moon B2F")
+    i = next(i for i, w in enumerate(nav.map(b1)["warps"]) if w[:2] == (21, 17))
+    (dm, x, y), = nav.warp_dest(b1, i)
+    j = next(j for j, w in enumerate(nav.map(b2)["warps"]) if w[:2] == (x, y))
+    assert dm == b2 and nav.warp_dest(b2, j)[0][0] == b1
+    assert _route(nav, "Route 4", (18, 5), "Cerulean City")[0][:3] == ("warp", 18, 5)   # standing on the entrance
+    for src, pos, goal, kw in [("Route 10", (8, 17), "Lavender Town", {}),
+                               ("Celadon City", (10, 20), "Rocket Hideout B4F", {}),
+                               ("Silph Co. 1F", (10, 17), "Silph Co. 11F", {}),
+                               ("Pokémon Tower 1F", (10, 17), "Pokémon Tower 7F", {}),
+                               ("Route 23", (7, 140), "Indigo Plateau Lobby", {"surf": True})]:
+        r = _route(nav, src, pos, goal, **kw)
+        assert r and r[-1][3] == goal, (src, goal, r)
+    assert _route(nav, "Pallet Town", (5, 6), "Pallet Town") == []
+
+
+@requires_rom
+def test_nav_memory_penalizes_taken_warps_and_skips_blocked_hops(nav):
+    from bench.jev_nav import map_id
+    mid = map_id("Mt. Moon 1F")
+    first = _route(nav, "Mt. Moon 1F", (14, 35), "Route 4")                 # two-wide cave mouth: (14,35) and (15,35)
+    assert first == [("warp", 15, 35, "Route 4")]                            # one step beats stepping off and on
+    assert _route(nav, "Mt. Moon 1F", (14, 35), "Route 4", blocked=frozenset({f"{mid}:15,35"}))[0][:3] == ("warp", 14, 35)
+    assert _route(nav, "Mt. Moon 1F", (14, 35), "Route 4", taken={f"{mid}:15,35": 3})[0][:3] == ("warp", 14, 35)
+    assert _route(nav, "Mt. Moon 1F", (14, 35), "Cerulean City", blocked=frozenset({f"{mid}:5,5"})) is None
+
+
+@requires_rom
+def test_agent_offers_route_and_concrete_warps_instead_of_nearest_ladder(nav, tmp_path):
+    from bench.jev_agent import NAME_WALK_RE
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=nav)
+    o = J.parse("walked\nf1 Mt. Moon 1F (14,35) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
+    facts = SOLO.Facts(badges=1)
+    opts, key = agent.nav_options(o, ["Mt. Moon B1F", "Mt. Moon B2F", "Route 4", "Cerulean City"], facts)
+    assert opts[0].label.startswith("follow the map route to Cerulean City") and opts[0].args["path"] == "to 5,5"
+    assert key.endswith(":5,5") and "B2F" in opts[0].desc
+    assert any(x.args["path"] == "to 17,11" for x in opts) and not any(NAME_WALK_RE.match(x.args["path"]) for x in opts)
+    assert NAME_WALK_RE.match("to Mt. Moon B1F") and not NAME_WALK_RE.match("to east edge") and not NAME_WALK_RE.match("to 5,5")
+    after = J.parse("walked\nf1 Mt. Moon B1F (5,5) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
+    agent.nav_feedback(o, opts[0], after, key)
+    assert agent.s["nav_taken"] == {key: 1}
+    stuck = J.parse("walked\nf1 Mt. Moon 1F (14,35) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
+    agent.nav_feedback(o, J.Option(opts[0].label, "walk", {"path": "up 1"}), stuck, key)
+    assert agent.s["nav_blocked"][key] > agent.s["step"]
