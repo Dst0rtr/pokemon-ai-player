@@ -30,7 +30,7 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `bench/jev.py` | Jev (TypeSafe System One) HTTP client + mock, reply parsers, candidate actions, policy, outcome labels, calibration summary, Haiku planner, battle advisor |
 | `bench/jev_agent.py` | the Jev player: MCP client of `server.py`, launched per chunk by `run.py`; variants solo/assist/hybrid/scripted; assist logs `fallbacks.jsonl` |
 | `bench/jev_solo.py` | jev-solo (no LLM): whole-game objective graph, facts, heal/train/HM rules, stuck recovery |
-| `bench/jev_nav.py`, `bench/jev_atlas.py` | Jev map knowledge: `--map-source rom` = warp/edge graph decoded from the ROM (Dijkstra over arrival points, per-dungeon warp memory); `learned` = atlas built from map views, wWarpEntries and real arrivals (`data/jev_atlas.json`) |
+| `bench/jev_nav.py`, `bench/jev_atlas.py` | Jev map knowledge: `--map-source learned` (default) = atlas built from map views, wWarpEntries and real arrivals (`data/jev_atlas.json`, blank unless `--atlas`); `rom` = warp/edge graph decoded from the ROM (comparison/debugging); both route with Dijkstra over arrival points and per-dungeon warp memory |
 | `bench/improve.py`, `bench/segments.json` | Jev self-improvement: cluster jev-assist fallbacks, Opus proposal (dry run unless `--call`), apply on an iteration branch, compare; fixed segment start states |
 | `tests/` | pytest (108): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report, Jev track (mocked, no network) |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |

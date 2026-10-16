@@ -752,8 +752,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stuck-threshold", type=float, default=0.7, help="hybrid: replan when Jev's 'stuck' noul is at least this")
     p.add_argument("--min-replan-gap", type=int, default=5, help="hybrid: steps between confidence/stuck-triggered replans")
     p.add_argument("--rom", default="", help="ROM for the static map graph (default: the server's --rom)")
-    p.add_argument("--map-source", choices=["rom", "learned"], default="rom",
-                   help="rom: world graph from the ROM map tables; learned: Jev builds its own atlas while playing")
+    p.add_argument("--map-source", choices=["rom", "learned"], default="learned",
+                   help="learned (default): Jev builds its own atlas while playing; rom: world graph from the ROM map tables")
     p.add_argument("--atlas", default="", help="learned: start from this atlas (an earlier run's data/jev_atlas.json)")
     p.add_argument("--max-steps", type=int, default=0)
     p.add_argument("--seed", type=int, default=0)

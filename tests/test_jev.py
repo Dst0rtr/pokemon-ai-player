@@ -576,7 +576,7 @@ def test_results_md_iteration_trend():
     md = build_results_md(rows)
     assert "### Self-improvement iterations" in md
     tbl = md.split("### Self-improvement iterations", 1)[1]
-    assert tbl.index("| 1 | assist | 1000 | 40 |") < tbl.index("| 2 | assist | 1000 | 12 |") and "$2.00" in tbl and "✓ badge: Boulder" in tbl
+    assert tbl.index("| 1 | assist | rom | 1000 | 40 |") < tbl.index("| 2 | assist | rom | 1000 | 12 |") and "$2.00" in tbl and "✓ badge: Boulder" in tbl
 
 
 class LearnMoveServer(FakeServer):
@@ -827,3 +827,12 @@ def test_learned_atlas_edges(tmp_path):
     assert e[f"{r3}:north"]["offset"] == 5 and e[f"{r4}:south"] == {"map": r3, "offset": -5, "fixed": 0, "seen": False}
     _, trans = atlas.reach(r3, (2, 1))
     assert any(arr == (r4, 6, 9) for _, h, arr in trans if (h.x, h.y) == (1, 0))   # the offset applies along the edge
+
+
+def test_results_record_how_maps_were_known():
+    from bench.report import map_cell
+    assert map_cell({"variant": "solo"}) == "rom"                                    # runs before --map-source
+    assert map_cell({"variant": "solo", "map_source": {"source": "learned", "atlas_seed": None}}) == "learned (blank)"
+    assert map_cell({"variant": "solo", "map_source": {"source": "learned", "atlas_seed": "a.json"}}) == "learned (carried atlas)"
+    from bench.run import build_parser
+    assert build_parser().parse_args(["--mode", "jev-solo"]).map_source == "learned"

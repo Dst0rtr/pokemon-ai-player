@@ -39,8 +39,8 @@ Jev runs also pick where map knowledge comes from, `--map-source`:
 
 | `--map-source` | What the Jev player knows about maps | Use it when |
 |---|---|---|
-| `rom` (default) | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | benchmark runs; the self-improvement loop |
-| `learned` | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run | measuring how much the map data helps; letting Jev get better run after run |
+| `learned` (default) | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run. Results record whether a run started blank or with a carried atlas | every benchmark run, including the jev-solo goal and the full run (started blank): exploring is the better test of the model |
+| `rom` | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | comparison and debugging only (run ids get `-rommap`) |
 
 ### One command per mode
 
@@ -49,12 +49,13 @@ cents for Jev). A run without `--smoke` is a full run: 12 h of active play or 20
 comes first.
 
 ```bash
-# Jev, no LLM at all (the final exam; stuck for 2,000 steps = fail)
+# Jev, no LLM at all, exploring from a blank atlas (the final exam; stuck for 2,000 steps = fail)
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo
 # Jev + an LLM fallback on uncertain or stuck decisions (the self-improvement run mode)
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-assist --fallback-model haiku --fallback-budget-usd 25 --segment mt-moon --iteration 3
-# the same with no ROM map tables: Jev builds its own atlas (seed it with an earlier run's atlas to improve over runs)
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --map-source learned --atlas bench/runs/<earlier_run>/data/jev_atlas.json
+# carry an earlier run's atlas over (recorded as "learned (carried atlas)"), or compare with the ROM map graph
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --atlas bench/runs/<earlier_run>/data/jev_atlas.json
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --map-source rom
 # Jev picks actions, an LLM plans objectives
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-hybrid --model haiku
 # Jev picks actions toward a fixed route list (ablation)
@@ -293,7 +294,7 @@ Jev / Haiku / Opus / total cost); `run.py --iteration N` records the cost of the
 
 Where Jev alone cannot decide, and what code does instead: Jev never produces arguments, so every
 destination, move and menu path is enumerated by code; which ladder or door leads on is a map-knowledge question
-(`--map-source rom` answers it from the ROM, `learned` from what Jev has explored), offered as a 'follow the map
+(by default from what Jev has explored, `--map-source learned`; `rom` answers it from the ROM for comparison), offered as a 'follow the map
 route' option that Jev still has to pick; arithmetic (HP fractions, level targets, damage)
 stays in code (Jev is not a calculator); story progress is read from game data, not judged, except the
 few `jev_check` nodes; the START/B reset after Oak's "Don't go away yet!" push-back (the game ignores

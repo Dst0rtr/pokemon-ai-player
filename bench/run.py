@@ -118,7 +118,7 @@ class Run:
         else:
             seg = f"_{a.segment}" if a.segment else ""
             it = f"_it{a.iteration}" if a.iteration is not None else ""
-            learned = "-learned" if a.provider == "jev" and a.map_source == "learned" else ""
+            learned = "-rommap" if a.provider == "jev" and a.map_source == "rom" else ""
             self.run_id = f"{self.provider.label}{learned}{seg}{it}_{_slug(self.model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             self.dir = ROOT / "bench" / "runs" / self.run_id
         self.state_path = self.dir / "harness.json"
@@ -130,7 +130,8 @@ class Run:
         }
         self.state.setdefault("mode", a.mode)
         if self.provider.name == "jev" and a.variant != "battles":
-            self.state.setdefault("map_source", {"source": a.map_source, "atlas_seed": a.atlas or None})
+            self.state.setdefault("map_source", {"source": a.map_source, "atlas_seed": a.atlas or None,
+                                                 "start": ("carried atlas" if a.atlas else "blank") if a.map_source == "learned" else "rom"})
         if self.provider.name == "jev" and a.variant == "assist":
             self.state.setdefault("fallback", {"model": a.fallback_model, "budget_usd": a.fallback_budget_usd,
                                                "max_fallbacks": a.max_fallbacks, "threshold": a.fallback_threshold})
@@ -483,7 +484,7 @@ class Run:
         print("  see", self.dir / "chunks", "for the raw streams\n")
 
 
-def main(argv=None) -> None:
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Game Boy MCP benchmark runner")
     p.add_argument("--mode", choices=list(MODES), default="",
                    help="what decides each action: jev-solo (Jev, no LLM), jev-assist (Jev + LLM fallback when unsure/stuck), "
@@ -498,9 +499,10 @@ def main(argv=None) -> None:
     p.add_argument("--fallback-budget-usd", type=float, default=25.0,
                    help="jev-assist: stop calling the fallback model after this much spend (0 = no cap); Jev plays on alone")
     p.add_argument("--max-fallbacks", type=int, default=0, help="jev-assist: at most this many fallbacks (0 = no cap)")
-    p.add_argument("--map-source", choices=["rom", "learned"], default="rom",
-                   help="jev: where map knowledge comes from: rom (world/warp graph from the ROM map tables; the benchmark "
-                        "default) or learned (no ROM tables: Jev builds an atlas while playing, data/jev_atlas.json)")
+    p.add_argument("--map-source", choices=["rom", "learned"], default="learned",
+                   help="jev: where map knowledge comes from: learned (default; no ROM map tables, Jev builds an atlas while "
+                        "playing, data/jev_atlas.json, blank unless --atlas) or rom (world/warp graph from the ROM map tables; "
+                        "for comparison and debugging)")
     p.add_argument("--atlas", default="", help="jev --map-source learned: start from an earlier run's data/jev_atlas.json")
     p.add_argument("--variant", default="solo", choices=["solo", "assist", "hybrid", "scripted", "battles"],
                    help="jev: solo = Jev + code only, no LLM, stuck = fail (final exam); assist = solo + Haiku fallback per "
@@ -526,7 +528,11 @@ def main(argv=None) -> None:
     p.add_argument("--grace-seconds", type=float, default=60)
     p.add_argument("--resume-run", help="continue an interrupted run directory")
     p.add_argument("--smoke", action="store_true", help="two 4-minute chunks with tiny budgets; prints a checklist")
-    a = p.parse_args(argv)
+    return p
+
+
+def main(argv=None) -> None:
+    a = build_parser().parse_args(argv)
     a.provider, a.variant, a.mode = resolve_mode(a.mode, a.provider, a.variant)
     a.model, a.fallback_model = resolve_model(a.model), resolve_model(a.fallback_model)
     if a.provider == "jev" and not a.mock and not os.environ.get("TYPESAFE_API_KEY"):

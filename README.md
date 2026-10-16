@@ -85,8 +85,8 @@ Jev runs also pick where map knowledge comes from, `--map-source`:
 
 | `--map-source` | What the Jev player knows about maps | Use it when |
 |---|---|---|
-| `rom` (default) | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | benchmark runs; the self-improvement loop |
-| `learned` | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run | measuring how much the map data helps; letting Jev get better run after run |
+| `learned` (default) | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run. Results record whether a run started blank or with a carried atlas | every benchmark run, including the jev-solo goal and the full run (started blank): exploring is the better test of the model |
+| `rom` | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | comparison and debugging only (run ids get `-rommap`) |
 
 ```bash
 venv/bin/python bench/run.py --mode llm --provider claude --model haiku                    # any Claude model

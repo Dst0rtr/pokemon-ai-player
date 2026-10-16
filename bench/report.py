@@ -188,8 +188,18 @@ def _ms(x) -> str:
     return "—" if x is None else f"{x:.0f}"
 
 
+def map_cell(h: dict) -> str:
+    """How the Jev player knew the maps: rom, learned (blank) or learned (carried atlas). Older runs: rom."""
+    ms = h.get("map_source") or {}
+    if h.get("variant") == "battles":
+        return "—"
+    if ms.get("source") == "learned":
+        return "learned (carried atlas)" if ms.get("atlas_seed") else "learned (blank)"
+    return "rom"
+
+
 def jev_leaderboard(results: list[dict]) -> str:
-    head = ["#", "Variant", "Model", "Segment", "Badges", "Furthest", "Hall of Fame", "Active h", "Tool calls", "Jev calls",
+    head = ["#", "Variant", "Model", "Maps", "Segment", "Badges", "Furthest", "Hall of Fame", "Active h", "Tool calls", "Jev calls",
             "Fallbacks (/1k steps)",
             "Jev latency p50 / p95 ms", "Jev cost", "LLM cost", "Total cost", "Correct", "ECE", "Exit"]
     rows = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
@@ -204,7 +214,7 @@ def jev_leaderboard(results: list[dict]) -> str:
         fb = "—" if j.get("fallbacks") is None else f"{j['fallbacks']} ({j.get('fallbacks_per_1k_steps')})"
         seg = (h.get("segment") or {}).get("name", "full game") + (f" · it{h['iteration']}" if h.get("iteration") is not None else "")
         cells = [str(i), f"jev-{h.get('variant')}" + (" (mock)" if h.get("mock") else ""), f"`{h.get('display_model') or h.get('model')}`",
-                 seg, str(d["badges"]), d["furthest"], _cell(d["milestone_times"].get(CHAMPION)),
+                 map_cell(h), seg, str(d["badges"]), d["furthest"], _cell(d["milestone_times"].get(CHAMPION)),
                  f"{(m.get('real_seconds') or 0) / 3600:.1f}", str(d["tool_calls"]), str(j.get("jev_calls", "—")), fb,
                  f"{_ms(lat.get('p50'))} / {_ms(lat.get('p95'))}", "—" if jc is None else f"${jc:,.2f}",
                  "—" if llm is None else f"${llm:,.2f}", _cost(h), "—" if acc is None else f"{acc:.0%}",
@@ -218,7 +228,7 @@ def iteration_table(results: list[dict]) -> str:
     rows = [r for r in results if r["harness"].get("iteration") is not None]
     if not rows:
         return ""
-    head = ["Segment (state)", "Iter", "Variant", "Steps", "Fallbacks", "Per 1k steps", "Goal", "Badges", "Active h",
+    head = ["Segment (state)", "Iter", "Variant", "Maps", "Steps", "Fallbacks", "Per 1k steps", "Goal", "Badges", "Active h",
             "Jev $", "Haiku $", "Opus $", "Total $", "Exit"]
     out = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
     key = lambda r: ((r["harness"].get("segment") or {}).get("name", ""), r["harness"]["iteration"], r["run_id"])  # noqa: E731
@@ -230,7 +240,7 @@ def iteration_table(results: list[dict]) -> str:
         reached = goal and any(str(x.get("name", "")).startswith(goal) for x in m.get("milestones") or [])
         out.append("| " + " | ".join([
             f"{seg.get('name', 'full game')}" + (f" (`{seg['state_sha256']}`)" if seg.get("state_sha256") else ""),
-            str(h["iteration"]), h.get("variant", ""), str(j.get("steps", "—")), str(j.get("fallbacks", "—")),
+            str(h["iteration"]), h.get("variant", ""), map_cell(h), str(j.get("steps", "—")), str(j.get("fallbacks", "—")),
             str(j.get("fallbacks_per_1k_steps", "—")), ("✓ " if reached else "✗ ") + (goal or "—"), str(d["badges"]),
             f"{(m.get('real_seconds') or 0) / 3600:.2f}", f"${jc:,.2f}", f"${llm:,.2f}", f"${opus:,.2f}",
             f"${jc + llm + opus:,.2f}", h.get("exit_reason") or "—"]) + " |")
