@@ -35,7 +35,7 @@ from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, Claud
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import STUCK_Q, SoloDirector  # noqa: E402
-from bench.jev_nav import WorldNav, map_id  # noqa: E402
+from bench.jev_nav import MOVES, WorldNav, map_id  # noqa: E402
 from games import gen1_data as D  # noqa: E402
 from bench import jev as J  # noqa: E402
 
@@ -92,6 +92,7 @@ class Agent:
         self.reply = ""
         self.stop = ""
         self.route_hint = ""
+        self.why = ""                                  # the director's reason for the objective (heal, train, node id)
         self.planner_cost = 0.0
         self.planner_calls = 0
         self.planner_tokens = {"input": 0, "cached_input": 0, "cache_write": 0, "output": 0}
@@ -200,12 +201,21 @@ class Agent:
         if o.mode == "dialogue":
             return [Option("continue the conversation", "talk", {})]
         if o.mode == "battle":
-            return battle_options(o.battle, self.party, self.items, allow_auto=True)
+            return battle_options(o.battle, self.party, self.items, allow_auto=True, run_note=self.run_note(o))
         if o.mode == "faint_switch":
             return battle_options(o.battle, self.party, self.items, only_switch=True) or press_options()
         return overworld_options(o, ex, cn, targets, self.party, self.items, self.s["step"] - self.s["last_save_step"],
                                  grid=self.grid(o.map), said=self.s["said"].get(o.map, {}),
                                  facing_said=self.s["said"].get(o.map, {}).get(f"facing {o.pos} {o.facing}", ""))
+
+    def run_note(self, o: Obs) -> str:
+        """Whether fleeing a wild battle fits the objective is decided in code; Jev reads it as the option's criterion."""
+        mine = (o.battle or {}).get("mine") or {}
+        if self.why == "train":
+            return "flee: gives no experience, and the objective is to train, so fighting is better"
+        if self.why == "heal" or mine.get("hp", 0) < 0.35 * max(mine.get("max_hp", 1), 1):
+            return "flee: recommended now, the team needs healing before more fights"
+        return "flee from the wild Pokémon (no experience gained)"
 
     def jev_state(self, o: Obs, objective: str) -> dict:
         recent = self.s["history"][-8:]
@@ -239,8 +249,10 @@ class Agent:
             self.s["visited"].append(o.map)
         if o.map:
             self.s["badges"] = o.badges
-        if o.mode in ("battle", "faint_switch") and (self.team_step < self.s["battle_seen_step"] or self.team_step < 0):
+        if o.mode in ("battle", "faint_switch") and (self.team_step < self.s["battle_seen_step"] or self.team_step < 0
+                                                     or self.s.get("refresh_party")):
             await self.refresh_team()
+            self.s["refresh_party"] = False
         if o.mode in ("battle", "battle_start", "faint_switch"):
             self.s["battle_seen_step"] = self.s["step"]
         elif o.mode == "overworld" and (self.team_step < 0 or self.s["step"] - self.team_step >= 30
@@ -277,13 +289,18 @@ class Agent:
             self.log_objective("graph" if self.director else "route", why, objective, targets)
             self.s["last_objective"] = objective
 
+        self.why = why
         opts = self.options(o, ex, cn, targets)
         route_key = ""
         if self.director and kind == "overworld":
             opts = self.director.extra_options(o, facts, self.party, ex, cn, why) + opts
-            nav_opts, route_key = self.nav_options(o, targets, facts)
+            nav_opts, route_key = self.nav_options(o, targets, facts, why)
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
-                opts = nav_opts + [x for x in opts if not (x.tool == "walk" and NAME_WALK_RE.match(x.args.get("path", "")))]
+                quiet = bool(route_key) and self.s.get("recovery", 0) == 0   # blind 4-tile walks only dilute the choice
+                opts = nav_opts + [x for x in opts if not (x.tool == "walk" and NAME_WALK_RE.match(x.args.get("path", "")))
+                                   and not (quiet and x.label.startswith("walk ") and x.label.endswith(" 4 tiles"))]
+            if why == "heal" and o.map.endswith("Poké Center"):
+                opts = [x for x in opts if not x.label.startswith("talk to the person")]   # the nurse option replaces them
             seen, uniq = set(), []
             for x in opts:
                 if x.label.lower() not in seen:
@@ -300,6 +317,11 @@ class Agent:
             kept = drop_repeats(opts, self.s["history"], keep=("press A",) if kind == "prompt" else ())
             loop_dropped = len(kept) < len(opts)
             opts = kept
+        if kind in ("battle", "faint_switch"):
+            # a switch the game refused ("is already out", "no will to fight") is not offered again right away
+            failed = {h.removeprefix(J.AUTO).split(" -> ", 1)[0] for h in self.s["history"][-4:]
+                      if "is already out" in h or "no will to fight" in h}
+            opts = [x for x in opts if x.label not in failed] or opts
         screen, screen_stuck = self.screen_entry(o), False
         if kind != "overworld" and screen["n"] >= SCREEN_LOOP and len(opts) > 1:
             # the same menu/dialog/prompt screen keeps coming back without progress: try what was not tried here yet;
@@ -366,6 +388,8 @@ class Agent:
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
             self.s["refresh_items"] = True              # the bag, HMs or moves may have changed
+        if opt.tool == "battle" and (opt.args.get("action") == "switch" or "fainted" in reply.lower()):
+            self.s["refresh_party"] = True              # Gen 1 reorders the party on a switch; faints change the switch set
         line = (J.AUTO if dec.record.get("forced") else "") + f"{opt.label} -> {after.head[:90]}"
         if not dec.record.get("forced"):
             repeat = kind not in ("battle", "faint_switch") and self.s["history"].count(line) >= 2
@@ -395,7 +419,7 @@ class Agent:
         return ""
 
     # ------------------------------------------------------------- navigation (static warp graph, no LLM)
-    def nav_options(self, o: Obs, targets: list[str], facts) -> tuple[list[Option], str]:
+    def nav_options(self, o: Obs, targets: list[str], facts, why: str = "") -> tuple[list[Option], str]:
         """The next hop of the shortest route to the objective's last target map, plus one option per warp on this
         map (by coordinates, so a ladder is never confused with another ladder to the same floor)."""
         cur = map_id(o.map) if o.map else None
@@ -405,7 +429,9 @@ class Agent:
             self.s["nav_taken"], self.s["nav_at"] = {}, self.s.get("last_progress_step", 0)
         opts, route_key = [], ""
         self.route_hint = ""
-        goal = next((map_id(t) for t in reversed(targets) if map_id(t) is not None), None)
+        # healing: the targets list the nearest Poké Center first; otherwise the route ends at the last target
+        order = targets if why == "heal" else list(reversed(targets))
+        goal = next((map_id(t) for t in order if map_id(t) is not None), None)
         moves = set(facts.moves) if facts else set()
         surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
         cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
@@ -414,10 +440,10 @@ class Agent:
             route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked)
             if route:
                 h = route[0]
-                args = ({"path": f"to {h.side} edge", "on_battle": "stop"} if h.kind == "edge"
-                        else {"path": f"to {h.x},{h.y}", "on_battle": "stop"})
+                args, then = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "") or \
+                    ({"path": f"to {h.x},{h.y}", "on_battle": "stop"}, [])
                 via = " → ".join(x.dest_name for x in route)
-                route_key = f"{h.map}:{h.x},{h.y}" if h.kind == "warp" else f"{h.map}:{h.side}"
+                route_key = f"{h.map}:{h.x},{h.y}"       # the key format WorldNav.route checks in `blocked`
                 desc = f"next hop of the shortest route in the game's map data: {via} ({len(route)} hops)"
                 self.route_hint = f"to reach {D.map_name(goal)}: {h.label()} on this map, then {via}"
                 if self.s["step"] - self.s["nav_noroute"].get(route_key, -10**9) <= NAV_BLOCK_STEPS:
@@ -434,7 +460,7 @@ class Agent:
                             x.desc = "it stands in the only way along the route (take the item, or talk/battle to make it move)"
                         opts += clear
                         desc += f"; the way is blocked at {', '.join(f'({bx},{by})' for bx, by in blockers)}"
-                opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc))
+                opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc, then=then))
         visited = set(self.s["visited"])
         _, trans = self.nav.reach(cur, tuple(o.pos), surf=surf, cut=cut)
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}   # warps this section of the map can reach
@@ -444,23 +470,49 @@ class Agent:
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
             name = dests.pop() if len(dests) == 1 else "outside"
             new = "" if name in visited else " (not visited yet)"
-            opts.append(Option(f"walk to the warp at ({x},{y}) → {name}{new}", "walk",
-                               {"path": f"to {x},{y}", "on_battle": "stop"}, "this particular door, ladder or stairway"))
+            walk = self.hop_walk(cur, tuple(o.pos), x, y)
+            if not walk:
+                continue
+            here = " (you stand on it: step off and back on)" if (x, y) == tuple(o.pos) else ""
+            opts.append(Option(f"walk to the warp at ({x},{y}) → {name}{new}{here}", "walk", walk[0],
+                               "this particular door, ladder or stairway", then=walk[1]))
         return opts, route_key
 
     def nav_feedback(self, o: Obs, opt: Option, after: Obs, route_key: str) -> None:
         """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
-        m = re.fullmatch(r"to (\d+),(\d+)", opt.args.get("path", ""))
+        # warp options carry their coordinates in the label (a warp you stand on is taken by stepping off and back)
+        m = re.search(r"warp at \((\d+),(\d+)\)", opt.label) or re.fullmatch(r"to (\d+),(\d+)", opt.args.get("path", ""))
         cur = map_id(o.map)
         if m and after.map and after.map != o.map and cur is not None:
             key = f"{cur}:{m[1]},{m[2]}"
             self.s["nav_taken"][key] = self.s["nav_taken"].get(key, 0) + 1
-        elif after.mode == "overworld" and after.map == o.map and (after.pos == o.pos or "no walkable route" in after.head):
+        elif after.mode == "overworld" and after.map == o.map and ("no walkable route" in after.head or
+                                                                    after.pos == o.pos and "already at" not in after.head):
             key = f"{cur}:{m[1]},{m[2]}" if m else (route_key if opt.label.startswith("follow the map route") else "")
             if key:
                 if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) <= NAV_BLOCK_STEPS:
                     self.s["nav_blocked"][key] = self.s["step"] + NAV_BLOCK_STEPS   # failed again: try another way
                 self.s["nav_noroute"][key] = self.s["step"]
+
+    def hop_walk(self, cur: int, pos: tuple, x: int, y: int, side: str = "") -> Optional[tuple[dict, list]]:
+        """Walk args and follow-up walks for one hop: to a warp tile, or to the route's own edge cell and one step
+        across (the server's "to <side> edge" picks its own cell, which can be solid on the other side). A warp the
+        player stands on (just arrived by it) is taken by stepping off and back on; None if no neighbour is free."""
+        if side:
+            across = {"north": "up", "south": "down", "west": "left", "east": "right"}[side]
+            if (x, y) == pos:
+                return {"path": f"{across} 1", "on_battle": "stop"}, []
+            return {"path": f"to {x},{y}", "on_battle": "stop"}, [("walk", {"path": f"{across} 1", "on_battle": "stop"})]
+        if (x, y) != pos:
+            return {"path": f"to {x},{y}", "on_battle": "stop"}, []
+        m = self.nav.map(cur)
+        cells, warps = m["cells"], {(wx, wy) for wx, wy, _, _ in m["warps"]}
+        back = {"up": "down", "down": "up", "left": "right", "right": "left"}
+        for d, (dx, dy) in MOVES.items():
+            nx, ny = x + dx, y + dy
+            if 0 <= ny < len(cells) and 0 <= nx < len(cells[0]) and cells[ny][nx] in (".", ",") and (nx, ny) not in warps:
+                return {"path": f"{d} 1", "on_battle": "stop"}, [("walk", {"path": f"{back[d]} 1", "on_battle": "stop"})]
+        return None
 
     def screen_entry(self, o: Obs) -> dict:
         """Per-screen visit counter and options tried there, reset whenever the director sees progress."""

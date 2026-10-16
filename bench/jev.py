@@ -387,8 +387,11 @@ def press_options(intro: bool = False) -> list[Option]:
 
 
 def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], allow_auto: bool = True,
-                   only_switch: bool = False) -> list[Option]:
+                   only_switch: bool = False, run_note: str = "") -> list[Option]:
+    """The legal battle actions. Switches name the species: Gen 1 reorders the party in battle, so slot numbers go
+    stale ("PIDGEY is already out!"). The server's auto-battle scores moves with the damage formula (code, not Jev)."""
     mine, kind = b.get("mine") or {}, b.get("kind", "")
+    active = (mine.get("species") or "").lower()
     opts: list[Option] = []
     if "Safari" in b.get("menu", ""):
         return [Option("throw a Safari Ball", "battle", {"action": "item"}, "try to catch it"),
@@ -398,28 +401,29 @@ def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], all
     if not only_switch:
         if allow_auto:
             opts.append(Option("auto-battle", "battle", {"action": "auto"},
-                               "keep attacking with the strongest move for the matchup until the battle ends or HP is low"))
+                               "the server picks the strongest move for this matchup each turn (Gen 1 damage formula, type "
+                               "chart, accuracy) until the battle ends or HP is low; the usual choice when attacking"))
         for mv in mine.get("moves", []):
             if mv["pp"] > 0 and not mv.get("disabled"):
                 opts.append(Option(f"use {mv['name']}", "battle", {"action": "fight", "target": mv["name"]},
                                    f"attack with {mv['name']} ({mv['pp']} PP left)"))
     for p in party:
-        if p["hp"] <= 0 or (p["species"] == mine.get("species") and p["hp"] == mine.get("hp")):
+        if p["hp"] <= 0 or p["species"].lower() == active:
             continue
-        opts.append(Option(f"switch to {p['species']}", "battle", {"action": "switch", "target": str(p["slot"])},
+        opts.append(Option(f"switch to {p['species']}", "battle", {"action": "switch", "target": p["species"]},
                            f"L{p['level']}, {p['hp']}/{p['max_hp']} HP, moves: " + ", ".join(m["name"] for m in p["moves"])))
     if only_switch:
         return _dedupe(opts)
     names = {n for n, _ in items}
-    if mine.get("hp", 0) < mine.get("max_hp", 0):
+    if _frac(mine) < 0.5:
         for h in HEAL_ITEMS:
             if h in names:
                 opts.append(Option(f"use {h}", "battle", {"action": "item", "target": h}, "heal the Pokémon in battle"))
     if kind == "wild":
         ball = next((x for x in BALLS if x in names), None)
-        if ball:
+        if ball and len(party) < 4:                    # a small team: catching is worth an option
             opts.append(Option(f"throw a {ball}", "battle", {"action": "item", "target": ball}, "try to catch the wild Pokémon"))
-        opts.append(Option("run away", "battle", {"action": "run"}, "flee from the wild Pokémon"))
+        opts.append(Option("run away", "battle", {"action": "run"}, run_note or "flee from the wild Pokémon (no experience gained)"))
     return _dedupe(opts)
 
 
@@ -546,11 +550,14 @@ class JevPolicy:
     """Asks Jev to pick one Option and logs one JSON line per decision (outcome added after execution)."""
 
     INSTRUCTIONS = ("You are playing Pokémon Red. Which action should the player take next to make progress toward "
-                    "`objective`? Read `situation`. Prefer actions that move toward the objective; avoid repeating actions "
-                    "from `recent_actions` that failed or changed nothing.")
+                    "`objective`? Read `location`, `map_route`, `hint` and `last_result`. An option starting with 'follow the "
+                    "map route' is the next step of the shortest path in the game's map data toward the objective: take it "
+                    "unless `recent_actions` show it just failed. Avoid repeating actions from `recent_actions` that failed "
+                    "or changed nothing.")
     BATTLE_INSTRUCTIONS = ("You are playing a Pokémon Red battle. Which action gives the best chance to win this battle "
-                           "(or, against a wild Pokémon you do not need, to end it safely)? Consider type matchups, HP and "
-                           "PP in `battle`; switch out a Pokémon that is about to faint if a healthier one is available.")
+                           "(or, against a wild Pokémon you do not need, to end it safely)? auto-battle attacks with the "
+                           "move code rates strongest for the matchup; switch out a Pokémon that is about to faint if a "
+                           "healthier one is available; follow what the 'run away' option says about fleeing.")
 
     def __init__(self, client, log_path: Optional[Path] = None, variant: str = "", seed: int = 0,
                  price_per_mtok: float = PRICE_PER_MTOK):

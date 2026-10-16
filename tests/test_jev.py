@@ -127,7 +127,7 @@ def test_battle_options_are_the_legal_set():
     wild = [x.label for x in J.battle_options(o.battle, party, [("Poké Ball", 3)], allow_auto=False)]
     assert "throw a Poké Ball" in wild and "run away" in wild and "auto-battle" not in wild
     sw = J.battle_options(o.battle, party, [], only_switch=True)
-    assert [x.label for x in sw] == ["switch to Charmeleon"] and sw[0].args == {"action": "switch", "target": "2"}
+    assert [x.label for x in sw] == ["switch to Charmeleon"] and sw[0].args == {"action": "switch", "target": "Charmeleon"}
     safari = dict(o.battle, menu="menu: BALL/BAIT/ROCK/RUN (Safari: cursor on BALL)")
     assert [x.args["action"] for x in J.battle_options(safari, party, [])] == ["item", "bait", "rock", "run"]
 
@@ -721,7 +721,9 @@ def test_agent_offers_route_and_concrete_warps_instead_of_nearest_ladder(nav, tm
     assert key.endswith(":5,5") and "B2F" in opts[0].desc
     assert not any(NAME_WALK_RE.match(x.args["path"]) for x in opts)
     pocket = J.parse("walked\nf1 Mt. Moon B2F (25,9) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
-    assert {x.args["path"] for x in agent.nav_options(pocket, [], facts)[0]} == {"to 25,9"}   # other B2F sections: unlisted
+    here = agent.nav_options(pocket, [], facts)[0]                       # other B2F sections: unlisted
+    assert [x.label for x in here] == ["walk to the warp at (25,9) → Mt. Moon B1F (not visited yet) (you stand on it: step off and back on)"]
+    assert here[0].args["path"] == "up 1" and here[0].then == [("walk", {"path": "down 1", "on_battle": "stop"})]
     assert NAME_WALK_RE.match("to Mt. Moon B1F") and not NAME_WALK_RE.match("to east edge") and not NAME_WALK_RE.match("to 5,5")
     after = J.parse("walked\nf1 Mt. Moon B1F (5,5) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
     agent.nav_feedback(o, opts[0], after, key)
@@ -762,3 +764,15 @@ def test_play_modes_and_model_aliases():
             resolve_mode(bad[0], bad[1], "solo")
     assert resolve_model("opus") == "claude-opus-5-5" and resolve_model("Sonnet") == "claude-sonnet-5-5"
     assert resolve_model("haiku") == "claude-haiku-4-5-20251001" and resolve_model("gpt-5.6-sol") == "gpt-5.6-sol"
+
+
+def test_heal_offers_the_nurse():
+    d = SOLO.SoloDirector({"visited": ["Pewter City", "Pewter Poké Center"]})
+    o = J.parse("walked\nf1 Pewter Poké Center (5,6) facing up | Charmeleon L20 10/60 | ¥3000 | 1 badges")
+    nurse = [x for x in d.extra_options(o, SOLO.Facts(badges=1, levels=[20], hp_ratio=0.2), [], [], [], "heal")
+             if x.label == "talk to the nurse across the counter"]
+    assert nurse and nurse[0].args["path"] == "to 3,3" and nurse[0].then[-1] == ("talk", {})
+    o.pos = (3, 3)
+    nurse = [x for x in d.extra_options(o, SOLO.Facts(badges=1, levels=[20], hp_ratio=0.2), [], [], [], "heal")
+             if x.label.startswith("talk to the nurse")]
+    assert nurse[0].args["path"] == "up 1" and nurse[0].then == [("talk", {})]

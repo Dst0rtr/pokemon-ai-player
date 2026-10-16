@@ -130,7 +130,7 @@ class WorldNav:
                         for s, dm, ya, xa in m["conns"]:
                             if s == side and ((x, y), s) not in seen_warp:
                                 seen_warp.add(((x, y), s))
-                                arr = self._edge_arrival(s, dm, ya, xa, x, y)
+                                arr = self._edge_arrival(s, dm, ya, xa, x, y, passable)
                                 if arr:
                                     trans.append((d + 1, Hop(mid, "edge", x, y, dm, side=s, steps=d + 1), arr))
                         continue
@@ -160,7 +160,8 @@ class WorldNav:
         # walkable neighbour is covered above (warps are checked before walkability)
         return dist, trans
 
-    def _edge_arrival(self, side: str, dm: int, ya: int, xa: int, x: int, y: int) -> Optional[tuple[int, int, int]]:
+    def _edge_arrival(self, side: str, dm: int, ya: int, xa: int, x: int, y: int,
+                      passable: frozenset | set = frozenset({".", ","})) -> Optional[tuple[int, int, int]]:
         sb = lambda v: v - 256 if v > 127 else v               # noqa: E731 (signed byte)
         if side in ("north", "south"):
             ax, ay = x + sb(xa), ya
@@ -170,7 +171,8 @@ class WorldNav:
             cells = self.map(dm)["cells"]
         except (IndexError, ValueError):
             return None
-        if 0 <= ay < len(cells) and 0 <= ax < len(cells[0]):
+        # a crossing only where the cell across is walkable (Route 3 (63,0) -> Route 4 is solid; iteration 2 looped there)
+        if 0 <= ay < len(cells) and 0 <= ax < len(cells[0]) and cells[ay][ax] in passable | set(LEDGE_DIR):
             return dm, ax, ay
         return None
 

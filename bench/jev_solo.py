@@ -34,6 +34,7 @@ POKE_CENTERS = {"Viridian City": "Viridian Poké Center", "Pewter City": "Pewter
                 "Celadon City": "Celadon Poké Center", "Fuchsia City": "Fuchsia Poké Center",
                 "Saffron City": "Saffron Poké Center", "Cinnabar Island": "Cinnabar Poké Center",
                 "Route 10": "Rock Tunnel Poké Center", "Indigo Plateau Lobby": "Indigo Plateau Lobby"}
+NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
 
 
 @dataclass
@@ -87,8 +88,10 @@ GRAPH: list[Node] = [
          lambda f: f.reached("Viridian Forest")),
     Node("pewter", "Find the way through Viridian Forest to Pewter City.", ("Route 2", "Pewter City"), lambda f: f.reached("Pewter City")),
     Node("brock", "Beat Brock in the Pewter Gym.", ("Pewter Gym",), _badge(1)),
-    Node("mtmoon", "Go east along Route 3 to Mt. Moon.", ("Route 3", "Route 4", "Mt. Moon 1F"), lambda f: f.reached("Mt. Moon 1F")),
-    Node("cerulean", "Get through Mt. Moon (ladders down, then up to the exit) and on to Cerulean City.",
+    Node("mtmoon", "Go east along Route 3 to Mt. Moon (the 'follow the map route' option knows the way).",
+         ("Route 3", "Route 4", "Mt. Moon 1F"), lambda f: f.reached("Mt. Moon 1F")),
+    Node("cerulean", "Get through Mt. Moon to Cerulean City: on every floor take the 'follow the map route' option (it knows "
+                     "which ladder leads on); beat trainers who block the way.",
          ("Mt. Moon B1F", "Mt. Moon B2F", "Route 4", "Cerulean City"), lambda f: f.reached("Cerulean City")),
     Node("misty", "Beat Misty in the Cerulean Gym.", ("Cerulean Gym",), _badge(2)),
     Node("ticket", "Go north over Nugget Bridge (Route 24) and east on Route 25 to Bill's house; help Bill to get the S.S. Ticket.",
@@ -260,6 +263,15 @@ class SoloDirector:
                 opts.append(Option(f"teach {hm} ({move}) to {party[0]['species']}", "manage",
                                    {"action": "use", "target": hm, "target2": party[0]["species"]},
                                    f"{move} is needed to pass obstacles"))
+        if why == "heal" and o.map.endswith("Poké Center") and o.pos:
+            # code knows where the nurse is: every Gen 1 Poké Center has her at (3,1) behind the counter, talked to
+            # from (3,3) facing up; the generic talk-to options cannot reach her across the counter
+            at = tuple(o.pos) == NURSE_SPOT
+            face = ("walk", {"path": "up 1", "on_battle": "stop"})
+            first = face[1] if at else {"path": f"to {NURSE_SPOT[0]},{NURSE_SPOT[1]}", "on_battle": "stop"}
+            opts.append(Option("talk to the nurse across the counter", "walk", first,
+                               "the Poké Center nurse heals the whole team: this is what the objective asks for",
+                               then=([] if at else [face]) + [("talk", {})]))
         hint = (o.hint or "").lower()
         for move, word in (("Cut", "tree"), ("Surf", "water"), ("Strength", "boulder")):
             if move in f.moves and word in hint:
