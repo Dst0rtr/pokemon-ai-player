@@ -36,6 +36,7 @@ from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, Claud
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import STUCK_Q, SoloDirector  # noqa: E402
 from bench.jev_nav import MOVES, WorldNav, map_id  # noqa: E402
+from bench.jev_atlas import LearnedAtlas  # noqa: E402
 from games import gen1_data as D  # noqa: E402
 from bench import jev as J  # noqa: E402
 
@@ -93,6 +94,8 @@ class Agent:
         self.stop = ""
         self.route_hint = ""
         self.why = ""                                  # the director's reason for the objective (heal, train, node id)
+        self.edge_hop: Optional[tuple] = None           # (side, x, y) of the chosen edge-crossing option (learned atlas)
+        self.edge_opts: dict = {}
         self.planner_cost = 0.0
         self.planner_calls = 0
         self.planner_tokens = {"input": 0, "cached_input": 0, "cache_write": 0, "output": 0}
@@ -100,6 +103,9 @@ class Agent:
 
     # ------------------------------------------------------------- plumbing
     def save(self) -> None:
+        if isinstance(self.nav, LearnedAtlas):
+            self.nav.save()
+            self.s["atlas"] = self.nav.stats()
         self.path.write_text(json.dumps(self.s, ensure_ascii=False))
 
     async def tool(self, name: str, **kw) -> str:
@@ -260,6 +266,14 @@ class Agent:
             await self.refresh_team()
             self.s["refresh_items"] = False
         ex, cn = await self.map_info(o) if o.mode == "overworld" else ([], [])
+        if isinstance(self.nav, LearnedAtlas) and o.mode == "overworld" and o.map and map_id(o.map) is not None \
+                and (not self.nav.known(map_id(o.map)) or o.map != self.s.get("atlas_map")):
+            # learned atlas: record what the player can see on entering a map (full map view + wWarpEntries in WRAM)
+            view = await self.tool("state", section="map")
+            warps = await self.tool("memory", address="D3AE", length=129)
+            self.nav.observe(map_id(o.map), view, warps, cn)
+        if o.mode == "overworld" and o.map:
+            self.s["atlas_map"] = o.map
 
         kind = o.mode
         battle = kind in ("battle", "faint_switch")
@@ -294,6 +308,8 @@ class Agent:
         route_key = ""
         if self.director and kind == "overworld":
             opts = self.director.extra_options(o, facts, self.party, ex, cn, why) + opts
+            if self.nav and not o.npcs and any(self.s["step"] - v <= 3 for v in self.s["nav_noroute"].values()):
+                o.npcs = parse(await self.tool("state", section="map")).npcs   # who stands in the way (no view in a refusal)
             nav_opts, route_key = self.nav_options(o, targets, facts, why)
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
                 quiet = bool(route_key) and self.s.get("recovery", 0) == 0   # blind 4-tile walks only dilute the choice
@@ -364,6 +380,7 @@ class Agent:
                 else:
                     dec.record["fallback_capped"] = trigger
         opt = dec.option
+        self.edge_hop = self.edge_opts.get(opt.label)
         screen["tried"] = (screen["tried"] + [opt.label])[-20:]
         reply = await self.tool(opt.tool, **opt.args)
         if opt.tool == "walk" and o.pos and FROZEN_RE.search(reply.split("\n", 1)[0]) and self.free_neighbour(o):
@@ -429,6 +446,7 @@ class Agent:
             self.s["nav_taken"], self.s["nav_at"] = {}, self.s.get("last_progress_step", 0)
         opts, route_key = [], ""
         self.route_hint = ""
+        self.edge_opts = {}
         # healing: the targets list the nearest Poké Center first; otherwise the route ends at the last target
         order = targets if why == "heal" else list(reversed(targets))
         goal = next((map_id(t) for t in order if map_id(t) is not None), None)
@@ -461,6 +479,21 @@ class Agent:
                         opts += clear
                         desc += f"; the way is blocked at {', '.join(f'({bx},{by})' for bx, by in blockers)}"
                 opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc, then=then))
+                if h.kind == "edge":
+                    self.edge_opts[opts[0].label] = (h.side, h.x, h.y)
+        if isinstance(self.nav, LearnedAtlas) and not route_key:
+            # the objective's map is not in the atlas (or not reachable through it yet): explore frontier-first
+            for h in self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut)[:2]:
+                walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
+                if not walk:
+                    continue
+                what = (f"cross the {h.side} edge → {h.dest_name} (never crossed)" if h.kind == "edge"
+                        else f"walk to the untaken warp at ({h.x},{h.y}) → {h.dest_name}")
+                label = f"explore the frontier: {what}"
+                opts.insert(0, Option(label, "walk", walk[0], "the atlas does not know the way to the objective yet: "
+                                      "unexplored warps and edges (never-visited maps first) find it", then=walk[1]))
+                if h.kind == "edge":
+                    self.edge_opts[label] = (h.side, h.x, h.y)
         visited = set(self.s["visited"])
         _, trans = self.nav.reach(cur, tuple(o.pos), surf=surf, cut=cut)
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}   # warps this section of the map can reach
@@ -486,6 +519,12 @@ class Agent:
         if m and after.map and after.map != o.map and cur is not None:
             key = f"{cur}:{m[1]},{m[2]}"
             self.s["nav_taken"][key] = self.s["nav_taken"].get(key, 0) + 1
+            if isinstance(self.nav, LearnedAtlas) and after.pos and map_id(after.map) is not None and "edge" not in opt.label:
+                self.nav.record_warp(cur, int(m[1]), int(m[2]), map_id(after.map), *after.pos)
+        if isinstance(self.nav, LearnedAtlas) and self.edge_hop and after.map and after.map != o.map and after.pos \
+                and cur is not None and map_id(after.map) is not None:
+            side, ex_, ey_ = self.edge_hop
+            self.nav.record_edge(cur, side, ex_, ey_, map_id(after.map), *after.pos)
         elif after.mode == "overworld" and after.map == o.map and ("no walkable route" in after.head or
                                                                     after.pos == o.pos and "already at" not in after.head):
             key = f"{cur}:{m[1]},{m[2]}" if m else (route_key if opt.label.startswith("follow the map route") else "")
@@ -628,7 +667,10 @@ class Agent:
 
 
 def load_nav(a: argparse.Namespace, server_cmd: list[str]) -> Optional[WorldNav]:
-    """The static world graph from the ROM the server plays (its --rom argument, relative to the run directory)."""
+    """--map-source rom: the static world graph from the ROM the server plays (its --rom argument); learned: the
+    atlas Jev builds while playing (<run>/data/jev_atlas.json, seeded from --atlas)."""
+    if a.map_source == "learned":
+        return LearnedAtlas(Path(a.run_dir) / "data" / "jev_atlas.json", seed=Path(a.atlas) if a.atlas else None)
     rom = a.rom or (server_cmd[server_cmd.index("--rom") + 1] if "--rom" in server_cmd[:-1] else "")
     path = Path(rom) if Path(rom).is_absolute() else Path(a.run_dir) / rom
     try:
@@ -710,6 +752,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stuck-threshold", type=float, default=0.7, help="hybrid: replan when Jev's 'stuck' noul is at least this")
     p.add_argument("--min-replan-gap", type=int, default=5, help="hybrid: steps between confidence/stuck-triggered replans")
     p.add_argument("--rom", default="", help="ROM for the static map graph (default: the server's --rom)")
+    p.add_argument("--map-source", choices=["rom", "learned"], default="rom",
+                   help="rom: world graph from the ROM map tables; learned: Jev builds its own atlas while playing")
+    p.add_argument("--atlas", default="", help="learned: start from this atlas (an earlier run's data/jev_atlas.json)")
     p.add_argument("--max-steps", type=int, default=0)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--mock", action="store_true", help="offline: MockJev (and MockPlanner for hybrid), no network")

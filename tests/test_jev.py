@@ -776,3 +776,54 @@ def test_heal_offers_the_nurse():
     nurse = [x for x in d.extra_options(o, SOLO.Facts(badges=1, levels=[20], hp_ratio=0.2), [], [], [], "heal")
              if x.label.startswith("talk to the nurse")]
     assert nurse[0].args["path"] == "up 1" and nurse[0].then == [("talk", {})]
+
+
+# ---------------------------------------------------------------- --map-source learned (bench/jev_atlas.py)
+def _view(name, rows, exits=""):
+    body = "\n".join(f"{y:2d} {r}" for y, r in enumerate(rows))
+    return f"{name} {len(rows[0])}x{len(rows)}, you at (1,1) facing up.\n   0123456\n{body}\nexits: {exits}"
+
+
+def _warps_hex(warps):
+    data = [len(warps)] + [b for (x, y, dw, dm) in warps for b in (y, x, dw, dm)]
+    return "\n".join(f"{0xD3AE + i:04X}: " + " ".join(f"{b:02X}" for b in data[i:i + 16]) for i in range(0, len(data), 16))
+
+
+def test_learned_atlas_builds_routes_from_what_it_saw(tmp_path):
+    from bench.jev_atlas import LearnedAtlas, parse_view, parse_warps
+    from bench.jev_nav import map_id
+    a, b, c = map_id("Mt. Moon 1F"), map_id("Mt. Moon B1F"), map_id("Mt. Moon B2F")
+    assert parse_warps(_warps_hex([(5, 1, 0, b), (1, 3, 1, 0xFF)])) == [(5, 1, 0, b), (1, 3, 1, 0xFF)]
+    assert parse_view(_view("x", ["#######", "#P..D.#", "#######"]))[1] == list("#...D.#")
+    atlas = LearnedAtlas(tmp_path / "atlas.json")
+    # a blind start: 1F seen, its ladder (5,1) goes to B1F per WRAM, nothing known about B1F yet
+    atlas.observe(a, _view("Mt. Moon 1F", ["#######", "#P...D#", "#######"]), _warps_hex([(5, 1, 0, b)]), [])
+    r = atlas.route(a, (1, 1), b)
+    assert r and r[0].kind == "warp" and (r[0].x, r[0].y) == (5, 1)          # WRAM names the destination map
+    assert atlas.route(a, (1, 1), c) is None                                 # B2F: not reachable through the atlas yet
+    assert [(h.x, h.y) for h in atlas.frontier(a, (1, 1), {"Mt. Moon 1F"})] == [(5, 1)]
+    # take the ladder: arrive at B1F (2,1); B1F has a ladder back at (2,1) and one to B2F at (5,1)
+    atlas.observe(b, _view("Mt. Moon B1F", ["#######", "#.D..D#", "#######"]), _warps_hex([(2, 1, 0, a), (5, 1, 0, c)]), [])
+    atlas.record_warp(a, 5, 1, b, 2, 1)
+    assert atlas.map(b)["arrivals"]["2,1"] == {"map": a, "x": 5, "y": 1, "seen": False}   # assumed way back
+    r = atlas.route(a, (1, 1), c)
+    assert [(h.map, h.x, h.y) for h in r] == [(a, 5, 1), (b, 5, 1)]         # B2F through the known B1F ladder
+    assert atlas.frontier(a, (1, 1), {"Mt. Moon 1F", "Mt. Moon B1F"}) == []  # the 1F ladder was taken
+    atlas.save()
+    again = LearnedAtlas(tmp_path / "other.json", seed=tmp_path / "atlas.json")   # carried into a later run
+    assert again.route(a, (1, 1), c) is not None and again.stats()["warps_taken"] == 1
+
+
+def test_learned_atlas_edges(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r3, r4 = map_id("Route 3"), map_id("Route 4")
+    atlas = LearnedAtlas(tmp_path / "atlas.json")
+    atlas.observe(r3, _view("Route 3", ["#...#", "#...#"]), _warps_hex([]), [("north", "Route 4")])
+    hops = atlas.frontier(r3, (2, 1), {"Route 3"})
+    assert hops and hops[0].kind == "edge" and hops[0].side == "north" and hops[0].y == 0
+    atlas.record_edge(r3, "north", 2, 0, r4, 7, 9)
+    e = atlas.data["edges"]
+    assert e[f"{r3}:north"]["offset"] == 5 and e[f"{r4}:south"] == {"map": r3, "offset": -5, "fixed": 0, "seen": False}
+    _, trans = atlas.reach(r3, (2, 1))
+    assert any(arr == (r4, 6, 9) for _, h, arr in trans if (h.x, h.y) == (1, 0))   # the offset applies along the edge

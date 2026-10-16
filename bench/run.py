@@ -106,7 +106,8 @@ class Run:
         self.args = a
         agent_args = [f"--replan-every={a.replan_every}", f"--confidence-threshold={a.confidence_threshold}",
                       f"--fallback-threshold={a.fallback_threshold}", f"--stuck-fail-steps={a.stuck_fail_steps}",
-                      f"--fallback-budget-usd={a.fallback_budget_usd}", f"--max-fallbacks={a.max_fallbacks}"]
+                      f"--fallback-budget-usd={a.fallback_budget_usd}", f"--max-fallbacks={a.max_fallbacks}",
+                      f"--map-source={a.map_source}"] + ([f"--atlas={Path(a.atlas).resolve()}"] if a.atlas else [])
         self.segment = load_segment(a.segment) if a.segment else None
         self.provider = make_provider(a.provider, a.model, variant=a.variant, jev_model=a.jev_model, mock=a.mock,
                                       agent_args=agent_args, fallback_model=a.fallback_model)
@@ -117,7 +118,8 @@ class Run:
         else:
             seg = f"_{a.segment}" if a.segment else ""
             it = f"_it{a.iteration}" if a.iteration is not None else ""
-            self.run_id = f"{self.provider.label}{seg}{it}_{_slug(self.model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            learned = "-learned" if a.provider == "jev" and a.map_source == "learned" else ""
+            self.run_id = f"{self.provider.label}{learned}{seg}{it}_{_slug(self.model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             self.dir = ROOT / "bench" / "runs" / self.run_id
         self.state_path = self.dir / "harness.json"
         self.state = _read_json(self.state_path) or {
@@ -127,6 +129,8 @@ class Run:
             "chunks": [], "active_seconds": 0.0, "paused_seconds": 0.0, "exit_reason": None, "cli_session": None,
         }
         self.state.setdefault("mode", a.mode)
+        if self.provider.name == "jev" and a.variant != "battles":
+            self.state.setdefault("map_source", {"source": a.map_source, "atlas_seed": a.atlas or None})
         if self.provider.name == "jev" and a.variant == "assist":
             self.state.setdefault("fallback", {"model": a.fallback_model, "budget_usd": a.fallback_budget_usd,
                                                "max_fallbacks": a.max_fallbacks, "threshold": a.fallback_threshold})
@@ -494,6 +498,10 @@ def main(argv=None) -> None:
     p.add_argument("--fallback-budget-usd", type=float, default=25.0,
                    help="jev-assist: stop calling the fallback model after this much spend (0 = no cap); Jev plays on alone")
     p.add_argument("--max-fallbacks", type=int, default=0, help="jev-assist: at most this many fallbacks (0 = no cap)")
+    p.add_argument("--map-source", choices=["rom", "learned"], default="rom",
+                   help="jev: where map knowledge comes from: rom (world/warp graph from the ROM map tables; the benchmark "
+                        "default) or learned (no ROM tables: Jev builds an atlas while playing, data/jev_atlas.json)")
+    p.add_argument("--atlas", default="", help="jev --map-source learned: start from an earlier run's data/jev_atlas.json")
     p.add_argument("--variant", default="solo", choices=["solo", "assist", "hybrid", "scripted", "battles"],
                    help="jev: solo = Jev + code only, no LLM, stuck = fail (final exam); assist = solo + Haiku fallback per "
                         "uncertain/stuck decision, logged to fallbacks.jsonl; hybrid = Haiku planner; scripted = short route; "

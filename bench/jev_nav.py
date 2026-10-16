@@ -134,7 +134,7 @@ class WorldNav:
                                 if arr:
                                     trans.append((d + 1, Hop(mid, "edge", x, y, dm, side=s, steps=d + 1), arr))
                         continue
-                    if frozenset((tiles[y][x], tiles[ny][nx])) in pairs or (nx, ny) in avoid:
+                    if pairs and frozenset((tiles[y][x], tiles[ny][nx])) in pairs or (nx, ny) in avoid:
                         continue
                     if (nx, ny) in warp_at:
                         if (nx, ny) not in seen_warp:
@@ -216,7 +216,7 @@ class WorldNav:
                 return hops[::-1]
             try:
                 _, trans = self.reach(node[0], (node[1], node[2]), surf=surf, cut=cut)
-            except (IndexError, ValueError):
+            except (IndexError, ValueError, KeyError):         # a map with no data (learned atlas): a dead end
                 continue
             for steps, hop, arr in trans:
                 key = f"{hop.map}:{hop.x},{hop.y}"
