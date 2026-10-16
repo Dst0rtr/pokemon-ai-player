@@ -35,6 +35,13 @@ Every run picks one play mode with `--mode` (`--provider`/`--variant` still work
 | `jev-battles` | the LLM agent CLI plays (Claude Code + `--model`), Jev decides each `battle('auto')` turn | the whole run | testing Jev as a battle module inside an LLM run |
 | `llm` + `--provider claude\|codex` | an agent CLI alone with the MCP tools and the shared prompt | the whole run | the main leaderboard: model vs. model, no code help |
 
+Jev runs also pick where map knowledge comes from, `--map-source`:
+
+| `--map-source` | What the Jev player knows about maps | Use it when |
+|---|---|---|
+| `rom` (default) | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | benchmark runs; the self-improvement loop |
+| `learned` | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run | measuring how much the map data helps; letting Jev get better run after run |
+
 ### One command per mode
 
 Add `--smoke` to any of these first: short chunks and small budgets, then a pass/fail checklist (a few minutes,
@@ -46,6 +53,8 @@ comes first.
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo
 # Jev + an LLM fallback on uncertain or stuck decisions (the self-improvement run mode)
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-assist --fallback-model haiku --fallback-budget-usd 25 --segment mt-moon --iteration 3
+# the same with no ROM map tables: Jev builds its own atlas (seed it with an earlier run's atlas to improve over runs)
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --map-source learned --atlas bench/runs/<earlier_run>/data/jev_atlas.json
 # Jev picks actions, an LLM plans objectives
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-hybrid --model haiku
 # Jev picks actions toward a fixed route list (ablation)
@@ -283,7 +292,9 @@ Jev / Haiku / Opus / total cost); `run.py --iteration N` records the cost of the
 `bench/iterations/it<N-1>/analysis.json`. Multi-hour runs and Opus analysis batches need Bijan's go.
 
 Where Jev alone cannot decide, and what code does instead: Jev never produces arguments, so every
-destination, move and menu path is enumerated by code; arithmetic (HP fractions, level targets, damage)
+destination, move and menu path is enumerated by code; which ladder or door leads on is a map-knowledge question
+(`--map-source rom` answers it from the ROM, `learned` from what Jev has explored), offered as a 'follow the map
+route' option that Jev still has to pick; arithmetic (HP fractions, level targets, damage)
 stays in code (Jev is not a calculator); story progress is read from game data, not judged, except the
 few `jev_check` nodes; the START/B reset after Oak's "Don't go away yet!" push-back (the game ignores
 directions until a menu opens and closes; seen with mock runs, it can affect any agent) is a code fix.

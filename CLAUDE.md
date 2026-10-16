@@ -30,8 +30,9 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `bench/jev.py` | Jev (TypeSafe System One) HTTP client + mock, reply parsers, candidate actions, policy, outcome labels, calibration summary, Haiku planner, battle advisor |
 | `bench/jev_agent.py` | the Jev player: MCP client of `server.py`, launched per chunk by `run.py`; variants solo/assist/hybrid/scripted; assist logs `fallbacks.jsonl` |
 | `bench/jev_solo.py` | jev-solo (no LLM): whole-game objective graph, facts, heal/train/HM rules, stuck recovery |
+| `bench/jev_nav.py`, `bench/jev_atlas.py` | Jev map knowledge: `--map-source rom` = warp/edge graph decoded from the ROM (Dijkstra over arrival points, per-dungeon warp memory); `learned` = atlas built from map views, wWarpEntries and real arrivals (`data/jev_atlas.json`) |
 | `bench/improve.py`, `bench/segments.json` | Jev self-improvement: cluster jev-assist fallbacks, Opus proposal (dry run unless `--call`), apply on an iteration branch, compare; fixed segment start states |
-| `tests/` | pytest (99): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report, Jev track (mocked, no network) |
+| `tests/` | pytest (108): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report, Jev track (mocked, no network) |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 
@@ -142,7 +143,8 @@ after a walk), `hint:` (from `profile.hint()`), then an image only if the screen
   spotted the player is walking over) and reports "dialogue appeared" instead.
 * Party menus remember their cursor: helpers read the `▶` row (on TM lists it sits on the entry's
   second row) instead of assuming the top. In-battle item use shows "Use item on which POKéMON?".
-* Jev track: Jev only picks among options code enumerates; `--variant solo` must never call an LLM (a test patches
+* Jev track: ROM world data (`gen1_data.map_warps/map_connections/map_cells`, tileset table 0xC7BE) matches WRAM (tested).
+  Mt. Moon B2F's exit needs one of the two fossils taken (they block the only gap). Jev only picks among options code enumerates; `--variant solo` must never call an LLM (a test patches
   `subprocess` to enforce it). After Oak's "Don't go away yet!" push-back the game can ignore directions until a menu
   opens and closes (START, B); the Jev agent unsticks with that and retries the walk.
 * Metrics: a session resumes from `metrics/<id>_checkpoint.json` when `--session-id` is reused; frames

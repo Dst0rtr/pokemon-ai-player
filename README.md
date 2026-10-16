@@ -81,6 +81,13 @@ Pick a play mode with `--mode`:
 | `jev-battles` | the LLM agent CLI plays (Claude Code + `--model`), Jev decides each `battle('auto')` turn | the whole run | testing Jev as a battle module inside an LLM run |
 | `llm` + `--provider claude\|codex` | an agent CLI alone with the MCP tools and the shared prompt | the whole run | the main leaderboard: model vs. model, no code help |
 
+Jev runs also pick where map knowledge comes from, `--map-source`:
+
+| `--map-source` | What the Jev player knows about maps | Use it when |
+|---|---|---|
+| `rom` (default) | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | benchmark runs; the self-improvement loop |
+| `learned` | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run | measuring how much the map data helps; letting Jev get better run after run |
+
 ```bash
 venv/bin/python bench/run.py --mode llm --provider claude --model haiku                    # any Claude model
 venv/bin/python bench/run.py --mode llm --provider codex --model gpt-5.6-sol               # any Codex model

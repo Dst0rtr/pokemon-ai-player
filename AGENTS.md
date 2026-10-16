@@ -20,7 +20,7 @@ dialogue/menus decoded from VRAM as text).
 | `games/pokemon_gen1.py` | Red/Blue/Yellow: status line, party/battle/items/map sections, screen text, milestones |
 | `games/gen1_data.py` | verified WRAM addresses, charmap, species/move/item/map tables |
 | `games/pyboy_wrapped.py` | score/lives for games PyBoy has wrappers for (Tetris, Mario Land, Kirby, Pinball) |
-| `tests/` | pytest (99): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report, Jev track (mocked) |
+| `tests/` | pytest (108): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report, Jev track (mocked) |
 | `bench/` | benchmark harness (`run.py`, `report.py`, `stream.py`, `providers.py`) and the Jev track (`jev.py`, `jev_agent.py`, `jev_solo.py`, `improve.py`, `segments.json`) |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
@@ -55,6 +55,13 @@ Full details: `BENCHMARKING.md` ("Running a benchmark"). Every run takes a play 
 | `jev-scripted` | Jev picks actions toward a short fixed route list, no rules or recovery | none | an ablation: how much the scaffolding matters (for a fully scripted, AI-free baseline use `examples/reference_run.py`) |
 | `jev-battles` | the LLM agent CLI plays (Claude Code + `--model`), Jev decides each `battle('auto')` turn | the whole run | testing Jev as a battle module inside an LLM run |
 | `llm` + `--provider claude\|codex` | an agent CLI alone with the MCP tools and the shared prompt | the whole run | the main leaderboard: model vs. model, no code help |
+
+Jev runs also pick where map knowledge comes from, `--map-source`:
+
+| `--map-source` | What the Jev player knows about maps | Use it when |
+|---|---|---|
+| `rom` (default) | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | benchmark runs; the self-improvement loop |
+| `learned` | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run | measuring how much the map data helps; letting Jev get better run after run |
 
 Checklist for a coding agent:
 
