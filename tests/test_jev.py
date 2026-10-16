@@ -710,6 +710,8 @@ def test_nav_memory_penalizes_taken_warps_and_skips_blocked_hops(nav):
 @requires_rom
 def test_agent_offers_route_and_concrete_warps_instead_of_nearest_ladder(nav, tmp_path):
     from bench.jev_agent import NAME_WALK_RE
+    from bench.jev_nav import map_id
+    SOLO_MAP_ID = map_id("Mt. Moon 1F")
     (tmp_path / "data").mkdir()
     agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=nav)
     o = J.parse("walked\nf1 Mt. Moon 1F (14,35) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
@@ -717,13 +719,25 @@ def test_agent_offers_route_and_concrete_warps_instead_of_nearest_ladder(nav, tm
     opts, key = agent.nav_options(o, ["Mt. Moon B1F", "Mt. Moon B2F", "Route 4", "Cerulean City"], facts)
     assert opts[0].label.startswith("follow the map route to Cerulean City") and opts[0].args["path"] == "to 5,5"
     assert key.endswith(":5,5") and "B2F" in opts[0].desc
-    assert any(x.args["path"] == "to 17,11" for x in opts) and not any(NAME_WALK_RE.match(x.args["path"]) for x in opts)
+    assert not any(NAME_WALK_RE.match(x.args["path"]) for x in opts)
+    pocket = J.parse("walked\nf1 Mt. Moon B2F (25,9) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
+    assert {x.args["path"] for x in agent.nav_options(pocket, [], facts)[0]} == {"to 25,9"}   # other B2F sections: unlisted
     assert NAME_WALK_RE.match("to Mt. Moon B1F") and not NAME_WALK_RE.match("to east edge") and not NAME_WALK_RE.match("to 5,5")
     after = J.parse("walked\nf1 Mt. Moon B1F (5,5) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
     agent.nav_feedback(o, opts[0], after, key)
     assert agent.s["nav_taken"] == {key: 1}
-    stuck = J.parse("walked\nf1 Mt. Moon 1F (14,35) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
-    agent.nav_feedback(o, J.Option(opts[0].label, "walk", {"path": "up 1"}), stuck, key)
+    # the server finds no way although the map data has one: offer to clear whatever stands on the route
+    stuck = J.parse("no walkable route from (14,35) to (5,5) on this map\nf1 Mt. Moon 1F (14,35) facing up | Charmeleon L20 50/60 | ¥3000 | 1 badges")
+    agent.nav_feedback(o, opts[0], stuck, key)
+    assert agent.s["nav_noroute"][key] == agent.s["step"] and key not in agent.s["nav_blocked"]
+    path = nav.path_cells(SOLO_MAP_ID, (14, 35), (5, 5))
+    assert path[0] == (14, 35) and path[-1] == (5, 5) and len(path) > 10
+    o.npcs = [path[len(path) // 2]]
+    opts2, _ = agent.nav_options(o, ["Cerulean City"], facts)
+    clear = [x for x in opts2 if x.label.startswith("clear the route")]
+    assert clear and "blocked at" in opts2[0].desc
+    agent.s["step"] += 5                                                 # failed again later: avoid that hop
+    agent.nav_feedback(o, opts[0], stuck, key)
     assert agent.s["nav_blocked"][key] > agent.s["step"]
 
 

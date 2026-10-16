@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import hashlib
 import json
 import re
@@ -81,7 +82,7 @@ class Agent:
                      "maps": {}, "history": [], "last_save_step": 0, "plan_badges": 0, "battle_seen_step": -1,
                      "last_objective": "", "grids": {}, "said": {}, "pending_fallbacks": [], "fallbacks": 0,
                      "last_fallback_step": -10**9, "screens": {}, "screens_at": -1, "reloads": 0,
-                     "last_reload_step": -10**9, "nav_taken": {}, "nav_blocked": {}, "nav_at": -1,
+                     "last_reload_step": -10**9, "nav_taken": {}, "nav_blocked": {}, "nav_at": -1, "nav_noroute": {},
                      "fallback_cost": 0.0, "fallback_capped": False}.items():
             self.s.setdefault(k, v)
         self.director = SoloDirector(self.s) if a.variant in ("solo", "assist") else None
@@ -90,6 +91,7 @@ class Agent:
         self.team_step = -10**9
         self.reply = ""
         self.stop = ""
+        self.route_hint = ""
         self.planner_cost = 0.0
         self.planner_calls = 0
         self.planner_tokens = {"input": 0, "cached_input": 0, "cache_write": 0, "output": 0}
@@ -216,12 +218,16 @@ class Agent:
                                "your_moves": [f"{mv['name']} {mv['pp']}pp" for mv in m.get("moves", [])]},
                     "party": [f"{p['slot']}. {p['species']} L{p['level']} {p['hp']}/{p['max_hp']} HP" for p in self.party],
                     "screen": o.screen, "recent_actions": recent}
-        return {"objective": objective, "location": f"{o.map} ({o.pos[0]},{o.pos[1]}) facing {o.facing}" if o.pos else "(no map yet)",
-                "team": o.lead, "badges": o.badges, "money": o.money, "screen": o.screen, "hint": o.hint,
-                "last_result": o.head[:200], "recent_actions": recent}
+        st = {"objective": objective, "location": f"{o.map} ({o.pos[0]},{o.pos[1]}) facing {o.facing}" if o.pos else "(no map yet)",
+              "team": o.lead, "badges": o.badges, "money": o.money, "screen": o.screen, "hint": o.hint,
+              "last_result": o.head[:200], "recent_actions": recent}
+        if self.route_hint and o.mode == "overworld":
+            st["map_route"] = self.route_hint             # from the game's map data (bench/jev_nav.py)
+        return st
 
     async def step(self) -> None:
         o = parse(self.reply)
+        self.route_hint = ""
         self.s["milestones"] += [e for e in o.events if e not in self.s["milestones"]]
         if any(e.startswith("champion defeated") for e in o.events):
             self.stop = "champion"
@@ -398,6 +404,7 @@ class Agent:
         if self.s["nav_at"] != self.s.get("last_progress_step", 0):
             self.s["nav_taken"], self.s["nav_at"] = {}, self.s.get("last_progress_step", 0)
         opts, route_key = [], ""
+        self.route_hint = ""
         goal = next((map_id(t) for t in reversed(targets) if map_id(t) is not None), None)
         moves = set(facts.moves) if facts else set()
         surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
@@ -410,11 +417,30 @@ class Agent:
                 args = ({"path": f"to {h.side} edge", "on_battle": "stop"} if h.kind == "edge"
                         else {"path": f"to {h.x},{h.y}", "on_battle": "stop"})
                 via = " → ".join(x.dest_name for x in route)
-                opts.append(Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args,
-                                   f"next hop of the shortest route in the game's map data: {via} ({len(route)} hops)"))
                 route_key = f"{h.map}:{h.x},{h.y}" if h.kind == "warp" else f"{h.map}:{h.side}"
+                desc = f"next hop of the shortest route in the game's map data: {via} ({len(route)} hops)"
+                self.route_hint = f"to reach {D.map_name(goal)}: {h.label()} on this map, then {via}"
+                if self.s["step"] - self.s["nav_noroute"].get(route_key, -10**9) <= NAV_BLOCK_STEPS:
+                    # the server found no way there although the map data has one: a person or object (an item
+                    # ball, a guard, a boulder) stands in the only gap. Offer to talk to it / pick it up first.
+                    path = set(self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=cut))
+                    blockers = [n for n in o.npcs if n in path]
+                    if blockers:
+                        grid = self.grid(o.map) or o.grid or {(x, y): c for y, row in enumerate(self.nav.map(cur)["cells"])
+                                                           for x, c in enumerate(row)}
+                        clear = J.talk_to_options(dataclasses.replace(o, npcs=blockers), grid)
+                        for x in clear:
+                            x.label = x.label.replace("talk to the person or object", "clear the route: talk to the person or object")
+                            x.desc = "it stands in the only way along the route (take the item, or talk/battle to make it move)"
+                        opts += clear
+                        desc += f"; the way is blocked at {', '.join(f'({bx},{by})' for bx, by in blockers)}"
+                opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc))
         visited = set(self.s["visited"])
+        _, trans = self.nav.reach(cur, tuple(o.pos), surf=surf, cut=cut)
+        near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}   # warps this section of the map can reach
         for i, (x, y, _, _) in enumerate(self.nav.map(cur)["warps"]):
+            if (x, y) not in near:
+                continue
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
             name = dests.pop() if len(dests) == 1 else "outside"
             new = "" if name in visited else " (not visited yet)"
@@ -429,9 +455,12 @@ class Agent:
         if m and after.map and after.map != o.map and cur is not None:
             key = f"{cur}:{m[1]},{m[2]}"
             self.s["nav_taken"][key] = self.s["nav_taken"].get(key, 0) + 1
-        elif route_key and opt.label.startswith("follow the map route") and after.mode == "overworld" \
-                and after.map == o.map and after.pos == o.pos:
-            self.s["nav_blocked"][route_key] = self.s["step"] + NAV_BLOCK_STEPS
+        elif after.mode == "overworld" and after.map == o.map and (after.pos == o.pos or "no walkable route" in after.head):
+            key = f"{cur}:{m[1]},{m[2]}" if m else (route_key if opt.label.startswith("follow the map route") else "")
+            if key:
+                if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) <= NAV_BLOCK_STEPS:
+                    self.s["nav_blocked"][key] = self.s["step"] + NAV_BLOCK_STEPS   # failed again: try another way
+                self.s["nav_noroute"][key] = self.s["step"]
 
     def screen_entry(self, o: Obs) -> dict:
         """Per-screen visit counter and options tried there, reset whenever the director sees progress."""

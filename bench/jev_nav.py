@@ -174,6 +174,21 @@ class WorldNav:
             return dm, ax, ay
         return None
 
+    def path_cells(self, mid: int, start: tuple[int, int], target: tuple[int, int], **kw) -> list[tuple[int, int]]:
+        """Cells of one shortest grid path from start to target (a warp or edge cell), by walking the BFS distances
+        back from the target. Used to find what stands in the way when the server finds no route."""
+        dist, _ = self.reach(mid, start, **kw)
+        cur = target if target in dist else min(((x + dx, y + dy) for x, y in [target] for dx, dy in MOVES.values()
+                                                 if (x + dx, y + dy) in dist), key=lambda c: dist[c], default=None)
+        out = [target]
+        while cur is not None and cur != start:
+            out.append(cur)
+            cur = min(((cur[0] + dx, cur[1] + dy) for dx, dy in MOVES.values() if dist.get((cur[0] + dx, cur[1] + dy), 1 << 30)
+                       < dist[cur]), key=lambda c: dist[c], default=None)
+        if cur == start:
+            out.append(start)
+        return out[::-1]
+
     # ---------------------------------------------------------------- route
     def route(self, mid: int, pos: tuple[int, int], goal: int, surf: bool = False, cut: bool = False,
               taken: Optional[dict] = None, blocked: frozenset = frozenset(), max_nodes: int = 4000) -> Optional[list[Hop]]:
