@@ -6,7 +6,6 @@ import json
 import os
 import shutil
 import sys
-from argparse import Namespace
 
 import httpx
 import pytest
@@ -147,6 +146,17 @@ def test_overworld_options_and_talk_to_objects_on_tables():
     assert talk.args["path"] == "to 2,1" and talk.then[0][1]["path"] == "right 1"
 
 
+def test_drop_repeats_and_talk_memory():
+    opts = [J.Option(x, "talk", {}) for x in ("talk to what you are facing", "walk to A")]
+    hist = ["talk to what you are facing -> dialogue ended: BLUE: Heh"] * 3 + ["walk to A -> moved"]
+    assert [o.label for o in J.drop_repeats(opts, hist)] == ["walk to A"]
+    assert J.drop_repeats(opts[:1], hist) == opts[:1]                                 # never empties the set
+    o = J.parse(PEWTER)
+    o.pos, o.npcs = (1, 3), [(3, 1), (4, 3)]
+    t = J.talk_to_options(o, o.grid, said={"3,1": "BLUE: Heh"})
+    assert t[0].label.endswith("(4,3)") and "not talked to yet" in t[0].desc and "BLUE: Heh" in t[1].desc
+
+
 # ---------------------------------------------------------------- policy, labels, summary
 def test_policy_shuffles_logs_and_forces_single_options(tmp_path):
     log = tmp_path / "d.jsonl"
@@ -230,7 +240,7 @@ def test_solo_objective_progression_and_rules():
 def test_solo_jev_done_votes_and_stuck_tracking():
     s = {"visited": [], "milestones": []}
     d = SOLO.SoloDirector(s)
-    f = SOLO.Facts(badges=5, items={"HM03", "HM04", "Tea"}, visited={"Saffron City", "Cinnabar Island"},
+    f = SOLO.Facts(badges=5, items={"HM03", "HM04", "Tea"}, visited={"Saffron City"},
                    milestones=["game started", "starter: X"], ever_items={"Oak's Parcel", "S.S. Ticket", "Silph Scope", "Poké Flute"})
     for m in ("Viridian City", "Viridian Forest", "Pewter City", "Mt. Moon 1F", "Cerulean City", "Vermilion City", "Lavender Town",
               "Celadon City", "Fuchsia City"):
@@ -277,9 +287,12 @@ class FakeServer:
         return f"ok\n{status}"
 
 
-def _agent_args(tmp_path, variant="solo"):
-    return Namespace(run_dir=str(tmp_path), session_id="t", variant=variant, jev_model="mock", planner_model="x",
-                     replan_every=40, confidence_threshold=0.3, stuck_threshold=0.7, min_replan_gap=5, max_steps=8, seed=0, mock=True)
+def _agent_args(tmp_path, variant="solo", **kw):
+    from bench.jev_agent import build_parser
+    a = build_parser().parse_args(["--run-dir", str(tmp_path), "--session-id", "t", "--variant", variant, "--max-steps", "8", "--mock"])
+    for k, val in kw.items():
+        setattr(a, k, val)
+    return a
 
 
 def test_solo_agent_never_calls_an_llm(tmp_path, monkeypatch, capsys):
@@ -299,12 +312,63 @@ def test_solo_agent_never_calls_an_llm(tmp_path, monkeypatch, capsys):
     assert asyncio.run(agent.run()) == "max_steps"
     recs = J.read_jsonl(tmp_path / "data" / "jev_decisions.jsonl")
     assert len(recs) == 8 and all(r["variant"] == "solo" for r in recs) and pol.calls >= 1
-    assert all("correct" in r for r in recs if not r["forced"]) and recs[0]["why"] == "intro"
+    assert all("correct" in r for r in recs if not r["forced"]) and recs[0]["why"] == "viridian"   # party exists: intro/starter done
     events = [json.loads(x) for x in capsys.readouterr().out.splitlines()]
     assert events[0]["type"] == "start" and any(e["type"] == "usage" for e in events)
     assert json.loads((tmp_path / "jev_agent.json").read_text())["step"] == 8
     agent2 = Agent(a, srv, pol)                                    # a new chunk continues the saved progress
     assert agent2.resumed and agent2.s["step"] == 8
+
+
+def test_assist_agent_records_fallback_events_with_outcomes(tmp_path, capsys):
+    (tmp_path / "data").mkdir()
+    a = _agent_args(tmp_path, "assist", fallback_threshold=0.99, fallback_gap=1, fallback_outcome_steps=2, max_steps=6)
+    pol = J.JevPolicy(J.MockJev(), tmp_path / "data" / "jev_decisions.jsonl", variant="assist")
+    agent = Agent(a, FakeServer(), pol, chooser=J.MockChooser())
+    assert asyncio.run(agent.run()) == "max_steps"
+    evs = J.read_jsonl(tmp_path / "fallbacks.jsonl")
+    assert evs and agent.s["fallbacks"] == len(evs) and all(e["trigger"] == "low" for e in evs)
+    e = evs[0]
+    assert e["fallback_choice"] != e["jev_choice"] and not e["agreed"] and e["options"] and e["summary"]["party"]
+    assert e["outcome_after"]["complete"] and "progress" in e["outcome_after"] and e["map"] == "Pallet Town"
+    recs = J.read_jsonl(tmp_path / "data" / "jev_decisions.jsonl")
+    sup = [r for r in recs if r.get("fallback")]
+    assert sup and all(r["superseded"] and r["executed"] != r["choice"] for r in sup)     # excluded from Jev's calibration
+    s = J.summarize_fallbacks(evs, 6)
+    assert s["fallbacks"] == len(evs) and s["fallbacks_per_1k_steps"] == round(1000 * len(evs) / 6, 2)
+
+
+def test_solo_exam_stops_as_stuck(tmp_path, capsys):
+    (tmp_path / "data").mkdir()
+    a = _agent_args(tmp_path, "solo", stuck_fail_steps=3, max_steps=50)
+    agent = Agent(a, FakeServer(), J.JevPolicy(J.MockJev()))
+    assert asyncio.run(agent.run()) == "stuck" and agent.s["step"] < 50
+
+
+def test_claude_chooser_picks_from_the_closed_set():
+    class Out:
+        stdout, stderr = json.dumps({"result": '{"choice": 2, "why": "go"}', "total_cost_usd": 0.003}), ""
+    opts = [J.Option("a", "press", {}), J.Option("b", "press", {})]
+    fb = J.ClaudeChooser(runner=lambda cmd, **kw: Out()).choose("stuck", "o", {}, opts, {"a": 0.6, "b": 0.4})
+    assert fb.label == "b" and fb.cost_usd == 0.003 and not fb.error
+
+    class Bad:
+        stdout, stderr = json.dumps({"result": '{"choice": 9}'}), ""
+    assert J.ClaudeChooser(runner=lambda cmd, **kw: Bad()).choose("x", "o", {}, opts, {}).error
+
+
+def test_segments_resolve_and_iteration_cost(tmp_path, monkeypatch):
+    from bench import run
+    segs = json.loads((ROOT / "bench" / "segments.json").read_text())
+    assert {"power-on", "after-brock", "cerulean", "viridian-gym"} <= set(segs)
+    assert run.load_segment("power-on")["goal"] == "badge: Boulder"
+    with pytest.raises(SystemExit):
+        run.load_segment("nope")
+    it = tmp_path / "bench" / "iterations" / "it2"
+    it.mkdir(parents=True)
+    (it / "analysis.json").write_text(json.dumps({"cost_usd": 1.25}))
+    monkeypatch.setattr(run, "ROOT", tmp_path)
+    assert run.analysis_cost(3) == 1.25 and run.analysis_cost(5) is None
 
 
 def test_hybrid_agent_replans_with_the_planner(tmp_path, capsys):
@@ -437,3 +501,78 @@ def test_battle_advisor_decides_trainer_turns(rom_path, tmp_path):
     assert "[Jev: use " in out and recs and all(r["variant"] == "battles" for r in recs)
     assert all(r["kind"] in ("battle", "faint_switch") and "correct" in r for r in recs if not r.get("forced"))
     emu.pyboy.stop(save=False)
+
+
+# ---------------------------------------------------------------- self-improvement loop
+def _event(i, trigger="low", node="parcel", where="Viridian Mart", progress=True):
+    return {"id": f"r:{i}", "run": "r", "step": i, "trigger": trigger, "trigger_detail": trigger, "node": node, "map": where,
+            "mode": "overworld", "objective": "get the parcel", "options": [{"label": "a", "p": 0.4}], "jev_choice": "a",
+            "jev_confidence": 0.2, "fallback_choice": "b", "agreed": False, "cost_usd": 0.01,
+            "outcome_after": {"complete": True, "progress": progress}}
+
+
+def test_improve_clusters_and_dry_run(tmp_path, monkeypatch, capsys):
+    from bench import improve
+    run = tmp_path / "run1"
+    run.mkdir()
+    evs = [_event(i) for i in range(5)] + [_event(9, "stuck", "brock", "Pewter Gym", False)]
+    (run / "fallbacks.jsonl").write_text("\n".join(json.dumps(e) for e in evs))
+    cl = improve.build_clusters(evs)
+    assert [c["count"] for c in cl] == [5, 1] and cl[0]["progress_after"] == 1.0 and cl[1]["progress_after"] == 0.0
+    assert cl[0]["top_swaps"][0] == ("jev: a -> fallback: b", 5)
+    monkeypatch.setattr(improve, "ROOT", tmp_path)
+    for f in improve.SCAFFOLDING:
+        (tmp_path / f).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / f).write_text(f"# {f}\n")
+    import argparse
+    ns = argparse.Namespace(runs=[str(run)], iteration=1, model="claude-opus-5-5", call=False, per_cluster=2, max_clusters=12)
+    out = improve.analyze(ns, runner=lambda *x, **k: (_ for _ in ()).throw(AssertionError("dry run must not call")))
+    prompt = (out / "prompt.md").read_text()
+    assert "fallback events of 1 run(s)" in prompt and "# bench/jev_solo.py" in prompt and '"count": 5' in prompt
+    assert json.loads((out / "analysis.json").read_text())["called"] is False
+
+    class Out:
+        stdout = json.dumps({"result": "## Summary\nAdd a Mart option.\n## Patch\n```diff\n--- a/bench/jev.py\n+++ b/bench/jev.py\n@@ -1 +1 @@\n-x\n+y\n```",
+                             "total_cost_usd": 3.5, "usage": {"input_tokens": 50000}})
+        stderr = ""
+    seen = {}
+
+    def runner(cmd, **kw):
+        seen["cmd"] = cmd
+        return Out()
+    ns.call = True
+    out = improve.analyze(ns, runner=runner)
+    assert "claude-opus-5-5" in seen["cmd"] and "--tools" in seen["cmd"]
+    assert (out / "proposal.patch").read_text().startswith("--- a/bench/jev.py") and "Add a Mart option" in (out / "summary.md").read_text()
+    assert json.loads((out / "analysis.json").read_text())["cost_usd"] == 3.5
+
+
+def test_improve_apply_refuses_main(tmp_path, monkeypatch):
+    from bench import improve
+    import argparse
+    import subprocess
+    monkeypatch.setattr(improve, "ROOT", tmp_path)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(tmp_path)], check=True)
+    g = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    subprocess.run(g + ["commit", "-q", "--allow-empty", "-m", "init"], check=True)
+    it = tmp_path / "bench" / "iterations" / "it1"
+    it.mkdir(parents=True)
+    (it / "proposal.patch").write_text("--- a/x\n+++ b/x\n")
+    with pytest.raises(SystemExit, match="main"):
+        improve.apply(argparse.Namespace(iteration=1, branch=None))
+
+
+def test_results_md_iteration_trend():
+    from tests.test_bench import _result
+    rows = []
+    for it, fb in ((1, 40), (2, 12)):
+        r = _result(f"j{it}", "jev-latest", "jev", ["badge: Boulder"], 1, 0.5)
+        r["harness"].update(track="jev", variant="assist", iteration=it, analysis_cost_usd=2.0 if it == 2 else None,
+                            segment={"name": "after-brock", "state_sha256": "abc", "goal": "badge: Boulder"},
+                            jev=dict(J.summarize([]), steps=1000, fallbacks=fb, fallbacks_per_1k_steps=float(fb),
+                                     jev_cost_usd=0.1, planner_cost_usd=0.4))
+        rows.append(r)
+    md = build_results_md(rows)
+    assert "### Self-improvement iterations" in md
+    tbl = md.split("### Self-improvement iterations", 1)[1]
+    assert tbl.index("| 1 | assist | 1000 | 40 |") < tbl.index("| 2 | assist | 1000 | 12 |") and "$2.00" in tbl and "✓ badge: Boulder" in tbl

@@ -165,10 +165,13 @@ def run_section(r: dict) -> str:
 
 # ---------------------------------------------------------------- Jev track
 JEV_SCAFFOLDING = {
-    "solo": "Jev + code only, no LLM anywhere. Code enumerates the legal actions every step, reads progress (badges, bag, "
+    "solo": "The final exam: Jev + code only, no LLM anywhere, stuck = fail. Code enumerates the legal actions every step, reads progress (badges, bag, "
             "moves, maps, milestones) and walks a whole-game objective graph; it also heals, trains to level targets, teaches "
             "HMs, clears obstacles and runs stuck recovery. Jev picks every action and answers yes/no checks "
             "(\"stuck?\", \"objective done?\" where code cannot see a story event).",
+    "assist": "jev-solo's scaffolding plus a safety net: when Jev's confidence is low or code detects stuck/looping, Claude "
+              "Haiku picks that one action and a fallback event is logged; fallbacks per 1k steps should trend to 0 across "
+              "self-improvement iterations (bench/improve.py).",
     "hybrid": "Claude Haiku sets the objective (every N steps, on low Jev confidence, when Jev says stuck, after a badge); "
               "code enumerates the actions; Jev picks every action.",
     "scripted": "A short code-side objective list (no rules, no recovery); code enumerates the actions; Jev picks every action.",
@@ -186,7 +189,8 @@ def _ms(x) -> str:
 
 
 def jev_leaderboard(results: list[dict]) -> str:
-    head = ["#", "Variant", "Model", "Badges", "Furthest", "Hall of Fame", "Active h", "Tool calls", "Jev calls",
+    head = ["#", "Variant", "Model", "Segment", "Badges", "Furthest", "Hall of Fame", "Active h", "Tool calls", "Jev calls",
+            "Fallbacks (/1k steps)",
             "Jev latency p50 / p95 ms", "Jev cost", "LLM cost", "Total cost", "Correct", "ECE", "Exit"]
     rows = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
     for i, r in enumerate(sorted(results, key=rank_key), 1):
@@ -197,14 +201,40 @@ def jev_leaderboard(results: list[dict]) -> str:
         total = h.get("cost_usd")
         llm = None if total is None or jc is None else max(total - jc, 0.0)
         acc = j.get("accuracy")
+        fb = "—" if j.get("fallbacks") is None else f"{j['fallbacks']} ({j.get('fallbacks_per_1k_steps')})"
+        seg = (h.get("segment") or {}).get("name", "full game") + (f" · it{h['iteration']}" if h.get("iteration") is not None else "")
         cells = [str(i), f"jev-{h.get('variant')}" + (" (mock)" if h.get("mock") else ""), f"`{h.get('display_model') or h.get('model')}`",
-                 str(d["badges"]), d["furthest"], _cell(d["milestone_times"].get(CHAMPION)),
-                 f"{(m.get('real_seconds') or 0) / 3600:.1f}", str(d["tool_calls"]), str(j.get("jev_calls", "—")),
+                 seg, str(d["badges"]), d["furthest"], _cell(d["milestone_times"].get(CHAMPION)),
+                 f"{(m.get('real_seconds') or 0) / 3600:.1f}", str(d["tool_calls"]), str(j.get("jev_calls", "—")), fb,
                  f"{_ms(lat.get('p50'))} / {_ms(lat.get('p95'))}", "—" if jc is None else f"${jc:,.2f}",
                  "—" if llm is None else f"${llm:,.2f}", _cost(h), "—" if acc is None else f"{acc:.0%}",
                  "—" if j.get("ece") is None else f"{j['ece']:.3f}", h.get("exit_reason") or "—"]
         rows.append("| " + " | ".join(cells) + " |")
     return "\n".join(rows)
+
+
+def iteration_table(results: list[dict]) -> str:
+    """Self-improvement trend: one row per iteration run, grouped by segment, oldest first."""
+    rows = [r for r in results if r["harness"].get("iteration") is not None]
+    if not rows:
+        return ""
+    head = ["Segment (state)", "Iter", "Variant", "Steps", "Fallbacks", "Per 1k steps", "Goal", "Badges", "Active h",
+            "Jev $", "Haiku $", "Opus $", "Total $", "Exit"]
+    out = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
+    key = lambda r: ((r["harness"].get("segment") or {}).get("name", ""), r["harness"]["iteration"], r["run_id"])  # noqa: E731
+    for r in sorted(rows, key=key):
+        h, d, m = r["harness"], r["derived"], r["metrics"]
+        j, seg = h.get("jev") or {}, h.get("segment") or {}
+        jc, llm, opus = j.get("jev_cost_usd") or 0.0, j.get("planner_cost_usd") or 0.0, h.get("analysis_cost_usd") or 0.0
+        goal = seg.get("goal")
+        reached = goal and any(str(x.get("name", "")).startswith(goal) for x in m.get("milestones") or [])
+        out.append("| " + " | ".join([
+            f"{seg.get('name', 'full game')}" + (f" (`{seg['state_sha256']}`)" if seg.get("state_sha256") else ""),
+            str(h["iteration"]), h.get("variant", ""), str(j.get("steps", "—")), str(j.get("fallbacks", "—")),
+            str(j.get("fallbacks_per_1k_steps", "—")), ("✓ " if reached else "✗ ") + (goal or "—"), str(d["badges"]),
+            f"{(m.get('real_seconds') or 0) / 3600:.2f}", f"${jc:,.2f}", f"${llm:,.2f}", f"${opus:,.2f}",
+            f"${jc + llm + opus:,.2f}", h.get("exit_reason") or "—"]) + " |")
+    return "\n".join(out)
 
 
 def calibration_table(j: dict) -> str:
@@ -226,6 +256,13 @@ def jev_section(r: dict) -> str:
            f"- Decisions {j.get('decisions')} (asked Jev {j.get('jev_calls')}, forced by code {j.get('forced')}, labelled {j.get('scored')}) · "
            f"models {', '.join(j.get('models') or []) or '—'} · input tokens {j.get('input_tokens')} · Jev ${j.get('jev_cost_usd', 0):.4f}",
            f"- Jev latency mean {_ms(lat.get('mean'))} ms · p50 {_ms(lat.get('p50'))} · p95 {_ms(lat.get('p95'))} · max {_ms(lat.get('max'))}",
+           (f"- Fallbacks {j.get('fallbacks')} ({j.get('fallbacks_per_1k_steps')} per 1k steps; by trigger {j.get('by_trigger')}; "
+            f"agreed with Jev {j.get('fallback_agreed_with_jev')}; progress within 10 steps {j.get('fallback_progress_rate')}; "
+            f"${j.get('fallback_cost_usd', 0):.4f})" if j.get("fallbacks") is not None else "- Fallbacks: none (variant without a safety net)"),
+           (f"- Segment {h['segment'].get('name')} from state `{h['segment'].get('state_sha256')}` to `{h['segment'].get('goal')}`"
+            + (f" · iteration {h.get('iteration')}" + (f" (analysis cost ${h['analysis_cost_usd']:.2f})" if h.get("analysis_cost_usd") else "")
+               if h.get("iteration") is not None else "") if h.get("segment") else
+            (f"- Iteration {h.get('iteration')}" if h.get("iteration") is not None else "- Full game from power-on")),
            f"- Planner calls {j.get('planner_calls', 0)} (${j.get('planner_cost_usd', 0):.4f}, errors {j.get('planner_errors', 0)}) · "
            f"objective changes {j.get('objective_changes', 0)} · objectives Jev marked done {j.get('jev_marked_done', 0)}"
            + (f" · final objective: {j['final_objective']}" if j.get("final_objective") else ""), ""]
@@ -289,6 +326,10 @@ def build_results_md(results: list[dict]) -> str:
                   "code, and no LLM is called. Cost is Jev's input tokens ($0.042/MTok, output free) plus any LLM the "
                   "variant uses.", "", "Variants: " + " ".join(f"**{k}**: {v}" for k, v in JEV_SCAFFOLDING.items()), "",
                   jev_leaderboard(jev), ""]
+        it = iteration_table(jev)
+        if it:
+            parts += ["### Self-improvement iterations (jev-assist → bench/improve.py → next iteration; goal: 0 fallbacks, "
+                      "then pass jev-solo)", "", it, ""]
     parts += ["## Runs", ""]
     for r in sorted(cli, key=rank_key):
         parts += [run_section(r)]

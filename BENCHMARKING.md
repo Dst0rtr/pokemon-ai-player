@@ -105,6 +105,7 @@ code scaffolding and are reported in a **separate table** in `RESULTS.md`.
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --smoke                     # jev-solo
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant hybrid --smoke
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant battles --smoke
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist --smoke
 venv/bin/python bench/run.py --provider jev --variant solo --mock     # offline: MockJev, no network, never a result
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev    # a full 12 h / 20k-call jev-solo run
 ```
@@ -120,7 +121,8 @@ action (continue a dialogue, press A through battle text) are executed by code a
 
 Variants (`--variant`):
 
-* **solo** (default, the main Jev track): no LLM is called at any point. Long-horizon structure is code:
+* **solo** (default; the final exam): no LLM is called at any point, and a run with no progress for
+  `--stuck-fail-steps` (2000) steps ends as `stuck` (a fail). Long-horizon structure is code:
   a whole-game objective graph (`jev_solo.GRAPH`, 33 nodes from the intro to the Champion) whose `done`
   tests read badges, bag contents (key items, HMs, ever-held items), moves the party knows, maps visited
   and milestones; rules that override the objective (heal at a Poké Center under 35% team HP, train to a
@@ -130,12 +132,48 @@ Variants (`--variant`):
   the last `jev-progress` checkpoint after 45). Jev picks every action and answers Nouls: "are we
   stuck?" and, for story events code cannot see (Silph Co. cleared), "is this objective done?" (three
   answers >= 0.8 in a row mark it done).
+* **assist** (the run mode of the self-improvement loop): jev-solo's scaffolding plus a safety net. When
+  Jev's confidence is below `--fallback-threshold` (0.3), or on the map code detects stuck (recovery level 2
+  or 10 steps without moving) or a loop (an option's identical result 3 times in the last 12 actions),
+  Claude Haiku 4.5 picks that one action from the same option list (at most every 3 steps). Every
+  fallback is a structured event in `bench/runs/<id>/fallbacks.jsonl`: trigger, map/position, objective
+  and graph node, a state summary (badges, money, party, bag, moves, recent milestones), screen text,
+  recent actions, Jev's options with probabilities and its pick and confidence, Haiku's pick and reason,
+  agreement, cost, latency, and the outcome 10 steps later (moved, new maps/milestones/items =
+  progress). Key metric: fallbacks per 1k steps (goal 0). Decisions Haiku overrode are kept out of Jev's
+  calibration curve.
 * **hybrid**: Claude Haiku 4.5 (`claude -p`, no tools) sets the objective and waypoints at the start,
   every 40 steps, after a badge, when Jev's confidence falls below 0.3 or its "stuck" Noul reaches 0.7
   (then Jev is asked again with the new objective). Jev picks every action.
 * **scripted**: a short code-side objective list (`jev.ROUTE`) with no rules and no recovery.
 * **battles**: the normal Claude Code + Haiku run (same tools; the prompt gains one line), but the
   server's `battle('auto')` asks Jev for every turn (`server.py --battle-advisor jev`).
+
+### Self-improvement loop (jev-assist → analysis → next iteration)
+
+```bash
+# iteration N: run from a fixed segment state (bench/segments.json; its sha256 is recorded) until the segment goal
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist --segment after-brock --iteration 1
+# analysis: cluster the fallbacks and write the Opus prompt (dry run); --call sends it to claude-opus-5-5
+venv/bin/python bench/improve.py analyze bench/runs/<run_id> --iteration 1            # -> bench/iterations/it1/{clusters.json,prompt.md}
+venv/bin/python bench/improve.py analyze bench/runs/<run_id> --iteration 1 --call     # -> summary.md, proposal.patch, analysis.json (cost)
+# apply on a new branch jev-iter-2 (refuses main; nothing committed), review, run the tests, rerun the same segment
+venv/bin/python bench/improve.py apply --iteration 1
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist --segment after-brock --iteration 2
+venv/bin/python bench/improve.py compare --segment after-brock                       # fallbacks/1k, badges, time, cost per iteration
+# final exam once fallbacks are ~0: strict solo, no LLM, stuck = fail
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant solo --segment after-brock --iteration 2
+```
+
+Segments (`bench/segments.json`): `power-on` → Boulder Badge, `after-brock` → Cerulean City (Mt. Moon),
+`cerulean` → Cascade Badge, `viridian-gym` → Earth Badge. The states are local files (gitignored); a run
+ends with exit reason `segment_goal` when the goal milestone appears. The Opus prompt contains the
+largest clusters (trigger × graph node × map × situation) with sample events and the full source of
+`bench/jev_solo.py`, `bench/jev.py` and `bench/jev_agent.py`, and asks for a per-cluster diagnosis
+(including "Jev cannot do this" when that is the answer) and one unified diff. `RESULTS.md` shows a
+self-improvement table per segment (iteration, steps, fallbacks, per 1k, goal reached, badges, hours,
+Jev / Haiku / Opus / total cost); `run.py --iteration N` records the cost of the analysis in
+`bench/iterations/it<N-1>/analysis.json`. Multi-hour runs and Opus analysis batches need Bijan's go.
 
 Where Jev alone cannot decide, and what code does instead: Jev never produces arguments, so every
 destination, move and menu path is enumerated by code; arithmetic (HP fractions, level targets, damage)

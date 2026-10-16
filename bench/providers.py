@@ -208,7 +208,11 @@ class JevProvider(Provider):
 
     @property
     def display_model(self) -> str:
-        return f"{self.model} + {self.planner_model}" if self.variant == "hybrid" else self.model
+        if self.variant == "hybrid":
+            return f"{self.model} + {self.planner_model} planner"
+        if self.variant == "assist":
+            return f"{self.model} + {self.planner_model} fallback"
+        return self.model
 
     def version(self) -> str:
         from bench.jev_agent import AGENT_VERSION
@@ -220,7 +224,8 @@ class JevProvider(Provider):
     def command(self, run_dir, prompt_file, session_id, first):
         root = Path(__file__).resolve().parent
         cmd = [self._server_cmd[0], str(root / "jev_agent.py"), "--run-dir", str(run_dir), "--session-id", run_dir.name,
-               "--variant", self.variant, "--jev-model", self.model, "--planner-model", self.planner_model] + self.agent_args
+               "--variant", self.variant, "--jev-model", self.model, "--planner-model", self.planner_model,
+               "--fallback-model", self.planner_model] + self.agent_args
         if self.mock:
             cmd.append("--mock")
         return cmd + ["--"] + self._server_cmd
@@ -256,7 +261,7 @@ class JevBattlesProvider(ClaudeProvider):
 
 
 PROVIDERS = {"claude": ClaudeProvider, "codex": CodexProvider, "jev": JevProvider}
-JEV_VARIANTS = ("solo", "hybrid", "scripted", "battles")
+JEV_VARIANTS = ("solo", "assist", "hybrid", "scripted", "battles")
 
 
 def make_provider(name: str, model: str = "", variant: str = "solo", jev_model: str = "", mock: bool = False,
@@ -267,7 +272,7 @@ def make_provider(name: str, model: str = "", variant: str = "solo", jev_model: 
     if name == "jev":
         if variant not in JEV_VARIANTS:
             raise SystemExit(f"unknown jev variant '{variant}'; choose from {', '.join(JEV_VARIANTS)}")
-        needs_claude = variant == "battles" or (variant == "hybrid" and not mock)
+        needs_claude = variant == "battles" or (variant in ("hybrid", "assist") and not mock)
         if needs_claude and shutil.which("claude") is None:
             raise SystemExit("claude is not installed or not on PATH (needed by the jev-" + variant + " variant)")
         if variant == "battles":

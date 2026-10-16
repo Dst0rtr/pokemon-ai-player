@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT))
 from bench.providers import claude_transcript_usage, codex_rollout_usage, estimate_cost, make_provider  # noqa: E402
 from bench.stream import ChunkStats  # noqa: E402
 from bench.report import derive, dump_result, write_results_md  # noqa: E402
-from bench.jev import read_jsonl, summarize  # noqa: E402
+from bench.jev import read_jsonl, summarize, summarize_fallbacks  # noqa: E402
 
 PYTHON = str(ROOT / "venv" / "bin" / "python") if (ROOT / "venv" / "bin" / "python").exists() else sys.executable
 CHAMPION = "champion defeated (Hall of Fame)"
@@ -55,6 +55,26 @@ def _read_json(path: Path) -> dict:
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return {}
+
+
+def load_segment(name: str) -> dict:
+    segs = _read_json(ROOT / "bench" / "segments.json")
+    seg = segs.get(name)
+    if not seg or name.startswith("_"):
+        raise SystemExit(f"unknown segment '{name}'; choose from {', '.join(k for k in segs if not k.startswith('_'))}")
+    seg = dict(seg, name=name)
+    if seg.get("state"):
+        path = ROOT / seg["state"]
+        if not path.exists():
+            raise SystemExit(f"segment '{name}' needs the local save state {seg['state']} (gitignored; generate it first)")
+        seg["state_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()[:16]   # comparability across iterations
+    return seg
+
+
+def analysis_cost(iteration: int) -> float | None:
+    """Opus cost of the analysis whose proposal produced this iteration's code (bench/iterations/it<N-1>/analysis.json)."""
+    a = _read_json(ROOT / "bench" / "iterations" / f"it{iteration - 1}" / "analysis.json")
+    return a.get("cost_usd") if a else None
 
 
 def run_cost(provider: str, chunks: list[dict], tokens: dict, prices: dict | None) -> tuple[float | None, bool]:
@@ -83,7 +103,9 @@ def run_cost(provider: str, chunks: list[dict], tokens: dict, prices: dict | Non
 class Run:
     def __init__(self, a: argparse.Namespace):
         self.args = a
-        agent_args = [f"--replan-every={a.replan_every}", f"--confidence-threshold={a.confidence_threshold}"]
+        agent_args = [f"--replan-every={a.replan_every}", f"--confidence-threshold={a.confidence_threshold}",
+                      f"--fallback-threshold={a.fallback_threshold}", f"--stuck-fail-steps={a.stuck_fail_steps}"]
+        self.segment = load_segment(a.segment) if a.segment else None
         self.provider = make_provider(a.provider, a.model, variant=a.variant, jev_model=a.jev_model, mock=a.mock,
                                       agent_args=agent_args)
         self.model = self.provider.model
@@ -91,7 +113,9 @@ class Run:
             self.dir = Path(a.resume_run).resolve()
             self.run_id = self.dir.name
         else:
-            self.run_id = f"{self.provider.label}_{_slug(self.model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            seg = f"_{a.segment}" if a.segment else ""
+            it = f"_it{a.iteration}" if a.iteration is not None else ""
+            self.run_id = f"{self.provider.label}{seg}{it}_{_slug(self.model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             self.dir = ROOT / "bench" / "runs" / self.run_id
         self.state_path = self.dir / "harness.json"
         self.state = _read_json(self.state_path) or {
@@ -100,6 +124,11 @@ class Run:
             "server_commit": _git_commit(), "budget": {"hours": a.budget_hours, "max_calls": a.max_calls},
             "chunks": [], "active_seconds": 0.0, "paused_seconds": 0.0, "exit_reason": None, "cli_session": None,
         }
+        if self.segment:
+            self.state.setdefault("segment", self.segment)
+        if a.iteration is not None:
+            self.state.setdefault("iteration", a.iteration)
+            self.state.setdefault("analysis_cost_usd", analysis_cost(a.iteration))
         if self.provider.track != "cli":
             self.state.update(track=self.provider.track, variant=self.provider.variant,
                               display_model=getattr(self.provider, "display_model", self.model), mock=bool(a.mock),
@@ -116,6 +145,10 @@ class Run:
         rom = self.dir / "rom.gb"
         if not rom.exists():
             shutil.copy(self.args.rom, rom)
+            if self.segment and self.segment.get("state"):     # fixed start state: the server resumes from it
+                saves = self.dir / "data" / "saves" / "rom"
+                saves.mkdir(parents=True, exist_ok=True)
+                shutil.copy(ROOT / self.segment["state"], saves / "autosave.state")
         prompt = ROOT / "bench" / "PROMPT.md"
         cont = ROOT / "bench" / "CONTINUE.md"
         suffix = self.provider.prompt_suffix()
@@ -152,6 +185,9 @@ class Run:
         names = [x.get("name") for x in cp.get("milestones", [])]
         if CHAMPION in names:
             return "champion"
+        if self.segment and self.segment.get("goal") and any(str(n).startswith(self.segment["goal"]) for n in names
+                                                               if n not in self.segment.get("initial_milestones", [])):
+            return "segment_goal"
         if cp.get("tool_calls_total", 0) >= self.args.max_calls:
             return "budget_calls"
         if self.state["active_seconds"] >= self.max_seconds or cp.get("real_seconds", 0) >= self.max_seconds:
@@ -285,7 +321,7 @@ class Run:
             if self.stop_requested:
                 return "manual"
             rec = self.run_chunk()
-            if rec["exit_reason"] in ("champion", "budget_calls", "budget_time", "manual", "max_chunks"):
+            if rec["exit_reason"] in ("champion", "budget_calls", "budget_time", "manual", "max_chunks", "segment_goal"):
                 return rec["exit_reason"]
             if rec["exit_reason"] == "rate_limited":
                 self.log(f"rate limited: pausing {backoff} min")
@@ -330,8 +366,13 @@ class Run:
             self.provider.parser, self.state["chunks"], tok, _read_json(ROOT / "bench" / "prices.json").get(self.model))
         if self.provider.track == "jev":
             self.state["jev"] = self.jev_summary()
+            j = self.state["jev"]
             if self.provider.variant == "battles":       # the CLI's cost does not include the server-side Jev calls
-                self.state["cost_usd"] = round((self.state["cost_usd"] or 0) + self.state["jev"]["jev_cost_usd"], 4)
+                self.state["cost_usd"] = round((self.state["cost_usd"] or 0) + j["jev_cost_usd"], 4)
+            else:                                        # the decision/objective logs survive a killed chunk; the stream may not
+                logged = round(j["jev_cost_usd"] + j["planner_cost_usd"], 4)
+                if self.state["cost_usd"] is None or logged > self.state["cost_usd"]:
+                    self.state["cost_usd"], self.state["cost_estimated"] = logged, False
         for c in self.state["chunks"][1:]:                   # keep the published file small: per-chunk essentials only
             c.pop("mcp_servers", None)
             if not c.get("errors"):
@@ -357,6 +398,21 @@ class Run:
         out = summarize(read_jsonl(self.dir / "data" / "jev_decisions.jsonl"),
                         [o for o in objectives if o.get("source") == "planner"])
         out["objective_changes"] = len(objectives)
+        agent = _read_json(self.dir / "jev_agent.json")
+        fb = read_jsonl(self.dir / "fallbacks.jsonl")
+        pending = agent.get("pending_fallbacks") or []
+        if pending:                                      # outcomes not yet due when the run ended: record them as incomplete
+            with open(self.dir / "fallbacks.jsonl", "a", encoding="utf-8") as f:
+                for ev in pending:
+                    ev.pop("sig_before", None)
+                    ev["outcome_after"] = {"complete": False, "steps": (agent.get("step") or 0) - ev["step"]}
+                    f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+            agent["pending_fallbacks"] = []
+            (self.dir / "jev_agent.json").write_text(json.dumps(agent, ensure_ascii=False))
+            fb = read_jsonl(self.dir / "fallbacks.jsonl")
+        if self.provider.variant == "assist" or fb:
+            out.update(summarize_fallbacks(fb, agent.get("step")))
+            out["planner_cost_usd"] = round(out.get("planner_cost_usd", 0) + out["fallback_cost_usd"], 6)
         out["jev_marked_done"] = sum(1 for o in objectives if o.get("source") == "jev")
         agent = _read_json(self.dir / "jev_agent.json")
         if agent:
@@ -379,6 +435,10 @@ class Run:
         if self.provider.variant == "hybrid":
             print(f"  [{ok(j['planner_calls'] and not j['planner_errors'])}] planner: {j['planner_calls']} calls, "
                   f"{j['planner_errors']} errors, ${j['planner_cost_usd']:.4f}")
+        if self.provider.variant == "assist":
+            print(f"  [{ok((self.dir / 'fallbacks.jsonl').exists())}] fallback events: {j.get('fallbacks')} "
+                  f"({j.get('fallbacks_per_1k_steps')} per 1k steps, by trigger {j.get('by_trigger')}, errors {j.get('fallback_errors')}, "
+                  f"${j.get('fallback_cost_usd', 0):.4f}) -> {self.dir / 'fallbacks.jsonl'}")
         if self.provider.variant == "solo":
             print(f"  [{ok(not j['planner_calls'])}] no LLM called (planner calls {j['planner_calls']}); objective changes {j['objective_changes']}")
         if self.provider.variant == "battles":
@@ -387,7 +447,7 @@ class Run:
         print(f"  [{ok(c2 and c2.get('tool_calls_seen'))}] chunk 2 continued playing ({c2.get('tool_calls_seen')} tool calls)")
         print(f"  [{ok(c2 and cp.get('chunks', 1) >= 2)}] server metrics session continued across chunks (chunks={cp.get('chunks')})")
         print(f"  [{ok(cp.get('tool_calls_total'))}] server checkpoint: {cp.get('tool_calls_total')} calls, milestones "
-              f"{[m.get('name') for m in cp.get('milestones', [])][:12]}")
+              f"{[m.get('name') for m in cp.get('milestones', []) if not str(m.get('name')).startswith('loaded state')]}")
         errs = [e for c in chunks for e in c.get("errors", [])]
         print(f"  [{ok(not errs)}] no errors" + (f": {errs[:3]}" if errs else ""))
         print("  see", self.dir, "(data/jev_decisions.jsonl, data/jev_objectives.jsonl, chunks/)\n")
@@ -415,8 +475,14 @@ def main(argv=None) -> None:
     p = argparse.ArgumentParser(description="Game Boy MCP benchmark runner")
     p.add_argument("--provider", required=True, choices=["claude", "codex", "jev"])
     p.add_argument("--model", default="", help="CLI model; for jev: the planner (hybrid) or CLI (battles) model")
-    p.add_argument("--variant", default="solo", choices=["solo", "hybrid", "scripted", "battles"],
-                   help="jev: solo = Jev + code only (no LLM); hybrid = Haiku planner; scripted = short route; battles = Haiku run, Jev battles")
+    p.add_argument("--variant", default="solo", choices=["solo", "assist", "hybrid", "scripted", "battles"],
+                   help="jev: solo = Jev + code only, no LLM, stuck = fail (final exam); assist = solo + Haiku fallback per "
+                        "uncertain/stuck decision, logged to fallbacks.jsonl; hybrid = Haiku planner; scripted = short route; "
+                        "battles = Haiku run, Jev battles")
+    p.add_argument("--fallback-threshold", type=float, default=0.3, help="jev-assist: fall back below this Jev confidence")
+    p.add_argument("--stuck-fail-steps", type=int, default=2000, help="jev-solo: steps without progress that end the exam")
+    p.add_argument("--segment", help="start from a fixed save state and stop at its goal (bench/segments.json)")
+    p.add_argument("--iteration", type=int, help="self-improvement iteration number (recorded; RESULTS.md tracks the trend)")
     p.add_argument("--jev-model", default="jev-latest")
     p.add_argument("--mock", action="store_true", help="jev: offline MockJev/MockPlanner (no network); never a benchmark result")
     p.add_argument("--replan-every", type=int, default=40, help="jev-hybrid: planner at least every N steps")

@@ -1,0 +1,23 @@
+{
+  "_comment": "Fixed start states for comparable self-improvement iterations. state = save state relative to the repo (local, gitignored; its sha256 is recorded per run); goal = milestone prefix that ends the segment run; initial_milestones = milestones the state already reports at boot.",
+  "power-on": {
+    "state": null,
+    "goal": "badge: Boulder",
+    "initial_milestones": []
+  },
+  "after-brock": {
+    "state": "saves/Pokemon-Red_Version/after-brock.state",
+    "goal": "reached: Cerulean City",
+    "initial_milestones": []
+  },
+  "cerulean": {
+    "state": "saves/Pokemon-Red_Version/cerulean.state",
+    "goal": "badge: Cascade",
+    "initial_milestones": []
+  },
+  "viridian-gym": {
+    "state": "saves/Pokemon-Red_Version/viridian-gym.state",
+    "goal": "badge: Earth",
+    "initial_milestones": []
+  }
+}

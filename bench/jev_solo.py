@@ -75,7 +75,7 @@ def _badge(n: int) -> Callable[[Facts], bool]:
 GRAPH: list[Node] = [
     Node("intro", "Start a new game: get through the title screen and Professor Oak's introduction.", (),
          lambda f: f.milestone("game started")),
-    Node("starter", "Leave the house, walk north out of Pallet Town; Oak takes you to his lab: choose a starter Pokémon.",
+    Node("starter", "Leave the house, walk north out of Pallet Town; Oak takes you to his lab: choose a starter Pokémon (talk to one of the Poké Balls on the table, answer YES).",
          ("Pallet Town", "Route 1", "Oak's Lab"), lambda f: f.milestone("starter:")),
     Node("viridian", "Leave Oak's lab and go north along Route 1 to Viridian City.", ("Route 1", "Viridian City"),
          lambda f: f.reached("Viridian City")),
@@ -133,7 +133,13 @@ GRAPH: list[Node] = [
 
 
 def current_node(f: Facts) -> Node:
-    for n in GRAPH:
+    # A run that starts from a segment save state has no milestone history: everything before the furthest node
+    # whose code-side test passes (badges, bag, maps incl. the current one; the starter once a party exists) is done.
+    start = 0
+    for i, n in enumerate(GRAPH):
+        if n.id == "starter" and bool(f.levels) or n.done is not None and n.done(f) or n.id in f.manual_done:
+            start = i + 1
+    for n in GRAPH[start:]:
         if n.id in f.manual_done:
             continue
         if n.done is None or not n.done(f):
@@ -168,12 +174,14 @@ class SoloDirector:
     def objective(self, f: Facts, o: Obs) -> tuple[str, list[str], str]:
         """(objective text, walk targets, why) after the code rules that override the graph."""
         node = current_node(f)
-        if f.levels and f.hp_ratio < 0.35 and o.mode == "overworld":
+        if f.levels and (f.hp_ratio < 0.35 or self.s.get("healing") and f.hp_ratio < 0.9):   # hysteresis: heal fully
+            self.s["healing"] = True
             here = [POKE_CENTERS[o.map]] if o.map in POKE_CENTERS else []
             pcs = here + [POKE_CENTERS[m] for m in reversed(self.s["visited"]) if m in POKE_CENTERS and m != o.map]
             if pcs:
                 return (f"Your team is weak ({round(100 * f.hp_ratio)}% HP): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
                         pcs[:2], "heal")
+        self.s["healing"] = False
         target = LEVEL_TARGET.get(f.badges, 55)
         if node.id in ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni", "champion") and f.levels \
                 and max(f.levels) < target:

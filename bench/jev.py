@@ -348,6 +348,17 @@ class Option:
     then: list = field(default_factory=list)    # follow-up (tool, args) calls run only if the previous one did not stop early
 
 
+def drop_repeats(opts: list[Option], history: list[str], times: int = 3) -> list[Option]:
+    """Code-side loop breaker: drop an option whose identical result already appeared `times` times in the recent
+    history ("label -> result" lines). Never empties the set."""
+    counts: dict[str, int] = {}
+    for h in history:
+        counts[h] = counts.get(h, 0) + 1
+    tired = {h.split(" -> ", 1)[0] for h, n in counts.items() if n >= times}
+    kept = [o for o in opts if o.label not in tired]
+    return kept or opts
+
+
 def _dedupe(opts: list[Option]) -> list[Option]:
     seen, out = set(), []
     for o in opts:
@@ -411,12 +422,13 @@ WALKABLE = set(".,")
 STEP_TOWARD = {(0, -1): "down", (0, 1): "up", (-1, 0): "right", (1, 0): "left"}   # offset of the stand cell -> facing
 
 
-def talk_to_options(o: Obs, grid: dict, limit: int = 6) -> list[Option]:
+def talk_to_options(o: Obs, grid: dict, limit: int = 10, said: Optional[dict] = None) -> list[Option]:
     """'talk to the person or object at (x,y)': stand on a free neighbouring cell, face it, talk. Objects on
     tables (Oak's Poké Balls) or behind counters are solid targets, so the walk goes to the neighbour."""
     out = []
     px, py = o.pos
-    for nx, ny in sorted(set(o.npcs), key=lambda n: abs(n[0] - px) + abs(n[1] - py))[:limit]:
+    said = said or {}
+    for nx, ny in sorted(set(o.npcs), key=lambda n: (f"{n[0]},{n[1]}" in said, abs(n[0] - px) + abs(n[1] - py)))[:limit]:
         stands = [((nx + dx, ny + dy), face) for (dx, dy), face in STEP_TOWARD.items()
                   if grid.get((nx + dx, ny + dy)) in WALKABLE or (nx + dx, ny + dy) == (px, py)]
         if not stands:
@@ -425,15 +437,17 @@ def talk_to_options(o: Obs, grid: dict, limit: int = 6) -> list[Option]:
         first = (Option("", "walk", {"path": f"{face} 1", "on_battle": "stop"}) if (sx, sy) == (px, py)
                  else Option("", "walk", {"path": f"to {sx},{sy}", "on_battle": "stop"}))
         then = [("walk", {"path": f"{face} 1", "on_battle": "stop"})] if (sx, sy) != (px, py) else []
+        before = said.get(f"{nx},{ny}")
         out.append(Option(f"talk to the person or object at ({nx},{ny})", first.tool, first.args,
-                          f"{abs(nx - px) + abs(ny - py)} tiles away: walk next to it, face it and talk",
+                          f"{abs(nx - px) + abs(ny - py)} tiles away; " + (f"already talked to it, it said: {before}" if before
+                                                                            else "not talked to yet"),
                           then=then + [("talk", {})]))
     return out
 
 
 def overworld_options(o: Obs, exits: list[str], conns: list[tuple[str, str]], targets: list[str],
                       party: list[dict], items: list[tuple[str, int]], steps_since_save: int = 0,
-                      grid: Optional[dict] = None) -> list[Option]:
+                      grid: Optional[dict] = None, said: Optional[dict] = None, facing_said: str = "") -> list[Option]:
     opts: list[Option] = []
     for t in targets:
         if t and t != o.map:
@@ -445,10 +459,11 @@ def overworld_options(o: Obs, exits: list[str], conns: list[tuple[str, str]], ta
         opts.append(Option(f"walk to {dest} ({side} edge)", "walk", {"path": f"to {side} edge", "on_battle": "stop"},
                            f"leave this map by its {side} edge"))
     if o.pos:
-        opts += talk_to_options(o, grid or o.grid)
+        opts += talk_to_options(o, grid or o.grid, said=said)
     for d in ("up", "down", "left", "right"):
         opts.append(Option(f"walk {d} 4 tiles", "walk", {"path": f"{d} 4", "on_battle": "stop"}, "explore nearby"))
-    opts.append(Option("talk to what you are facing", "talk", {}, "an NPC, sign, item ball, PC or nurse right in front of you"))
+    opts.append(Option("talk to what you are facing", "talk", {}, "an NPC, sign, item ball, PC or nurse right in front of you"
+                       + (f"; last time it said: {facing_said}" if facing_said else "")))
     names = {n for n, _ in items}
     lead = party[0] if party else None
     if lead and lead["hp"] < lead["max_hp"] // 2:
@@ -575,7 +590,7 @@ class JevPolicy:
         ranked = sorted(probs.values(), reverse=True)
         p = probs.get(choice, ranked[0] if ranked else 0.0)
         conf = float(a["confidence"]) if a.get("confidence") is not None else choice_confidence(probs or {choice: 1.0})
-        rec.update(choice=choice, p=round(p, 4), confidence=round(conf, 4),
+        rec.update(choice=choice, p=round(p, 4), confidence=round(conf, 4), probs={k: round(v, 4) for k, v in probs.items()},
                    ratio=round(p / ranked[1], 3) if len(ranked) > 1 and ranked[1] > 0 else None,
                    position=[o.label for o in order].index(choice), latency_ms=res.latency_ms, wall_ms=res.wall_ms,
                    input_tokens=res.input_tokens, cost_usd=round(cost, 8), model=res.model, forced=False)
@@ -857,3 +872,97 @@ class BattleAdvisor:
 
 def make_client(model: str, mock: bool, seed: int = 0):
     return MockJev(seed=seed) if mock else JevClient(model)
+
+
+# ====================================================================== fallback chooser (jev-assist)
+CHOOSER_PROMPT = """You are the safety net for an automated Pokémon Red player. A fast decision model usually picks every action; this time it was unsure or the player looks stuck ({trigger}). Pick the best action from the numbered list. Reply with ONLY a JSON object: {{"choice": <number>, "why": "<one short sentence>"}}
+
+Objective: {objective}
+
+Situation (JSON):
+{state}
+
+The fast model's probabilities are shown after each option.
+Options:
+{options}"""
+
+
+@dataclass
+class Fallback:
+    label: str
+    why: str = ""
+    cost_usd: float = 0.0
+    tokens: dict = field(default_factory=dict)
+    latency_ms: float = 0.0
+    error: str = ""
+    model: str = ""
+
+
+class ClaudeChooser:
+    """One `claude -p` call (no tools, no MCP) that picks one option of the same closed set Jev saw."""
+
+    def __init__(self, model: str = PLANNER_MODEL, timeout: float = 120.0, runner: Callable = subprocess.run):
+        self.model = model
+        self.timeout = timeout
+        self.runner = runner
+
+    def available(self) -> bool:
+        return shutil.which("claude") is not None
+
+    def choose(self, trigger: str, objective: str, state: dict, options: list[Option], probs: dict[str, float]) -> Fallback:
+        lines = "\n".join(f"{i + 1}. {o.label}" + (f" — {o.desc}" if o.desc else "") + f" [p={probs.get(o.label, 0):.2f}]"
+                          for i, o in enumerate(options))
+        prompt = CHOOSER_PROMPT.format(trigger=trigger, objective=objective,
+                                       state=json.dumps(state, ensure_ascii=False)[:6000], options=lines)
+        cmd = ["claude", "-p", "--model", self.model, "--output-format", "json", "--tools", "",
+               "--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers": {}}']
+        env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+        t0 = time.perf_counter()
+        try:
+            out = self.runner(cmd, input=prompt, capture_output=True, text=True, timeout=self.timeout, env=env)
+        except (subprocess.TimeoutExpired, OSError) as e:
+            return Fallback("", error=f"{type(e).__name__}: {e}"[:300], model=self.model)
+        ms = round((time.perf_counter() - t0) * 1000, 1)
+        try:
+            d = json.loads(out.stdout.strip().splitlines()[-1]) if out.stdout.strip() else {}
+        except ValueError:
+            d = {}
+        u = d.get("usage") or {}
+        tokens = {"input": int(u.get("input_tokens", 0) or 0), "cached_input": int(u.get("cache_read_input_tokens", 0) or 0),
+                  "cache_write": int(u.get("cache_creation_input_tokens", 0) or 0), "output": int(u.get("output_tokens", 0) or 0)}
+        cost = float(d.get("total_cost_usd") or 0.0)
+        m = re.search(r"\{.*\}", str(d.get("result") or ""), re.S)
+        try:
+            pick = json.loads(m.group(0)) if m else {}
+            n = int(pick.get("choice"))
+            label = options[n - 1].label if 1 <= n <= len(options) else ""
+        except (ValueError, TypeError):
+            pick, label = {}, ""
+        err = "" if label else f"no valid choice in reply: {str(d.get('result') or out.stderr)[:200]}"
+        return Fallback(label, str(pick.get("why") or "")[:300], cost, tokens, ms, err, self.model)
+
+
+class MockChooser:
+    """Offline chooser: Jev's runner-up (so tests and --mock runs see the fallback change the action)."""
+    model = "mock-chooser"
+
+    def available(self) -> bool:
+        return True
+
+    def choose(self, trigger, objective, state, options, probs) -> Fallback:
+        ranked = sorted(options, key=lambda o: -probs.get(o.label, 0))
+        pick = ranked[1] if len(ranked) > 1 else ranked[0]
+        return Fallback(pick.label, "mock: runner-up", 0.0, {}, 0.0, "", self.model)
+
+
+def summarize_fallbacks(events: list[dict], steps: Optional[int]) -> dict:
+    n = len(events)
+    trig: dict[str, int] = {}
+    for e in events:
+        trig[e.get("trigger", "?")] = trig.get(e.get("trigger", "?"), 0) + 1
+    done = [e for e in events if (e.get("outcome_after") or {}).get("complete")]
+    return {"fallbacks": n, "fallbacks_per_1k_steps": round(1000 * n / steps, 2) if steps else None, "by_trigger": trig,
+            "fallback_cost_usd": round(sum(float(e.get("cost_usd") or 0) for e in events), 6),
+            "fallback_agreed_with_jev": sum(1 for e in events if e.get("agreed")),
+            "fallback_errors": sum(1 for e in events if e.get("error")),
+            "fallback_progress_rate": round(sum(1 for e in done if e["outcome_after"].get("progress")) / len(done), 3) if done else None}
