@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sys
+import types
 
 import httpx
 import pytest
@@ -576,3 +577,68 @@ def test_results_md_iteration_trend():
     assert "### Self-improvement iterations" in md
     tbl = md.split("### Self-improvement iterations", 1)[1]
     assert tbl.index("| 1 | assist | 1000 | 40 |") < tbl.index("| 2 | assist | 1000 | 12 |") and "$2.00" in tbl and "✓ badge: Boulder" in tbl
+
+
+class LearnMoveServer(FakeServer):
+    """Replays iteration 1's bug: Butterfree's learn-move prompts inside a battle. NO on "Abandon learning?" goes back
+    through two text screens to the first prompt; only YES (press A) there ends it."""
+
+    BAT = "f1 BATTLE (trainer): enemy Sandshrew L11 0/30 | you Butterfree L12 30/40 [Confusion 20pp] | menu: (text)"
+
+    def __init__(self):
+        super().__init__()
+        self.at = "teach"
+
+    async def __call__(self, name, args):
+        self.calls.append((name, args))
+        if self.at == "done":
+            return await super().__call__(name, args) if name != "press" else "pressed\n" + \
+                "f1 Pallet Town (2,5) facing up | Butterfree L12 30/40 | ¥3000 | 0 badges"
+        if name == "press":
+            b = args["buttons"]
+            if self.at == "teach":
+                self.at = "text1" if b == "A" else "abandon"
+            elif self.at == "abandon":
+                self.at = "done" if b == "A" else "text1"
+            elif self.at == "text1":
+                self.at = "text2"
+            elif self.at == "text2":
+                self.at = "teach"
+            if self.at == "done":
+                return await self(name, args)
+        screen = {"teach": "BUTTERFREE is trying to\nlearn STUN SPORE!\nDelete an older move?\n ▶YES\n  NO",
+                  "abandon": "Abandon learning\nSTUN SPORE?\n ▶YES\n  NO",
+                  "text1": "BUTTERFREE can't learn\nmore than 4 moves!", "text2": "But, BUTTERFREE can't\nlearn more than 4!"}
+        return f"pressed {args.get('buttons', '')}\n{self.BAT}\nscreen:\n{screen.get(self.at, screen['text1'])}"
+
+
+def test_learn_move_prompt_loop_is_broken(tmp_path):
+    """Iteration 1 burned 19,800 steps here: forced A presses on the text screens filled the history, so the repeat
+    filter dropped "press A" (the only way out). Forced presses no longer count and repeated screens try new options."""
+    assert J.drop_repeats([J.Option("press A", "press", {}), J.Option("press B", "press", {})],
+                          [J.AUTO + "press A -> pressed A"] * 5) [0].label == "press A"
+    assert [o.label for o in J.drop_repeats([J.Option("press A", "press", {}), J.Option("press B", "press", {})],
+                                            ["press A -> x"] * 3, keep=("press A",))] == ["press A", "press B"]
+    (tmp_path / "data").mkdir()
+
+    def stubborn(state, labels):                   # never picks YES on its own
+        for want in ("press B", "press DOWN then A"):
+            if want in labels:
+                return want
+        return labels[0]
+    srv = LearnMoveServer()
+    a = _agent_args(tmp_path, "solo", max_steps=60, stuck_fail_steps=0)
+    agent = Agent(a, srv, J.JevPolicy(J.MockJev(policy=stubborn)))
+    asyncio.run(agent.run())
+    assert srv.at == "done"
+    assert sum(1 for n, x in srv.calls if n == "press") < 30
+
+
+def test_assist_reports_a_repeated_prompt_as_stuck(tmp_path):
+    (tmp_path / "data").mkdir()
+    a = _agent_args(tmp_path, "assist", max_steps=1)
+    agent = Agent(a, FakeServer(), J.JevPolicy(J.MockJev()), chooser=J.MockChooser())
+    dec = types.SimpleNamespace(record={"confidence": 0.9})
+    assert agent.fallback_trigger(dec, False, False, screen_stuck=True) == "stuck"
+    assert agent.fallback_trigger(dec, True, False) == "loop"
+    assert agent.fallback_trigger(dec, False, False) == ""

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import re
 import signal
@@ -35,6 +36,8 @@ from bench.jev_solo import STUCK_Q, SoloDirector  # noqa: E402
 from bench import jev as J  # noqa: E402
 
 AGENT_VERSION = "2"
+SCREEN_LOOP = 3                                 # a non-map screen seen this often without progress is a loop
+IDLE_RELOAD = 500                               # steps without progress before the checkpoint is reloaded
 FROZEN_RE = re.compile(r"no walkable route from|^walked \w+ 0/\d+ — stopped: blocked")
 GOT_RE = re.compile(r"\b(got|received|obtained|learned|put .* in|delivered|handed over|traded)\b", re.I)
 NO_SHOT = ("press", "walk", "battle", "talk", "wait")
@@ -70,7 +73,8 @@ class Agent:
         for k, v in {"step": 0, "objective": "", "targets": [], "last_plan_step": -10**9, "milestones": [], "visited": [],
                      "maps": {}, "history": [], "last_save_step": 0, "plan_badges": 0, "battle_seen_step": -1,
                      "last_objective": "", "grids": {}, "said": {}, "pending_fallbacks": [], "fallbacks": 0,
-                     "last_fallback_step": -10**9}.items():
+                     "last_fallback_step": -10**9, "screens": {}, "screens_at": -1, "reloads": 0,
+                     "last_reload_step": -10**9}.items():
             self.s.setdefault(k, v)
         self.director = SoloDirector(self.s) if a.variant in ("solo", "assist") else None
         self.party: list[dict] = []
@@ -275,9 +279,22 @@ class Agent:
             opts = [forced]                              # code decides: logged as a forced decision
         loop_dropped = False
         if kind in ("overworld", "prompt", "intro"):
-            kept = drop_repeats(opts, self.s["history"])
+            kept = drop_repeats(opts, self.s["history"], keep=("press A",) if kind == "prompt" else ())
             loop_dropped = len(kept) < len(opts)
             opts = kept
+        screen, screen_stuck = self.screen_entry(o), False
+        if kind != "overworld" and screen["n"] >= SCREEN_LOOP and len(opts) > 1:
+            # the same menu/dialog/prompt screen keeps coming back without progress: try what was not tried here yet;
+            # when everything was tried, start over and report it as stuck (assist asks the fallback model)
+            untried = [x for x in opts if x.label not in screen["tried"]]
+            if untried:
+                opts, loop_dropped = untried, True
+            else:
+                screen["tried"], screen_stuck = [], True
+        if not forced and self.director and kind != "over":
+            reload = self.idle_reload()
+            if reload:
+                opts, forced = [reload], reload
         dec = self.policy.decide(kind, self.jev_state(o, objective), opts, step=self.s["step"], nouls=nouls, battle=battle)
         if self.director and dec.noul:
             marked = self.director.absorb(facts, dec.noul)
@@ -300,10 +317,11 @@ class Agent:
             dec.record["recovery"] = self.s.get("recovery", 0)
             dec.record["why"] = why
         if self.chooser is not None and not dec.record.get("forced"):
-            trigger = self.fallback_trigger(dec, loop_dropped and kind == "overworld", kind == "overworld")
+            trigger = self.fallback_trigger(dec, loop_dropped, kind == "overworld", screen_stuck)
             if trigger and self.s["step"] - self.s["last_fallback_step"] >= self.a.fallback_gap:
                 await self.fallback(trigger, dec, o, objective, opts, facts, kind)
         opt = dec.option
+        screen["tried"] = (screen["tried"] + [opt.label])[-20:]
         reply = await self.tool(opt.tool, **opt.args)
         if opt.tool == "walk" and o.pos and FROZEN_RE.search(reply.split("\n", 1)[0]) and self.free_neighbour(o):
             # After some scripted push-backs (Oak's "Don't go away yet!") the game ignores directions until a menu
@@ -325,7 +343,7 @@ class Agent:
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
             self.s["refresh_items"] = True              # the bag, HMs or moves may have changed
-        line = f"{opt.label} -> {after.head[:90]}"
+        line = (J.AUTO if dec.record.get("forced") else "") + f"{opt.label} -> {after.head[:90]}"
         if not dec.record.get("forced"):
             repeat = kind not in ("battle", "faint_switch") and self.s["history"].count(line) >= 2
             ok, how = label_outcome(kind, opt, o, after, repeat=repeat)
@@ -336,21 +354,47 @@ class Agent:
         self.s["history"] = (self.s["history"] + [line])[-12:]
         self.s["step"] += 1
         self.settle_fallbacks(after)
-        if self.a.variant == "solo" and self.a.stuck_fail_steps and \
+        if self.director and self.a.stuck_fail_steps and \
                 self.s["step"] - self.s.get("last_progress_step", 0) >= self.a.stuck_fail_steps:
-            self.stop = "stuck"                            # final exam: no fallback, stuck = fail
+            self.stop = "stuck"           # solo (final exam): stuck = fail; assist: the fallbacks did not help either
         self.reply = reply if has_status(reply) or after.mode == "over" else reply + "\n" + await self.observe()
 
     # ------------------------------------------------------------- jev-assist fallbacks
-    def fallback_trigger(self, dec, loop_dropped: bool, overworld: bool) -> str:
-        """Low confidence anywhere; stuck/loop only on the map (repeating A through menus and text is normal)."""
+    def fallback_trigger(self, dec, loop_dropped: bool, overworld: bool, screen_stuck: bool = False) -> str:
+        """Low confidence anywhere; stuck when the map position or a menu/dialog/prompt screen keeps repeating
+        without progress (every option there was tried); loop when the code dropped repeated options."""
         if dec.record["confidence"] < self.a.fallback_threshold:
             return f"low confidence {dec.record['confidence']:.2f}"
-        if overworld and (self.s.get("recovery", 0) >= 2 or self.s.get("pos_repeat", 0) >= 10):
+        if screen_stuck or overworld and (self.s.get("recovery", 0) >= 2 or self.s.get("pos_repeat", 0) >= 10):
             return "stuck"
         if loop_dropped:
             return "loop"
         return ""
+
+    def screen_entry(self, o: Obs) -> dict:
+        """Per-screen visit counter and options tried there, reset whenever the director sees progress."""
+        if self.director and self.s["screens_at"] != self.s.get("last_progress_step", 0):
+            self.s["screens"], self.s["screens_at"] = {}, self.s.get("last_progress_step", 0)
+        if o.mode == "overworld":
+            sig = f"ow|{o.map}|{o.pos}|{o.facing}"
+        else:
+            sig = o.mode + "|" + hashlib.md5(o.screen.encode()).hexdigest()[:12]
+        screens = self.s["screens"]
+        if sig not in screens and len(screens) >= 400:
+            screens.pop(next(iter(screens)))
+        e = screens.setdefault(sig, {"n": 0, "tried": []})
+        e["n"] += 1
+        return e
+
+    def idle_reload(self):
+        """Any screen: after IDLE_RELOAD steps without progress reload the last progress checkpoint (code, no Jev)."""
+        idle = self.s["step"] - self.s.get("last_progress_step", 0)
+        if idle >= IDLE_RELOAD and self.s.get("checkpoint_step") is not None \
+                and self.s["step"] - self.s["last_reload_step"] >= IDLE_RELOAD:
+            self.s["last_reload_step"] = self.s["step"]
+            self.s["reloads"] += 1
+            return Option("recovery: reload the last progress checkpoint", "load_state", {"slot": "jev-progress"})
+        return None
 
     async def fallback(self, trigger: str, dec, o: Obs, objective: str, opts: list[Option], facts, kind: str) -> None:
         """Ask Claude for this one decision and record a structured fallback event."""

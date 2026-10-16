@@ -213,7 +213,7 @@ class SoloDirector:
 
     # ------------------------------------------------------------- progress / stuck
     def track(self, step: int, o: Obs, f: Facts) -> None:
-        sig = f"{len(f.visited)}|{len(f.milestones)}|{len(f.ever_items)}|{f.badges}|{sorted(f.moves)}"
+        sig = f"{len(f.visited)}|{len(f.milestones)}|{len(f.ever_items)}|{f.badges}|{sorted(f.moves)}|{sum(f.levels)}"
         if sig != self.s["progress_sig"]:
             self.s["progress_sig"] = sig
             self.s["last_progress_step"] = step

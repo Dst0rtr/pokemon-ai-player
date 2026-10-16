@@ -348,13 +348,18 @@ class Option:
     then: list = field(default_factory=list)    # follow-up (tool, args) calls run only if the previous one did not stop early
 
 
-def drop_repeats(opts: list[Option], history: list[str], times: int = 3) -> list[Option]:
+AUTO = "(auto) "                               # history prefix of code-forced actions (never counted as a Jev repeat)
+
+
+def drop_repeats(opts: list[Option], history: list[str], times: int = 3, keep: tuple[str, ...] = ()) -> list[Option]:
     """Code-side loop breaker: drop an option whose identical result already appeared `times` times in the recent
-    history ("label -> result" lines). Never empties the set."""
+    history ("label -> result" lines). Forced actions (AUTO prefix) do not count; labels in `keep` are never dropped
+    ("press A" on a YES/NO prompt is often the only way out). Never empties the set."""
     counts: dict[str, int] = {}
     for h in history:
-        counts[h] = counts.get(h, 0) + 1
-    tired = {h.split(" -> ", 1)[0] for h, n in counts.items() if n >= times}
+        if not h.startswith(AUTO):
+            counts[h] = counts.get(h, 0) + 1
+    tired = {h.split(" -> ", 1)[0] for h, n in counts.items() if n >= times} - set(keep)
     kept = [o for o in opts if o.label not in tired]
     return kept or opts
 
