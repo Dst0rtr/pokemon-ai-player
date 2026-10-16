@@ -4,6 +4,94 @@ Two layers: the server records **metrics** for every session automatically, and 
 in `bench/` drives agent CLIs headless against the server, enforces budgets and publishes the
 results as `results/*.json` and [RESULTS.md](RESULTS.md).
 
+## Running a benchmark (copy-paste)
+
+### Prerequisites
+
+* Python 3.11+ venv with `requirements.txt` (`python3 -m venv venv && venv/bin/pip install -r requirements.txt`).
+* `Pokemon-Red_Version.gb` in the project root (your own dump; never committed). `--rom PATH` picks another file.
+* Check the setup first: `venv/bin/python -m pytest tests -q` (about 20 s) and
+  `venv/bin/python examples/reference_run.py Pokemon-Red_Version.gb` (expect "0 oddities").
+* LLM providers need their CLI on `PATH`, already logged in: `claude` (Claude Code) and/or `codex` (OpenAI Codex CLI).
+  The harness runs them headless with only the game server attached (no shell or file tools).
+* Jev needs a TypeSafe API key (docs.typesafe.ai). Put it in **`~/.typesafe-api-key`**, outside the repo, readable
+  only by you (`chmod 600 ~/.typesafe-api-key`). Never put it in the repo, `.env`, logs or commits. The harness
+  reads only the env var `TYPESAFE_API_KEY`, so load it **per command**:
+  `TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py ...`.
+  Without the key, a real Jev run exits immediately; `--mock` works offline.
+* Segment runs (`--segment`) need the local save states named in `bench/segments.json` under
+  `saves/Pokemon-Red_Version/` (gitignored). `power-on` needs none.
+
+### One command per mode
+
+Add `--smoke` to any of these first: short chunks and small budgets, then a pass/fail checklist (a few minutes,
+cents for Jev). A run without `--smoke` is a full run: 12 h of active play or 20,000 tool calls, whichever
+comes first.
+
+```bash
+# Jev, no LLM at all (the final exam; stuck for 2,000 steps = fail)
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant solo
+# Jev + a Claude Haiku 4.5 fallback on uncertain or stuck decisions (the self-improvement run mode)
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist --segment after-brock --iteration 2
+# Jev picks actions, Claude Haiku 4.5 plans objectives
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant hybrid
+# Claude Code + Haiku plays; Jev decides every battle('auto') turn
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant battles
+# any Claude model through Claude Code
+venv/bin/python bench/run.py --provider claude --model claude-haiku-4-5-20251001
+# any OpenAI model through the Codex CLI
+venv/bin/python bench/run.py --provider codex --model gpt-5.6-sol
+# offline check of the Jev track (MockJev, no network, no key, never a result)
+venv/bin/python bench/run.py --provider jev --variant solo --mock
+```
+
+Useful flags: `--segment NAME` (start from a fixed save state, stop at its goal), `--iteration N` (label for the
+improvement table), `--budget-hours`, `--max-calls`, `--resume-run bench/runs/<run_id>` (continue an interrupted
+run), `--jev-model jev-preview`. Run `venv/bin/python bench/run.py -h` for the rest. Runs are sequential: start
+the next one only after the previous one has exited.
+
+### What the outputs mean
+
+* `bench/runs/<run_id>/` (gitignored): everything about one run. `harness.log` (one line per chunk and the exit
+  reason), `harness.json` (state), `chunks/` (raw event streams), `data/` (server saves, metrics, server log).
+  Jev runs add `data/jev_decisions.jsonl` (every decision: options, choice, p, confidence, latency, cost,
+  outcome label), `data/jev_objectives.jsonl` (objective changes) and, for assist, `fallbacks.jsonl`.
+* `results/<run_id>.json`: the published record of a full run (not written for `--smoke`/`--mock`).
+  `RESULTS.md` is regenerated from all of them: LLM runs in the main leaderboard, Jev runs in the separate,
+  code-scaffolded Jev track with a calibration table and the self-improvement table.
+* Exit reasons: `champion` (Hall of Fame), `segment_goal` (the segment's goal milestone), `budget_calls`,
+  `budget_time`, `stuck` (Jev solo/assist: no progress for `--stuck-fail-steps`), `max_chunks`, `cli_failures`.
+* Key Jev numbers: fallbacks per 1k steps (assist; goal 0), Jev latency p50/p95, calibration (accuracy per
+  confidence bin; "correct" is a proxy label, see below), cost split Jev / Haiku / Opus.
+
+### Costs (October 2026 measurements)
+
+| Mode | Typical cost |
+|---|---|
+| jev-solo | Jev only: $0.042 per million input tokens, output free; about $0.03 per 1,000 decisions |
+| jev-assist | Jev plus about $0.008-0.01 per Haiku fallback (8-20 s each); iteration 1: 225 fallbacks = $1.87 |
+| jev-hybrid | Jev plus about $0.01 per Haiku planner call (one per 40 steps or when stuck) |
+| jev-battles | the Claude Code + Haiku run (the bulk) plus Jev per battle turn |
+| claude / codex | the model's own tokens: Haiku 4.5 full run $172, Fable 5.1 to the Champion $196 (see RESULTS.md) |
+| improve.py `--call` | one Opus 5.5 call per iteration, roughly $1-3 (the prompt holds the Jev source + clusters) |
+
+### Troubleshooting
+
+* **"TYPESAFE_API_KEY is not set"**: the key was not loaded for this command; use the `"$(cat ~/.typesafe-api-key)"`
+  prefix. 401 = wrong key. 429/529 are retried with backoff by the client.
+* **Oak's lab "Don't go away yet!"**: after the push-back the game ignores directions until a menu opens and
+  closes. The Jev agent opens and closes START automatically and retries the walk; an LLM agent may need to press
+  START then B itself.
+* **A run seems stuck**: `tail bench/runs/<run_id>/harness.log`; for Jev, the last lines of
+  `data/jev_decisions.jsonl` show the repeating choice. Stop with Ctrl-C (or `kill` the `run.py` process); continue
+  later with `--resume-run`.
+* **"segment ... needs the local save state"**: create it (for example from a run's `data/saves/autosave.state`
+  at the segment goal) and copy it to the path in `bench/segments.json`.
+* **CLI errors / rate limits** (claude, codex): the harness pauses on rate limits and resumes; three CLI failures
+  in a row end the run. Make sure the CLI is logged in by running it once interactively.
+* **No `.ram` next to the ROM**: keep the project ROM free of a battery save for reproducible runs (each run uses
+  its own ROM copy anyway).
+
 ## What the server records
 
 Nothing needs to be called except `metrics("finalize")` at the end (or start the server with
@@ -129,12 +217,16 @@ Variants (`--variant`):
   per-gym level target, teach an HM as soon as it is in the bag, use Cut/Surf/Strength when the hint
   says an obstacle is in front); stuck recovery (frontier exploration of unvisited exits after 60 idle
   steps, longer walks and menu resets after 150, START/B menu reset after 15 steps without moving, reload
-  the last `jev-progress` checkpoint after 45). Jev picks every action and answers Nouls: "are we
+  the last `jev-progress` checkpoint after 45, and on any screen after 500 steps without progress; a menu,
+  dialog or prompt screen seen 3 times without progress offers only the options not yet tried there). Jev
+  picks every action and answers Nouls: "are we
   stuck?" and, for story events code cannot see (Silph Co. cleared), "is this objective done?" (three
   answers >= 0.8 in a row mark it done).
 * **assist** (the run mode of the self-improvement loop): jev-solo's scaffolding plus a safety net. When
-  Jev's confidence is below `--fallback-threshold` (0.3), or on the map code detects stuck (recovery level 2
-  or 10 steps without moving) or a loop (an option's identical result 3 times in the last 12 actions),
+  Jev's confidence is below `--fallback-threshold` (0.3), or code detects stuck (on the map: recovery level 2
+  or 10 steps without moving; on any menu, dialog or prompt screen: the same screen came back 3 times without
+  progress and every option there was tried) or a loop (an option's identical result 3 times in the last 12
+  actions; code-forced presses, logged as `(auto)`, do not count, and `press A` on a prompt is never dropped),
   Claude Haiku 4.5 picks that one action from the same option list (at most every 3 steps). Every
   fallback is a structured event in `bench/runs/<id>/fallbacks.jsonl`: trigger, map/position, objective
   and graph node, a state summary (badges, money, party, bag, moves, recent milestones), screen text,

@@ -63,6 +63,25 @@ Then point your MCP client at `server.py` (see [QUICKSTART.md](QUICKSTART.md)):
 }
 ```
 
+## Benchmarks
+
+`bench/run.py` plays one autonomous run with an LLM agent CLI (Claude Code, Codex) or with TypeSafe's Jev, under
+a 12 h / 20,000-call budget, and publishes `results/<run>.json` plus [RESULTS.md](RESULTS.md). Prerequisites,
+costs, outputs and troubleshooting are in [BENCHMARKING.md](BENCHMARKING.md#running-a-benchmark-copy-paste).
+Jev's key lives in `~/.typesafe-api-key` (chmod 600, never in the repo) and is loaded per command:
+
+```bash
+venv/bin/python bench/run.py --provider claude --model claude-haiku-4-5-20251001          # any Claude model
+venv/bin/python bench/run.py --provider codex --model gpt-5.6-sol                         # any Codex model
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant solo      # no LLM
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant assist    # + Haiku fallback
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant hybrid    # + Haiku planner
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant battles   # Haiku plays, Jev battles
+venv/bin/python bench/run.py --provider jev --mock                                         # offline check, no key
+```
+
+Add `--smoke` for a few-minute checklist run first.
+
 ## Tools
 
 | Tool | What it does |

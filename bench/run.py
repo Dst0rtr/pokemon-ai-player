@@ -266,6 +266,8 @@ class Run:
             except OSError:
                 pass
             if self.proc.poll() is not None:
+                if self.provider.parser == "jev" and stats.result_text == "stuck":
+                    return "stuck"                       # the Jev agent gave up: no progress for --stuck-fail-steps
                 return "rate_limited" if stats.rate_limited else ("cli_error" if stats.errors and not stats.tool_calls else "exited")
             elapsed = time.time() - started
             if self.stop_requested:
@@ -321,7 +323,7 @@ class Run:
             if self.stop_requested:
                 return "manual"
             rec = self.run_chunk()
-            if rec["exit_reason"] in ("champion", "budget_calls", "budget_time", "manual", "max_chunks", "segment_goal"):
+            if rec["exit_reason"] in ("champion", "budget_calls", "budget_time", "manual", "max_chunks", "segment_goal", "stuck"):
                 return rec["exit_reason"]
             if rec["exit_reason"] == "rate_limited":
                 self.log(f"rate limited: pausing {backoff} min")
@@ -480,7 +482,7 @@ def main(argv=None) -> None:
                         "uncertain/stuck decision, logged to fallbacks.jsonl; hybrid = Haiku planner; scripted = short route; "
                         "battles = Haiku run, Jev battles")
     p.add_argument("--fallback-threshold", type=float, default=0.3, help="jev-assist: fall back below this Jev confidence")
-    p.add_argument("--stuck-fail-steps", type=int, default=2000, help="jev-solo: steps without progress that end the exam")
+    p.add_argument("--stuck-fail-steps", type=int, default=2000, help="jev solo/assist: steps without progress that end the run as stuck (solo: a fail)")
     p.add_argument("--segment", help="start from a fixed save state and stop at its goal (bench/segments.json)")
     p.add_argument("--iteration", type=int, help="self-improvement iteration number (recorded; RESULTS.md tracks the trend)")
     p.add_argument("--jev-model", default="jev-latest")

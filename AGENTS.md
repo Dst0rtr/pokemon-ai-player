@@ -12,7 +12,7 @@ dialogue/menus decoded from VRAM as text).
 
 | File | Purpose |
 |---|---|
-| `server.py` | FastMCP server: 10 tools, agent guide in the `instructions` field, CLI flags |
+| `server.py` | FastMCP server: 14 tools, agent guide in the `instructions` field, CLI flags |
 | `emulator.py` | `Emulator` class: PyBoy wrapper, button-script parser, tile-accurate `walk`, screenshots with change detection, save states, autosave, memory access, per-action bookkeeping |
 | `metrics.py` | `MetricsTracker`: real/emulated time, tool-call and image counts, milestones, JSON + text reports |
 | `games/__init__.py` | profile registry; `detect_profile()` matches the cartridge title |
@@ -20,7 +20,8 @@ dialogue/menus decoded from VRAM as text).
 | `games/pokemon_gen1.py` | Red/Blue/Yellow: status line, party/battle/items/map sections, screen text, milestones |
 | `games/gen1_data.py` | verified WRAM addresses, charmap, species/move/item/map tables |
 | `games/pyboy_wrapped.py` | score/lives for games PyBoy has wrappers for (Tetris, Mario Land, Kirby, Pinball) |
-| `tests/` | pytest (66): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report |
+| `tests/` | pytest (99): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trip, harness parsers/report, Jev track (mocked) |
+| `bench/` | benchmark harness (`run.py`, `report.py`, `stream.py`, `providers.py`) and the Jev track (`jev.py`, `jev_agent.py`, `jev_solo.py`, `improve.py`, `segments.json`) |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 
@@ -36,10 +37,35 @@ python server.py --rom Pokemon-Red_Version.gb --ai-model NAME [--resume]
 python examples/extended_run.py Pokemon-Red_Version.gb       # ~15 s from the local after-brock state; expect "0 oddities"
 python bench/run.py --provider claude --model claude-haiku-4-5-20251001 --smoke   # harness checklist (uses the real CLI)
 python bench/run.py --provider codex --model gpt-5.6-sol      # a full 12 h / 20k-call benchmark run -> results/, RESULTS.md
+python bench/run.py --provider jev --variant solo --mock       # Jev track offline (MockJev); real runs need TYPESAFE_API_KEY
 ```
 
 Clients must run the interpreter that has the dependencies (use the venv path in the config).
 `stdout` is the MCP transport: never `print()` in server code; use `logging` (stderr).
+
+## Running a benchmark unattended
+
+Full details: `BENCHMARKING.md` ("Running a benchmark"). Checklist for a coding agent:
+
+1. Gate: `venv/bin/python -m pytest tests -q` passes and `venv/bin/python examples/reference_run.py Pokemon-Red_Version.gb`
+   prints "0 oddities". Do not spend model hours if either fails.
+2. Only one run at a time. Start it in the background and wait for the process to exit; do not poll in a tight loop
+   (`tail bench/runs/<run_id>/harness.log` shows one line per chunk). The harness enforces the 12 h / 20k-call
+   budget, resumes chunks and pauses on rate limits by itself.
+3. Jev runs: the key is in `~/.typesafe-api-key`. Load it only as a per-command prefix,
+   `TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --provider jev --variant solo`.
+   Never print it, echo it, write it to a file, `.env`, a log or a commit.
+4. `--smoke` (minutes, cents) is always fine. A full run, a multi-hour segment run or an Opus analysis
+   (`bench/improve.py analyze ... --call`) needs the owner's go-ahead.
+5. Exit reasons in `harness.log`: `champion`, `segment_goal`, `budget_calls`, `budget_time`, `stuck` (Jev made no
+   progress for `--stuck-fail-steps`), `cli_error`. A full run writes `results/<run_id>.json` and regenerates
+   `RESULTS.md`; commit those only when asked, never `bench/runs/`.
+6. Self-improvement loop (Jev): `bench/run.py --variant assist --segment S --iteration N` →
+   `bench/improve.py analyze bench/runs/<run_id> --iteration N [--call]` → review `bench/iterations/itN/` →
+   `bench/improve.py apply --iteration N` (new branch, never main) → tests → rerun with `--iteration N+1` →
+   `bench/improve.py compare --segment S`. The strict exam is `--variant solo` (no LLM, stuck = fail).
+7. Known game quirk: after Oak's "Don't go away yet!" the game ignores directions until a menu opens and closes
+   (press START, then B). The Jev agent does this itself.
 
 ## Tool set (keep it small)
 
