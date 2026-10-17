@@ -278,6 +278,9 @@ class Agent:
             elif o.map not in known:
                 o.npcs = parse(await self.tool("state", section="map")).npcs
                 known[o.map] = [list(n) for n in o.npcs]
+            # hidden objects keep their sprite slot: a spot that answered "nothing to talk to here" is nobody
+            said = self.s["said"].get(o.map, {})
+            o.npcs = [n for n in o.npcs if not said.get(f"{n[0]},{n[1]}", "").startswith("nothing to talk to")]
         if isinstance(self.nav, LearnedAtlas) and o.mode == "overworld" and o.map and map_id(o.map) is not None \
                 and (not self.nav.known(map_id(o.map)) or o.map != self.s.get("atlas_map")):
             # learned atlas: record what the player can see on entering a map (full map view + wWarpEntries in WRAM)
@@ -433,7 +436,14 @@ class Agent:
         if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk"):
             m = re.search(r"\((\d+),(\d+)\)", opt.label) if opt.label.startswith(("talk to the person", "examine the object")) else None
             key = f"{m[1]},{m[2]}" if m else f"facing {o.pos} {o.facing}"
-            self.s["said"].setdefault(o.map, {})[key] = after.head[:80]
+            if m and opt.label.startswith("examine the object"):
+                key += " " + opt.label.rsplit(" from ", 1)[-1]     # each side is a different try
+            said = self.s["said"].setdefault(o.map, {})
+            if not after.head.startswith("nothing to talk to"):
+                # a real conversation: the room may have changed (Bill came out), retry the empty spots
+                for k in [k for k, v in said.items() if v.startswith("nothing to talk to")]:
+                    del said[k]
+            said[key] = after.head[:80]
         if opt.tool == "manage" and opt.args.get("action") == "save":
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
@@ -603,11 +613,24 @@ class Agent:
         if not objs or len(objs) > 12:
             return []
         said = self.s["said"].get(o.map, {})
-        grid = self.grid(o.map) or {(x, y): c for y, row in enumerate(cells) for x, c in enumerate(row)}
-        opts = J.talk_to_options(dataclasses.replace(o, npcs=objs), grid, limit=6, said=said)
-        for x in opts:
-            x.label = x.label.replace("talk to the person or object", "examine the object")
-        return opts
+        px, py = o.pos
+        sides = (("below", (0, 1), "up"), ("left", (-1, 0), "right"), ("right", (1, 0), "left"), ("above", (0, -1), "down"))
+        cands = []
+        for x, y in objs:                                  # machines and PCs are used from below first
+            for rank, (side, (dx, dy), face) in enumerate(sides):
+                sx, sy = x + dx, y + dy
+                if not (0 <= sx < w and 0 <= sy < h) or cells[sy][sx] not in (".", ","):
+                    continue
+                key = f"{x},{y} {side}"
+                first = ({"path": f"{face} 1", "on_battle": "stop"} if (sx, sy) == (px, py)
+                         else {"path": f"to {sx},{sy}", "on_battle": "stop"})
+                then = ([("walk", {"path": f"{face} 1", "on_battle": "stop"})] if (sx, sy) != (px, py) else []) + [("talk", {})]
+                before = said.get(key)
+                cands.append(((key in said, rank, abs(sx - px) + abs(sy - py)), Option(
+                    f"examine the object at ({x},{y}) from {side}", "walk", first,
+                    f"stand {side} it, face it and press A; " + (f"tried before: {before}" if before else "not tried yet"),
+                    then=then)))
+        return [o_ for _, o_ in sorted(cands, key=lambda c: c[0])[:8]]
 
     def train_options(self, o: Obs, facts) -> list[Option]:
         """Training: walk into the nearest reachable tall grass and pace there (wild battles come from grass); with no
