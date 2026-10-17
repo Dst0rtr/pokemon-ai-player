@@ -736,8 +736,9 @@ def test_agent_offers_route_and_concrete_warps_instead_of_nearest_ladder(nav, tm
     assert path[0] == (14, 35) and path[-1] == (5, 5) and len(path) > 10
     o.npcs = [path[len(path) // 2]]
     opts2, _ = agent.nav_options(o, ["Cerulean City"], facts)
-    clear = [x for x in opts2 if x.label.startswith("clear the route")]
-    assert clear and "blocked at" in opts2[0].desc
+    assert opts2[0].label.startswith("follow the map route to Cerulean City: first clear the way at")   # the route clears it
+    assert "blocked by" in opts2[0].desc and opts2[0].then[-1] == ("talk", {})
+    assert not any(x.label.startswith("walk to the warp at (5,5)") for x in opts2)
     agent.s["step"] += 5                                                 # failed again later: avoid that hop
     agent.nav_feedback(o, opts[0], stuck, key)
     assert agent.s["nav_blocked"][key] > agent.s["step"]
@@ -836,3 +837,17 @@ def test_results_record_how_maps_were_known():
     assert map_cell({"variant": "solo", "map_source": {"source": "learned", "atlas_seed": "a.json"}}) == "learned (carried atlas)"
     from bench.run import build_parser
     assert build_parser().parse_args(["--mode", "jev-solo"]).map_source == "learned"
+
+
+def test_learned_atlas_remembers_unreachable_targets(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b2 = map_id("Mt. Moon B2F")
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    atlas.observe(b2, _view("Mt. Moon B2F", ["#######", "#D...D#", "#######"]), _warps_hex([(1, 1, 0, 60), (5, 1, 1, 60)]), [])
+    assert {(h.x, h.y) for h in atlas.frontier(b2, (4, 1), set())} == {(1, 1), (5, 1)}
+    atlas.record_noroute(b2, (4, 1), (1, 1))            # the map view hid an elevation step
+    assert {(h.x, h.y) for h in atlas.frontier(b2, (4, 1), set())} == {(5, 1)}
+    assert {(h.x, h.y) for h in atlas.frontier(b2, (4, 1), set(), blocked=frozenset({f"{b2}:5,1"}))} == set()
+    atlas.save()
+    assert LearnedAtlas(tmp_path / "b.json", seed=tmp_path / "a.json").unreachable(b2, (3, 1), (1, 1))

@@ -94,6 +94,7 @@ class Agent:
         self.stop = ""
         self.route_hint = ""
         self.why = ""                                  # the director's reason for the objective (heal, train, node id)
+        self.exploring = False
         self.edge_hop: Optional[tuple] = None           # (side, x, y) of the chosen edge-crossing option (learned atlas)
         self.edge_opts: dict = {}
         self.planner_cost = 0.0
@@ -312,7 +313,7 @@ class Agent:
                 o.npcs = parse(await self.tool("state", section="map")).npcs   # who stands in the way (no view in a refusal)
             nav_opts, route_key = self.nav_options(o, targets, facts, why)
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
-                quiet = bool(route_key) and self.s.get("recovery", 0) == 0   # blind 4-tile walks only dilute the choice
+                quiet = (bool(route_key) or self.exploring) and self.s.get("recovery", 0) == 0   # blind walks dilute the choice
                 opts = nav_opts + [x for x in opts if not (x.tool == "walk" and NAME_WALK_RE.match(x.args.get("path", "")))
                                    and not (quiet and x.label.startswith("walk ") and x.label.endswith(" 4 tiles"))]
             if why == "heal" and o.map.endswith("Poké Center"):
@@ -444,9 +445,10 @@ class Agent:
             return [], ""
         if self.s["nav_at"] != self.s.get("last_progress_step", 0):
             self.s["nav_taken"], self.s["nav_at"] = {}, self.s.get("last_progress_step", 0)
-        opts, route_key = [], ""
+        opts, route_key, skip = [], "", None
         self.route_hint = ""
         self.edge_opts = {}
+        self.exploring = False
         # healing: the targets list the nearest Poké Center first; otherwise the route ends at the last target
         order = targets if why == "heal" else list(reversed(targets))
         goal = next((map_id(t) for t in order if map_id(t) is not None), None)
@@ -473,17 +475,24 @@ class Agent:
                         grid = self.grid(o.map) or o.grid or {(x, y): c for y, row in enumerate(self.nav.map(cur)["cells"])
                                                            for x, c in enumerate(row)}
                         clear = J.talk_to_options(dataclasses.replace(o, npcs=blockers), grid)
-                        for x in clear:
-                            x.label = x.label.replace("talk to the person or object", "clear the route: talk to the person or object")
-                            x.desc = "it stands in the only way along the route (take the item, or talk/battle to make it move)"
-                        opts += clear
-                        desc += f"; the way is blocked at {', '.join(f'({bx},{by})' for bx, by in blockers)}"
-                opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc, then=then))
-                if h.kind == "edge":
+                        if clear:
+                            # the route's next step is to clear the way: the route option itself walks up to the
+                            # blocker and talks to it (take the item / start the battle); Jev still picks the route
+                            c = clear[0]
+                            bx, by = re.search(r"\((\d+),(\d+)\)", c.label).groups()
+                            opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: first clear the way at "
+                                                  f"({bx},{by}) (talk to it / take it)", c.tool, c.args,
+                                                  desc + f"; the only way on is blocked by someone or something at ({bx},{by})",
+                                                  then=c.then))
+                            skip = (h.x, h.y)              # walking straight there fails until the way is clear
+                if skip is None:
+                    opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc, then=then))
+                if h.kind == "edge" and skip is None:
                     self.edge_opts[opts[0].label] = (h.side, h.x, h.y)
         if isinstance(self.nav, LearnedAtlas) and not route_key:
             # the objective's map is not in the atlas (or not reachable through it yet): explore frontier-first
-            for h in self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut)[:2]:
+            blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
+            for h in self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut, blocked=blocked)[:2]:
                 walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
                 if not walk:
                     continue
@@ -492,13 +501,14 @@ class Agent:
                 label = f"explore the frontier: {what}"
                 opts.insert(0, Option(label, "walk", walk[0], "the atlas does not know the way to the objective yet: "
                                       "unexplored warps and edges (never-visited maps first) find it", then=walk[1]))
+                self.exploring = True
                 if h.kind == "edge":
                     self.edge_opts[label] = (h.side, h.x, h.y)
         visited = set(self.s["visited"])
         _, trans = self.nav.reach(cur, tuple(o.pos), surf=surf, cut=cut)
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}   # warps this section of the map can reach
         for i, (x, y, _, _) in enumerate(self.nav.map(cur)["warps"]):
-            if (x, y) not in near:
+            if (x, y) not in near or (x, y) == skip:
                 continue
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
             name = dests.pop() if len(dests) == 1 else "outside"
@@ -525,6 +535,11 @@ class Agent:
                 and cur is not None and map_id(after.map) is not None:
             side, ex_, ey_ = self.edge_hop
             self.nav.record_edge(cur, side, ex_, ey_, map_id(after.map), *after.pos)
+        nr = re.match(r"no walkable route from \((\d+),(\d+)\) to \((\d+),(\d+)\)", after.head)
+        if nr and isinstance(self.nav, LearnedAtlas) and cur is not None:
+            self.nav.record_noroute(cur, (int(nr[1]), int(nr[2])), (int(nr[3]), int(nr[4])))
+        if after.map and after.map != o.map:
+            pass
         elif after.mode == "overworld" and after.map == o.map and ("no walkable route" in after.head or
                                                                     after.pos == o.pos and "already at" not in after.head):
             key = f"{cur}:{m[1]},{m[2]}" if m else (route_key if opt.label.startswith("follow the map route") else "")

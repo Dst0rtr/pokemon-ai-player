@@ -5,6 +5,8 @@ What it may use is what any player of the MCP server can see:
 * on entering a map, the server's full map view (`state map`: walls, walkable tiles, grass, water, ledges, `D` warp
   tiles) and the connection sides (`connections:`), plus the map's warp list from WRAM (`memory D3AE`:
   wWarpEntries, y / x / destination warp index / destination map per warp);
+* when the server answers "no walkable route from A to B" (the map view does not show cave elevation steps), that
+  B is out of reach from around A;
 * when it takes a warp or crosses an edge, where it actually arrived. An arrival on a warp tile is assumed to lead
   back (Gen 1 warps come in pairs) until a real crossing says otherwise; one edge crossing gives that edge's
   alignment for every other cell on it.
@@ -30,6 +32,7 @@ from games import gen1_data as D
 
 UNKNOWN = (-1, -1)                    # arrival point not known yet: "somewhere on that map"
 UNKNOWN_COST = 30                     # steps assumed from an unknown arrival point to any warp/edge of that map
+NOROUTE_NEAR = 6                      # a "no walkable route" learned from a cell applies to starts this close to it
 ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^]+)$")
 HEX_RE = re.compile(r"^([0-9A-F]{4}): ((?:[0-9A-F]{2} ?)+)$", re.M)
 SIDES = ("north", "south", "west", "east")
@@ -84,6 +87,9 @@ class LearnedAtlas(WorldNav):
                 if wk not in mine["arrivals"] or not mine["arrivals"][wk].get("seen") and arr.get("seen"):
                     mine["arrivals"][wk] = arr
             mine["visits"] = max(mine.get("visits", 0), m.get("visits", 0))
+            for rec in m.get("noroute", []):
+                if rec not in mine.setdefault("noroute", []):
+                    mine["noroute"].append(rec)
         for k, e in (other.get("edges") or {}).items():
             self.data["edges"].setdefault(k, e)
         self._maps.clear()
@@ -132,6 +138,19 @@ class LearnedAtlas(WorldNav):
         self._maps.pop(mid, None)
         self._maps.pop(dest, None)
         self.dirty = True
+
+    def record_noroute(self, mid: int, frm: tuple[int, int], to: tuple[int, int]) -> None:
+        m = self.data["maps"].setdefault(str(mid), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
+        rec = [frm[0], frm[1], to[0], to[1]]
+        if rec not in m.setdefault("noroute", []):
+            m["noroute"].append(rec)
+            self._maps.pop(mid, None)
+            self.dirty = True
+
+    def unreachable(self, mid: int, start: tuple[int, int], target: tuple[int, int]) -> bool:
+        m = self.data["maps"].get(str(mid)) or {}
+        return any((tx, ty) == target and abs(fx - start[0]) + abs(fy - start[1]) <= NOROUTE_NEAR
+                   for fx, fy, tx, ty in m.get("noroute", []))
 
     def record_edge(self, mid: int, side: str, x: int, y: int, dest: int, ax: int, ay: int) -> None:
         """Crossing the `side` edge at (x,y) arrived at (ax,ay): that edge's offset, and the way back."""
@@ -196,7 +215,7 @@ class LearnedAtlas(WorldNav):
                 trans.append((UNKNOWN_COST, Hop(mid, "edge", -1, -1, dm, side=side, steps=UNKNOWN_COST), (dm, *UNKNOWN)))
             return {}, trans
         dist, trans = super().reach(mid, start, surf=surf, cut=cut, avoid=avoid)
-        out = [t for t in trans if t[1].kind == "warp"]
+        out = [t for t in trans if t[1].kind == "warp" and not self.unreachable(mid, start, (t[1].x, t[1].y))]
         cells = m["cells"]
         h, w = len(cells), len(cells[0]) if cells else 0
         for side, dm, _, _ in m["conns"]:
@@ -205,6 +224,7 @@ class LearnedAtlas(WorldNav):
             if not edge:
                 continue
             e = self.data["edges"].get(f"{mid}:{side}")
+            edge = [c for c in edge if not self.unreachable(mid, start, c)]
             for c in sorted(edge, key=lambda c: dist[c])[:6]:  # a few nearest crossing cells per side
                 if e and e["map"] == dm:
                     arr = (dm, c[0] + e["offset"], e["fixed"]) if side in ("north", "south") else (dm, e["fixed"], c[1] + e["offset"])
@@ -220,7 +240,8 @@ class LearnedAtlas(WorldNav):
             return None
 
     # ---------------------------------------------------------------- frontier
-    def frontier(self, mid: int, pos: tuple[int, int], visited: set, surf: bool = False, cut: bool = False) -> list[tuple]:
+    def frontier(self, mid: int, pos: tuple[int, int], visited: set, surf: bool = False, cut: bool = False,
+                 blocked: frozenset = frozenset()) -> list[tuple]:
         """Untaken warps and uncrossed edges reachable from pos, best first: to never-visited maps, then nearest."""
         try:
             _, trans = self.reach(mid, pos, surf=surf, cut=cut)
@@ -235,7 +256,7 @@ class LearnedAtlas(WorldNav):
             else:
                 taken = self.data["edges"].get(f"{mid}:{hop.side}", {}).get("seen")
                 key = ("edge", hop.side)
-            if taken or key in seen:
+            if taken or key in seen or f"{mid}:{hop.x},{hop.y}" in blocked:
                 continue
             seen.add(key)
             new = D.map_name(hop.dest) not in visited
