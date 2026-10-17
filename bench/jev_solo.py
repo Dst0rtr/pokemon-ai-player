@@ -34,7 +34,8 @@ POKE_CENTERS = {"Viridian City": "Viridian Poké Center", "Pewter City": "Pewter
                 "Celadon City": "Celadon Poké Center", "Fuchsia City": "Fuchsia Poké Center",
                 "Saffron City": "Saffron Poké Center", "Cinnabar Island": "Cinnabar Poké Center",
                 "Route 10": "Rock Tunnel Poké Center", "Indigo Plateau Lobby": "Indigo Plateau Lobby"}
-NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
+NURSE_SPOT = (3, 3)
+GYM_NODES = ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni")                                  # where the player talks to a Poké Center nurse (facing up)
 
 
 @dataclass

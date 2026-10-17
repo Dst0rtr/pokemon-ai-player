@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, ClaudePlanner, JevError, drop_repeats,  # noqa: E402
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
-from bench.jev_solo import STUCK_Q, SoloDirector  # noqa: E402
+from bench.jev_solo import GYM_NODES, STUCK_Q, SoloDirector  # noqa: E402
 from bench.jev_nav import MOVES, WorldNav, map_id  # noqa: E402
 from bench.jev_atlas import LearnedAtlas  # noqa: E402
 from games import gen1_data as D  # noqa: E402
@@ -319,6 +319,11 @@ class Agent:
                 quiet = (bool(route_key) or self.exploring) and self.s.get("recovery", 0) == 0   # blind walks dilute the choice
                 opts = nav_opts + [x for x in opts if not (x.tool == "walk" and NAME_WALK_RE.match(x.args.get("path", "")))
                                    and not (quiet and x.label.startswith("walk ") and x.label.endswith(" 4 tiles"))]
+            if why in GYM_NODES and o.map.endswith("Gym") and any(x.label.startswith("talk to the person") for x in opts) \
+                    and self.s.get("recovery", 0) < 2:
+                # in the gym the objective names: the trainers and the leader are the options (blind walks only pace)
+                opts = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))
+                        and x.label != "talk to what you are facing"]
             if why == "heal" and o.map.endswith("Poké Center"):
                 opts = [x for x in opts if not x.label.startswith("talk to the person")]   # the nurse option replaces them
             seen, uniq = set(), []
@@ -480,7 +485,7 @@ class Agent:
                     opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc, then=then))
                 if h.kind == "edge" and skip is None:
                     self.edge_opts[opts[0].label] = (h.side, h.x, h.y)
-        if isinstance(self.nav, LearnedAtlas) and not route_key:
+        if isinstance(self.nav, LearnedAtlas) and not route_key and goal != cur:   # on the objective's map: nothing to explore
             # the objective's map is not in the atlas (or not reachable through it yet): explore frontier-first
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
             front = self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut, blocked=blocked,
