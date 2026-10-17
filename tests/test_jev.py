@@ -2,6 +2,7 @@
 solo objective graph, agent loop (fake server and the real one over MCP), harness glue. No network."""
 
 import asyncio
+import dataclasses
 import re
 import json
 import os
@@ -1026,6 +1027,18 @@ def test_talk_refused_by_a_tree_offers_cut(tmp_path):
     assert cut.args["path"] == "to 2,4" and cut.then[0] == ("walk", {"path": "up 1", "on_battle": "stop"})
 
 
+def test_four_moves_prompt_is_not_an_hm_refusal(tmp_path):
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    teach = J.Option("teach HM01 (Cut) to Charizard", "manage", {"action": "use", "target": "HM01", "target2": "Charizard: weakest"})
+    agent.remember_refusal(teach, "Booted up an HM! | AAAAAAAAAA is trying to learn | trying to learn CUT! | But, AAAAAAAAAA "
+                                  "can't learn more | can't learn more than 4 moves! | AAAAAAAAAA learned CUT!")
+    assert not agent.s.get("hm_no")                                        # full run 45: Charizard never got Cut
+    agent.remember_refusal(dataclasses.replace(teach, args=dict(teach.args, target2="Magikarp: weakest")),
+                           "MAGIKARP is not compatible with | compatible with CUT. | It can't learn CUT.")
+    assert agent.s["hm_no"] == ["HM01:Magikarp"]
+
+
 def test_vermilion_gym_trash_cans_are_searched_in_order():
     """Full run 42: in the Vermilion Gym with every person talked to, Jev walked out and back in ~600 times."""
     d = SOLO.SoloDirector({"visited": ["Vermilion Gym"], "milestones": []})
@@ -1034,6 +1047,10 @@ def test_vermilion_gym_trash_cans_are_searched_in_order():
     cans = [x for x in d.extra_options(o, f, [], [], [], "surge") if x.label.startswith("search the trash can")]
     assert cans[0].label == "search the trash can at (3,7)" and cans[0].args["path"] == "up 1"   # it stands below it
     assert cans[0].then == [("talk", {})] and cans[1].then[0] == ("walk", {"path": "up 1", "on_battle": "stop"})
+    o.npcs = [(3, 8)]                                                       # full run 45: a trainer stands below it
+    blocked = next(x for x in d.extra_options(o, f, [], [], [], "surge") if x.label == "search the trash can at (3,7)")
+    assert blocked.args["path"] == "to 3,6" and blocked.then[0][1]["path"] == "down 1"
+    o.npcs = []
     d.trash_result("search the trash can at (3,7)", "dialogue ended: Nope, there's only trash here.")
     labels = [x.label for x in d.extra_options(o, f, [], [], [], "surge")]
     assert "search the trash can at (3,7)" not in labels

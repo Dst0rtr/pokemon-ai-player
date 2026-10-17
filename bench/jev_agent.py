@@ -452,9 +452,7 @@ class Agent:
             self.s.pop("tree_target", None)
         if self.director:
             self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
-        if opt.tool == "manage" and opt.args.get("action") == "use" and re.search(r"not compatible|can't learn", reply):
-            refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
-            self.s.setdefault("hm_no", []).append(refused)   # this Pokémon cannot learn that HM: teach another one
+        self.remember_refusal(opt, reply)
         if opt.tool == "manage" and opt.args.get("action") == "save":
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
@@ -503,6 +501,13 @@ class Agent:
         return ""
 
     # ------------------------------------------------------------- navigation (static warp graph, no LLM)
+    def remember_refusal(self, opt: Option, reply: str) -> None:
+        """'X is not compatible with CUT': this Pokémon cannot learn that HM, teach another one. Only that line counts:
+        "can't learn more than 4 moves!" is the forget-a-move prompt (full run 45 marked Charizard refused on it)."""
+        if opt.tool == "manage" and opt.args.get("action") == "use" and "not compatible" in reply:
+            refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
+            self.s.setdefault("hm_no", []).append(refused)
+
     def remember_talk(self, o: Obs, opt: Option, after: Obs) -> None:
         """What a person or object answered, per map (shown in the next talk options; empty spots are dropped)."""
         if not (o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk")):

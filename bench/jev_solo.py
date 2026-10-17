@@ -322,12 +322,19 @@ class SoloDirector:
             cans = [c for c in TRASH_CANS if list(c) not in t["tried"]] or TRASH_CANS
             why = "Lt. Surge hid the door switches inside trash cans: search them"
         px, py = o.pos
+        people = {tuple(n) for n in o.npcs}
         opts = []
         for x, y in sorted(cans, key=lambda c: abs(c[0] - px) + abs(c[1] + 1 - py))[:6]:
-            here = (px, py) == (x, y + 1)
-            face = {"path": "up 1", "on_battle": "stop"}
+            # from below if free, else another side: trainers stand below some cans (full run 45 tried two ~134 times)
+            side = next(((sx, sy, d) for sx, sy, d in ((x, y + 1, "up"), (x, y - 1, "down"), (x - 1, y, "right"),
+                                                         (x + 1, y, "left")) if (sx, sy) not in people and sx >= 0), None)
+            if side is None:
+                continue
+            sx, sy, d = side
+            here = (px, py) == (sx, sy)
+            face = {"path": f"{d} 1", "on_battle": "stop"}
             opts.append(Option(f"search the trash can at ({x},{y})", "walk",
-                               face if here else {"path": f"to {x},{y + 1}", "on_battle": "stop"}, why,
+                               face if here else {"path": f"to {sx},{sy}", "on_battle": "stop"}, why,
                                then=([] if here else [("walk", face)]) + [("talk", {})]))
         return opts
 
