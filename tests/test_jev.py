@@ -233,6 +233,8 @@ def test_solo_objective_progression_and_rules():
     train = SOLO.Facts(badges=0, levels=[9], hp_ratio=1.0, visited={"Pewter City", "Viridian Forest", "Viridian City"},
                        milestones=["game started", "starter: X"], ever_items={"Oak's Parcel"})
     assert d.objective(train, o)[2] == "heal"                              # first visit to Pewter: use its Poké Center once
+    inside = J.parse("walked\nf1 Pewter Poké Center (3,6) facing up | X L9 30/30 | ¥3000 | 0 badges")
+    assert d.objective(train, inside)[2] == "heal"                         # inside it: no flip back to the graph
     d.s.setdefault("healed_at", []).append("Pewter Poké Center")
     assert d.objective(train, o)[2] == "train"
     hm = SOLO.Facts(items={"HM01"}, moves={"Tackle"})
