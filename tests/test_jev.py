@@ -851,3 +851,32 @@ def test_learned_atlas_remembers_unreachable_targets(tmp_path):
     assert {(h.x, h.y) for h in atlas.frontier(b2, (4, 1), set(), blocked=frozenset({f"{b2}:5,1"}))} == set()
     atlas.save()
     assert LearnedAtlas(tmp_path / "b.json", seed=tmp_path / "a.json").unreachable(b2, (3, 1), (1, 1))
+
+
+@requires_rom
+def test_refusals_without_a_status_line_still_count(nav, tmp_path):
+    """The server's 'no walkable route' reply has no status line; iteration 7 never recorded it (no clear option)."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=nav)
+    o = J.parse("walked\nf1 Mt. Moon B2F (13,7) facing up | Charmeleon L24 38/68 | ¥2543 | 1 badges")
+    opt = J.Option("follow the map route to Cerulean City: walk to the warp at (5,7) → Mt. Moon B1F", "walk", {"path": "to 5,7"})
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (13,7) to (5,7) on this map"), "61:5,7")
+    assert "61:5,7" in agent.s["nav_noroute"]
+    o.npcs = [(12, 6), (13, 6), (12, 8)]                  # the two fossils and the Super Nerd
+    opts, _ = agent.nav_options(o, ["Mt. Moon B1F", "Mt. Moon B2F", "Route 4", "Cerulean City"], SOLO.Facts(badges=1))
+    assert opts[0].label.startswith("follow the map route to Cerulean City: first clear the way at (1")
+    agent.nav_feedback(o, opts[0], J.parse("dialogue ended\nf1 Mt. Moon B2F (12,7) facing up | C L24 38/68 | ¥2543 | 1 badges"), "")
+    agent.nav_feedback(o, opts[0], J.parse("dialogue ended\nf1 Mt. Moon B2F (12,7) facing up | C L24 38/68 | ¥2543 | 1 badges"), "")
+    again, _ = agent.nav_options(o, ["Cerulean City"], SOLO.Facts(badges=1))
+    assert again[0].label != opts[0].label                # tried twice and still there: no longer a blocker
+
+
+def test_learned_frontier_prefers_the_objectives_maps(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b1 = map_id("Mt. Moon B1F")
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    atlas.observe(b1, _view("Mt. Moon B1F", ["#######", "#D.D.D#", "#######"]),
+                  _warps_hex([(1, 1, 0, 61), (3, 1, 0, 0xFF), (5, 1, 1, 61)]), [], last_map_text="D365: 0F")
+    hops = atlas.frontier(b1, (2, 1), {"Mt. Moon B2F", "Route 4"}, prefer=("Route 4", "Cerulean City"))
+    assert (hops[0].x, hops[0].dest_name) == (3, "Route 4")     # the exit: wLastMap names it, the objective lists it

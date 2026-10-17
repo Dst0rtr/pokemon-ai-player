@@ -272,7 +272,8 @@ class Agent:
             # learned atlas: record what the player can see on entering a map (full map view + wWarpEntries in WRAM)
             view = await self.tool("state", section="map")
             warps = await self.tool("memory", address="D3AE", length=129)
-            self.nav.observe(map_id(o.map), view, warps, cn)
+            last = await self.tool("memory", address="D365", length=1)        # wLastMap: where "outside" warps lead
+            self.nav.observe(map_id(o.map), view, warps, cn, last_map_text=last)
         if o.mode == "overworld" and o.map:
             self.s["atlas_map"] = o.map
 
@@ -466,25 +467,10 @@ class Agent:
                 route_key = f"{h.map}:{h.x},{h.y}"       # the key format WorldNav.route checks in `blocked`
                 desc = f"next hop of the shortest route in the game's map data: {via} ({len(route)} hops)"
                 self.route_hint = f"to reach {D.map_name(goal)}: {h.label()} on this map, then {via}"
-                if self.s["step"] - self.s["nav_noroute"].get(route_key, -10**9) <= NAV_BLOCK_STEPS:
-                    # the server found no way there although the map data has one: a person or object (an item
-                    # ball, a guard, a boulder) stands in the only gap. Offer to talk to it / pick it up first.
-                    path = set(self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=cut))
-                    blockers = [n for n in o.npcs if n in path]
-                    if blockers:
-                        grid = self.grid(o.map) or o.grid or {(x, y): c for y, row in enumerate(self.nav.map(cur)["cells"])
-                                                           for x, c in enumerate(row)}
-                        clear = J.talk_to_options(dataclasses.replace(o, npcs=blockers), grid)
-                        if clear:
-                            # the route's next step is to clear the way: the route option itself walks up to the
-                            # blocker and talks to it (take the item / start the battle); Jev still picks the route
-                            c = clear[0]
-                            bx, by = re.search(r"\((\d+),(\d+)\)", c.label).groups()
-                            opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: first clear the way at "
-                                                  f"({bx},{by}) (talk to it / take it)", c.tool, c.args,
-                                                  desc + f"; the only way on is blocked by someone or something at ({bx},{by})",
-                                                  then=c.then))
-                            skip = (h.x, h.y)              # walking straight there fails until the way is clear
+                clear = self.clear_option(cur, o, h, f"follow the map route to {D.map_name(goal)}", desc, surf, cut)
+                if clear:
+                    opts.insert(0, clear)
+                    skip = (h.x, h.y)                      # walking straight there fails until the way is clear
                 if skip is None:
                     opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc, then=then))
                 if h.kind == "edge" and skip is None:
@@ -492,15 +478,22 @@ class Agent:
         if isinstance(self.nav, LearnedAtlas) and not route_key:
             # the objective's map is not in the atlas (or not reachable through it yet): explore frontier-first
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
-            for h in self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut, blocked=blocked)[:2]:
+            for h in self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut, blocked=blocked,
+                                       prefer=tuple(targets))[:2]:
                 walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
                 if not walk:
                     continue
                 what = (f"cross the {h.side} edge → {h.dest_name} (never crossed)" if h.kind == "edge"
                         else f"walk to the untaken warp at ({h.x},{h.y}) → {h.dest_name}")
                 label = f"explore the frontier: {what}"
-                opts.insert(0, Option(label, "walk", walk[0], "the atlas does not know the way to the objective yet: "
-                                      "unexplored warps and edges (never-visited maps first) find it", then=walk[1]))
+                desc = "the atlas does not know the way to the objective yet: unexplored warps and edges (never-visited maps first) find it"
+                clear = self.clear_option(cur, o, h, "explore the frontier", desc, surf, cut)
+                if clear:
+                    opts.insert(0, clear)
+                    skip = (h.x, h.y)
+                    self.exploring = True
+                    continue
+                opts.insert(0, Option(label, "walk", walk[0], desc, then=walk[1]))
                 self.exploring = True
                 if h.kind == "edge":
                     self.edge_opts[label] = (h.side, h.x, h.y)
@@ -521,6 +514,27 @@ class Agent:
                                "this particular door, ladder or stairway", then=walk[1]))
         return opts, route_key
 
+    def clear_option(self, cur: int, o: Obs, h, prefix: str, desc: str, surf: bool, cut: bool) -> Optional[Option]:
+        """After the server found no way to this hop although the map data has one: if a person or object (an item
+        ball, a guard) stands on the map path, the hop's option becomes 'first clear the way': walk up to it and talk
+        (take the item / start the battle). Jev still has to pick it."""
+        key = f"{h.map}:{h.x},{h.y}"
+        if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) > NAV_BLOCK_STEPS:
+            return None
+        path = set(self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=cut))
+        tried = self.s.setdefault("clear_tries", {})
+        blockers = [n for n in o.npcs if n in path and tried.get(f"{h.map}:{n[0]},{n[1]}", 0) < 2]   # 2 tries: it stays
+        if not blockers:
+            return None
+        grid = self.grid(o.map) or o.grid or {(x, y): c for y, row in enumerate(self.nav.map(cur)["cells"]) for x, c in enumerate(row)}
+        clear = J.talk_to_options(dataclasses.replace(o, npcs=blockers), grid)
+        if not clear:
+            return None
+        c = clear[0]
+        bx, by = re.search(r"\((\d+),(\d+)\)", c.label).groups()
+        return Option(f"{prefix}: first clear the way at ({bx},{by}) (talk to it / take it)", c.tool, c.args,
+                      desc + f"; the only way on is blocked by someone or something at ({bx},{by})", then=c.then)
+
     def nav_feedback(self, o: Obs, opt: Option, after: Obs, route_key: str) -> None:
         """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
         # warp options carry their coordinates in the label (a warp you stand on is taken by stepping off and back)
@@ -535,13 +549,24 @@ class Agent:
                 and cur is not None and map_id(after.map) is not None:
             side, ex_, ey_ = self.edge_hop
             self.nav.record_edge(cur, side, ex_, ey_, map_id(after.map), *after.pos)
+        cl = re.search(r"first clear the way at \((\d+),(\d+)\)", opt.label)
+        if cl and cur is not None:
+            k = f"{cur}:{cl[1]},{cl[2]}"
+            self.s.setdefault("clear_tries", {})[k] = self.s["clear_tries"].get(k, 0) + 1
         nr = re.match(r"no walkable route from \((\d+),(\d+)\) to \((\d+),(\d+)\)", after.head)
         if nr and isinstance(self.nav, LearnedAtlas) and cur is not None:
-            self.nav.record_noroute(cur, (int(nr[1]), int(nr[2])), (int(nr[3]), int(nr[4])))
+            frm, to = (int(nr[1]), int(nr[2])), (int(nr[3]), int(nr[4]))
+            try:
+                on_path = set(self.nav.path_cells(cur, frm, to)) & set(o.npcs)
+            except KeyError:
+                on_path = set()
+            if not on_path:                              # a wall the map view does not show (elevation), not a person
+                self.nav.record_noroute(cur, frm, to)
         if after.map and after.map != o.map:
             pass
-        elif after.mode == "overworld" and after.map == o.map and ("no walkable route" in after.head or
-                                                                    after.pos == o.pos and "already at" not in after.head):
+        elif "no walkable route" in after.head or (after.mode == "overworld" and after.map == o.map and after.pos == o.pos
+                                                    and "already at" not in after.head):
+            # (a refusal carries no status line: no map in `after`)
             key = f"{cur}:{m[1]},{m[2]}" if m else (route_key if opt.label.startswith("follow the map route") else "")
             if key:
                 if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) <= NAV_BLOCK_STEPS:

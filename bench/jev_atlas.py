@@ -2,7 +2,7 @@
 
 What it may use is what any player of the MCP server can see:
 
-* on entering a map, the server's full map view (`state map`: walls, walkable tiles, grass, water, ledges, `D` warp
+* on entering a map, wLastMap (0xD365: where its "outside" warps lead), the server's full map view (`state map`: walls, walkable tiles, grass, water, ledges, `D` warp
   tiles) and the connection sides (`connections:`), plus the map's warp list from WRAM (`memory D3AE`:
   wWarpEntries, y / x / destination warp index / destination map per warp);
 * when the server answers "no walkable route from A to B" (the map view does not show cave elevation steps), that
@@ -80,7 +80,7 @@ class LearnedAtlas(WorldNav):
     def merge(self, other: dict) -> None:
         for k, m in (other.get("maps") or {}).items():
             mine = self.data["maps"].setdefault(k, {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
-            for key in ("cells", "warps", "conns"):
+            for key in ("cells", "warps", "conns", "outside"):
                 if m.get(key):
                     mine[key] = m[key]
             for wk, arr in (m.get("arrivals") or {}).items():
@@ -112,7 +112,7 @@ class LearnedAtlas(WorldNav):
         return {"maps": len(self.data["maps"]), "warps": warps, "warps_taken": seen, "edges": len(self.data["edges"])}
 
     # ---------------------------------------------------------------- learning
-    def observe(self, mid: int, view: str, warps_text: str, conns: list[tuple[str, str]]) -> None:
+    def observe(self, mid: int, view: str, warps_text: str, conns: list[tuple[str, str]], last_map_text: str = "") -> None:
         """Record a map on entry: its grid from the map view, its warps from WRAM, its connection sides."""
         m = self.data["maps"].setdefault(str(mid), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
         cells = parse_view(view)
@@ -124,6 +124,9 @@ class LearnedAtlas(WorldNav):
         if conns:
             ids = {v: k for k, v in D.MAPS.items()}
             m["conns"] = [[side, ids[name]] for side, name in conns if name in ids]
+        lm = HEX_RE.search(last_map_text or "")
+        if lm and int(lm[2].split()[0], 16) in D.MAPS:
+            m["outside"] = int(lm[2].split()[0], 16)
         m["visits"] = m.get("visits", 0) + 1
         self._maps.pop(mid, None)
         self.dirty = True
@@ -190,8 +193,9 @@ class LearnedAtlas(WorldNav):
         arr = m["arrivals"].get(f"{x},{y}")
         if arr:
             return [(arr["map"], arr["x"], arr["y"])]
-        if dm == 0xFF:
-            return []                                        # "back outside": unknown until taken once
+        if dm == 0xFF:                                       # "back outside": wLastMap, arrival unknown until taken once
+            out = self.data["maps"].get(str(mid), {}).get("outside")
+            return [(out, *UNKNOWN)] if out is not None else []
         try:
             dwarps = self.map(dm)["warps"]
             if dw < len(dwarps):
@@ -241,8 +245,9 @@ class LearnedAtlas(WorldNav):
 
     # ---------------------------------------------------------------- frontier
     def frontier(self, mid: int, pos: tuple[int, int], visited: set, surf: bool = False, cut: bool = False,
-                 blocked: frozenset = frozenset()) -> list[tuple]:
-        """Untaken warps and uncrossed edges reachable from pos, best first: to never-visited maps, then nearest."""
+                 blocked: frozenset = frozenset(), prefer: tuple = ()) -> list[tuple]:
+        """Untaken warps and uncrossed edges reachable from pos, best first: to a map the objective names (`prefer`,
+        later entries first), then to never-visited maps, then nearest."""
         try:
             _, trans = self.reach(mid, pos, surf=surf, cut=cut)
         except KeyError:
@@ -259,8 +264,9 @@ class LearnedAtlas(WorldNav):
             if taken or key in seen or f"{mid}:{hop.x},{hop.y}" in blocked:
                 continue
             seen.add(key)
-            new = D.map_name(hop.dest) not in visited
-            out.append((0 if new else 1, steps, hop))
+            name = D.map_name(hop.dest)
+            rank = -1 - list(prefer).index(name) if name in prefer else (0 if name not in visited else 1)
+            out.append((rank, steps, hop))
         return [h for *_, h in sorted(out, key=lambda t: (t[0], t[1]))]
 
 
