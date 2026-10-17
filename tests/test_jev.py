@@ -2,6 +2,7 @@
 solo objective graph, agent loop (fake server and the real one over MCP), harness glue. No network."""
 
 import asyncio
+import re
 import json
 import os
 import shutil
@@ -969,6 +970,29 @@ def test_tree_behind_a_ledge_is_still_found(tmp_path):
     assert not agent.nav.unreachable(r9, (1, 1), (6, 3))
     opts, _ = agent.nav_options(o, ["Cerulean City"], SOLO.Facts(badges=3, moves={"Cut"}))
     assert any("first cut the tree at (3,1)" in x.label for x in opts)
+
+
+def test_talk_refused_by_a_tree_offers_cut(tmp_path):
+    """Full run 44: Erika sits behind the Celadon Gym's trees; the talk option was refused ~240 times."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    gym = map_id("Celadon Gym")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(gym, _view("Celadon Gym", ["#######", "#..N..#", "#.....#", "##T####", "#.....#", "###D###"]),
+                      _warps_hex([(3, 5, 0, 0xFF)]), [])
+    o = J.parse("walked\nf1 Celadon Gym (3,4) facing up | C L49 138/168 | ¥2543 | 3 badges")
+    talk = J.Option("talk to the person or object at (3,1)", "walk", {"path": "to 3,2"})
+    agent.s["tree_target"] = None
+    after = J.parse("no walkable route from (3,4) to (3,2) on this map — a small tree (T) blocks part of this map")
+    agent.nav_feedback(o, talk, after, "")
+    tr = re.match(r"no walkable route from \(\d+,\d+\) to \((\d+),(\d+)\).*small tree", after.head)
+    assert tr                                                              # what the agent stores after the action
+    agent.s["tree_target"] = [gym, int(tr[1]), int(tr[2]), agent.s["step"]]
+    opts, _ = agent.nav_options(o, ["Celadon Gym"], SOLO.Facts(badges=3, moves={"Cut"}))
+    cut = next(x for x in opts if "first cut the tree at (2,3)" in x.label)
+    assert cut.args["path"] == "to 2,4" and cut.then[0] == ("walk", {"path": "up 1", "on_battle": "stop"})
 
 
 def test_vermilion_gym_trash_cans_are_searched_in_order():

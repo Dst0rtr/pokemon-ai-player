@@ -35,7 +35,7 @@ from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, Claud
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import GYM_NODES, STUCK_Q, SoloDirector  # noqa: E402
-from bench.jev_nav import MOVES, WorldNav, map_id  # noqa: E402
+from bench.jev_nav import MOVES, Hop, WorldNav, map_id  # noqa: E402
 from bench.jev_atlas import LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
 from bench import jev as J  # noqa: E402
@@ -442,6 +442,11 @@ class Agent:
         if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk" or any(t == "talk" for t, _ in opt.then)):
             self.s.setdefault("npcs", {}).pop(o.map, None)   # people move after talking (Bill into his machine)
         self.remember_talk(o, opt, after)
+        tr = re.match(r"no walkable route from \(\d+,\d+\) to \((\d+),(\d+)\).*small tree", after.head)
+        if tr and map_id(o.map) is not None:
+            self.s["tree_target"] = [map_id(o.map), int(tr[1]), int(tr[2]), self.s["step"]]
+        elif "hacked away with CUT" in reply:
+            self.s.pop("tree_target", None)
         if self.director:
             self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
         if opt.tool == "manage" and opt.args.get("action") == "use" and re.search(r"not compatible|can't learn", reply):
@@ -547,6 +552,14 @@ class Agent:
         moves = set(facts.moves) if facts else set()
         surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
         cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
+        tt = self.s.get("tree_target")
+        if cut and tt and tt[0] == cur and self.s["step"] - tt[3] <= NAV_BLOCK_STEPS:
+            # a walk on this map (to a person, a warp, a cell) was refused because of a small tree: cut it first
+            # (full run 44: Erika sits behind the Celadon Gym's trees; 1,250 steps in and out of the gym)
+            c = self.cut_option(cur, o, Hop(cur, "cell", tt[1], tt[2], cur), f"to reach ({tt[1]},{tt[2]})",
+                                "the server found no way there", surf)
+            if c:
+                opts.append(c)
         if goal is not None and goal != cur:
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
             route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked)
