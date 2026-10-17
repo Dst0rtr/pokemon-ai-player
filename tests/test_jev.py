@@ -1477,6 +1477,26 @@ def test_with_the_lift_key_the_objective_is_the_elevator(tmp_path):
     assert agent.s["elevator"] == "B4F"
 
 
+def test_the_elevator_panel_is_offered(tmp_path):
+    """Full run 52: the Rocket Hideout Elevator's view has side and bottom walls; with them 14 wall cells touched the
+    floor, over the cap, and the panel at (1,1) was never offered (~3,000 steps between B2F and the elevator)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    el = map_id("Rocket Hideout Elevator")
+    agent.nav.observe(el, _view("Rocket Hideout Elevator", ["######", "##DD##", "#....#", "#....#", "#....#", "#....#",
+                                                            "#....#", "######"]),
+                      _warps_hex([(2, 1, 4, 200), (3, 1, 4, 200)]), [])
+    o = J.parse("walked\nf1 Rocket Hideout Elevator (2,2) facing up | C L49 160/165 | ¥3000 | 4 badges")
+    labels = [x.label for x in agent.object_options(o)]
+    assert "examine the object at (1,1) from below" in labels
+    assert not any(re.search(r"\((0|5),\d\)|,7\)", x) for x in labels)          # borders are not objects
+    first = next(x for x in agent.object_options(o) if x.label == "examine the object at (1,1) from below")
+    assert first.args["path"] == "to 1,2" and first.then == [("walk", {"path": "up 1", "on_battle": "stop"}), ("talk", {})]
+
+
 def test_a_black_out_is_seen_without_the_words(tmp_path):
     """Full run 50: the last turns of a loss to Misty were plain 'pressed A' replies; the black-out went unnoticed, so
     Misty stayed 'already talked to' (Jev 0.02) and no training bonus followed. Out of a battle onto another map with

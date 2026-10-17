@@ -749,7 +749,9 @@ class Agent:
         top = 0
         while top < h and all(c == "#" for c in cells[top]):
             top += 1
-        objs = [(x, y) for y in range(top, h) for x in range(w) if cells[y][x] == "#" and any(
+        # the side and bottom borders are walls, not objects (the Rocket Hideout Elevator's view has them: 14 wall cells
+        # touched the floor, over the cap, and its panel at (1,1) was never offered; full run 52, ~3,000 steps)
+        objs = [(x, y) for y in range(top, h - 1) for x in range(1, w - 1) if cells[y][x] == "#" and any(
             0 <= x + dx < w and 0 <= y + dy < h and cells[y + dy][x + dx] in (".", ",") for dx, dy in MOVES.values())]
         if not objs or len(objs) > 12:
             return []
