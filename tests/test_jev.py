@@ -963,3 +963,18 @@ def test_training_paces_in_real_tall_grass(nav, tmp_path):
 def nav_id(name):
     from bench.jev_nav import map_id
     return map_id(name)
+
+
+def test_learned_twin_doors_and_global_frontier(tmp_path):
+    from bench.jev_atlas import LearnedAtlas, frontier_maps
+    from bench.jev_nav import map_id
+    city, house = map_id("Cerulean City"), map_id("Cerulean Trashed House")
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    atlas.observe(city, _view("Cerulean City", ["#######", "#..D..#", "#.....#"]), _warps_hex([(3, 1, 0, house)]), [])
+    atlas.observe(house, _view("Cerulean Trashed House", ["###D###", "#.....#", "#..DD.#"]),
+                  _warps_hex([(3, 2, 0, 0xFF), (4, 2, 0, 0xFF), (3, 0, 2, 0xFF)]), [], last_map_text="D365: 03")
+    atlas.record_warp(city, 3, 1, house, 3, 2)
+    atlas.record_warp(house, 3, 2, city, 3, 2)
+    assert atlas.warp_dest(house, 1) == [(city, 3, 2)]                 # (4,2) is the other half of the front door
+    assert [(h.x, h.y) for h in atlas.frontier(house, (3, 1), {"Cerulean City"})] == [(3, 0)]   # only the back door
+    assert house in frontier_maps(atlas, {"Cerulean City", "Cerulean Trashed House"})

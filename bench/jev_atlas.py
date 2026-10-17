@@ -193,6 +193,10 @@ class LearnedAtlas(WorldNav):
         arr = m["arrivals"].get(f"{x},{y}")
         if arr:
             return [(arr["map"], arr["x"], arr["y"])]
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):   # the other half of a two-wide door
+            twin = m["arrivals"].get(f"{nx},{ny}")
+            if twin and any((w[0], w[1]) == (nx, ny) for w in m["warps"]):
+                return [(twin["map"], twin["x"], twin["y"])]
         if dm == 0xFF:                                       # "back outside": wLastMap, arrival unknown until taken once
             out = self.data["maps"].get(str(mid), {}).get("outside")
             return [(out, *UNKNOWN)] if out is not None else []
@@ -256,7 +260,8 @@ class LearnedAtlas(WorldNav):
         out, seen = [], set()
         for steps, hop, arr in trans:
             if hop.kind == "warp":
-                taken = m["arrivals"].get(f"{hop.x},{hop.y}", {}).get("seen")
+                taken = any(m["arrivals"].get(f"{hop.x + dx},{hop.y + dy}", {}).get("seen")      # or its door twin
+                            for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)))
                 key = ("warp", hop.x, hop.y)
             else:
                 taken = self.data["edges"].get(f"{mid}:{hop.side}", {}).get("seen")
@@ -268,6 +273,26 @@ class LearnedAtlas(WorldNav):
             rank = -1 - list(prefer).index(name) if name in prefer else (0 if name not in visited else 1)
             out.append((rank, steps, hop))
         return [h for *_, h in sorted(out, key=lambda t: (t[0], t[1]))]
+
+
+def frontier_maps(atlas: "LearnedAtlas", visited: set) -> list[int]:
+    """Known maps that still have an untaken warp (not a door twin of a taken one) or an uncrossed edge."""
+    out = []
+    for k, m in atlas.data["maps"].items():
+        if not m.get("cells"):
+            continue
+        mid = int(k)
+        arr = m.get("arrivals", {})
+        for w in m.get("warps", []):
+            key = f"{w[0]},{w[1]}"
+            twin = any(arr.get(f"{w[0] + dx},{w[1] + dy}", {}).get("seen") for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+            if not arr.get(key, {}).get("seen") and not twin:
+                out.append(mid)
+                break
+        else:
+            if any(not atlas.data["edges"].get(f"{mid}:{side}", {}).get("seen") for side, _ in m.get("conns", [])):
+                out.append(mid)
+    return out
 
 
 def move_dir(a: tuple[int, int], b: tuple[int, int]) -> str:

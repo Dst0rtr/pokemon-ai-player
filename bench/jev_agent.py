@@ -36,7 +36,7 @@ from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, Claud
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import GYM_NODES, STUCK_Q, SoloDirector  # noqa: E402
 from bench.jev_nav import MOVES, WorldNav, map_id  # noqa: E402
-from bench.jev_atlas import LearnedAtlas  # noqa: E402
+from bench.jev_atlas import LearnedAtlas, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
 from bench import jev as J  # noqa: E402
 
@@ -566,6 +566,25 @@ class Agent:
                     continue
                 opts.insert(0, Option(label, "walk", walk[0], desc, then=walk[1]))
                 self.exploring = True
+            if not front:
+                # nothing unexplored here: the map route to the nearest known map that still has unexplored exits
+                best = None
+                for mid in frontier_maps(self.nav, set(self.s["visited"])):
+                    if mid == cur:
+                        continue
+                    r = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut, blocked=blocked)
+                    if r and (best is None or len(r) < len(best[1])):
+                        best = (mid, r)
+                if best:
+                    h = best[1][0]
+                    walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
+                    if walk:
+                        opts.insert(0, Option(f"explore the frontier: go to {D.map_name(best[0])} (unexplored exits): {h.label()}",
+                                              "walk", walk[0], "nothing is left to explore on this map; that map still has "
+                                              "exits never taken", then=walk[1]))
+                        self.exploring = True
+                        if h.kind == "edge":
+                            self.edge_opts[opts[0].label] = (h.side, h.x, h.y)
                 if h.kind == "edge":
                     self.edge_opts[label] = (h.side, h.x, h.y)
         visited = set(self.s["visited"])
