@@ -36,7 +36,7 @@ from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, Claud
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import GYM_NODES, STUCK_Q, SoloDirector  # noqa: E402
 from bench.jev_nav import MOVES, WorldNav, map_id  # noqa: E402
-from bench.jev_atlas import LearnedAtlas, frontier_maps  # noqa: E402
+from bench.jev_atlas import LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
 from bench import jev as J  # noqa: E402
 
@@ -297,6 +297,8 @@ class Agent:
         facts = None
         if self.director:
             facts = self.director.facts(o, self.party, self.items)
+            if isinstance(self.nav, LearnedAtlas):
+                facts.explored = explored_count(self.nav)
             self.director.track(self.s["step"], o, facts)
             objective, targets, why = self.director.objective(facts, o)
             if kind == "overworld":
@@ -627,6 +629,22 @@ class Agent:
             here = " (you stand on it: step off and back on)" if (x, y) == tuple(o.pos) else ""
             opts.append(Option(f"walk to the warp at ({x},{y}) → {name}{new}{here}", "walk", walk[0],
                                "this particular door, ladder or stairway", then=walk[1]))
+        if self.exploring and isinstance(self.nav, LearnedAtlas):
+            # exploring is all that is left: plain ways back to maps already explored, and plain copies of explore
+            # options, only dilute the choice (bills-house iterations 32-33: Jev took Route 4 / Route 24 crossings at
+            # 0.36 and 0.14 over the robbed house's frontier at 0.03, ~440 times each way)
+            spots = {(int(m[1]), int(m[2])) for x in opts if x.label.startswith("explore the frontier")
+                      for m in [re.search(r"warp at \((\d+),(\d+)\)", x.label)] if m}
+            def revisit(x: Option) -> bool:
+                if x.label.startswith(("explore the frontier", "follow the map route", "first clear the way")):
+                    return False
+                m = re.search(r"warp at \((\d+),(\d+)\)", x.label)
+                if m and x.label.startswith("walk to the warp"):
+                    return (int(m[1]), int(m[2])) in spots or "(not visited yet)" not in x.label
+                e = self.edge_opts.get(x.label)
+                return bool(e) and x.label.startswith("walk to ") and x.label.split(" (")[0][8:] in visited
+            if any(x.label.startswith("explore the frontier") for x in opts):
+                opts = [x for x in opts if not revisit(x)]
         return opts, route_key
 
     def object_options(self, o: Obs) -> list[Option]:

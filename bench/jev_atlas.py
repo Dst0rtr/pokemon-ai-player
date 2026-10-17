@@ -275,6 +275,12 @@ class LearnedAtlas(WorldNav):
         return [h for *_, h in sorted(out, key=lambda t: (t[0], t[1]))]
 
 
+def explored_count(atlas: "LearnedAtlas") -> int:
+    """Warps and edges actually taken so far."""
+    return sum(1 for m in atlas.data["maps"].values() for a in m.get("arrivals", {}).values() if a.get("seen")) + \
+        sum(1 for e in atlas.data["edges"].values() if e.get("seen"))
+
+
 def frontier_maps(atlas: "LearnedAtlas", visited: set) -> list[int]:
     """Known maps that still have an untaken warp (not a door twin of a taken one) or an uncrossed edge."""
     out = []

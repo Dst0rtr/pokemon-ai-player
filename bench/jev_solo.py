@@ -49,6 +49,7 @@ class Facts:
     levels: list = field(default_factory=list)
     hp_ratio: float = 1.0
     manual_done: set = field(default_factory=set)
+    explored: int = 0                    # learned atlas: warps and edges taken so far (exploring counts as progress)
 
     def has(self, item: str) -> bool:
         """Ever held (key items can be handed over later: Tea, Gold Teeth, the parcel)."""
@@ -245,7 +246,7 @@ class SoloDirector:
             self.s["gym_map_seen"] = o.map
         elif o.map:
             self.s["gym_map_seen"] = ""
-        sig = f"{len(f.visited)}|{len(f.milestones)}|{len(f.ever_items)}|{f.badges}|{sorted(f.moves)}|{sum(f.levels)}"
+        sig = f"{len(f.visited)}|{len(f.milestones)}|{len(f.ever_items)}|{f.badges}|{sorted(f.moves)}|{sum(f.levels)}|{f.explored}"
         if sig != self.s["progress_sig"]:
             self.s["progress_sig"] = sig
             self.s["last_progress_step"] = step

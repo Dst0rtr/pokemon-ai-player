@@ -1012,6 +1012,15 @@ def test_learned_twin_doors_and_global_frontier(tmp_path):
     opts, _ = agent.nav_options(o, ["Vermilion City"], SOLO.Facts(badges=2))
     go = next(x for x in opts if x.label.startswith("explore the frontier: go to "))
     assert go.label.startswith("explore the frontier: go to Cerulean Trashed House"), go.label
+    labels = [x.label for x in opts]                   # plain ways back to explored maps would drown it (iteration 33)
+    assert "walk to Route 4 (west edge)" not in labels and "walk to Route 24 (north edge)" not in labels
+    assert not any(x.startswith("walk to the warp at (3,1)") for x in labels)
+    # taking new warps and edges counts as progress: exploring does not escalate the stuck recovery
+    d = SOLO.SoloDirector({})
+    f = SOLO.Facts(badges=2, explored=5)
+    d.track(0, o, f)
+    d.track(400, o, SOLO.Facts(badges=2, explored=6))
+    assert d.s["recovery"] == 0 and d.s["last_progress_step"] == 400
 
 
 def test_harness_stops_an_agent_that_keeps_crashing(monkeypatch):
