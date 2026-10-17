@@ -37,6 +37,8 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 
 Docs: `README.md`, `QUICKSTART.md`, `AGENT_GUIDE.md`, `BENCHMARKING.md`.
+`docs/DESIGN-JOURNAL.md` is a local, untracked design journal (in `.git/info/exclude`): update it locally with every
+Jev change, never commit or push it.
 
 ## Running
 
