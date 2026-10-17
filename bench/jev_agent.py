@@ -312,6 +312,7 @@ class Agent:
             opts = self.director.extra_options(o, facts, self.party, ex, cn, why) + opts
             if self.nav and not o.npcs and any(self.s["step"] - v <= 3 for v in self.s["nav_noroute"].values()):
                 o.npcs = parse(await self.tool("state", section="map")).npcs   # who stands in the way (no view in a refusal)
+            self.learn_noroute(o)
             nav_opts, route_key = self.nav_options(o, targets, facts, why)
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
                 quiet = (bool(route_key) or self.exploring) and self.s.get("recovery", 0) == 0   # blind walks dilute the choice
@@ -407,6 +408,8 @@ class Agent:
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
             self.s["refresh_items"] = True              # the bag, HMs or moves may have changed
+        if "fighting fit" in reply:
+            self.team_step = -10**9                      # healed at a Poké Center: re-read the party (heal rule)
         if opt.tool == "battle" and (opt.args.get("action") == "switch" or "fainted" in reply.lower()):
             self.s["refresh_party"] = True              # Gen 1 reorders the party on a switch; faints change the switch set
         line = (J.AUTO if dec.record.get("forced") else "") + f"{opt.label} -> {after.head[:90]}"
@@ -514,6 +517,20 @@ class Agent:
                                "this particular door, ladder or stairway", then=walk[1]))
         return opts, route_key
 
+    def learn_noroute(self, o: Obs) -> None:
+        """Learned atlas: a refusal with nobody on the path is a wall the map view does not show (cave elevation);
+        with someone or something on it, it is a blocker to clear, not a wall."""
+        pend = self.s.pop("pending_noroute", None)
+        if not pend or not isinstance(self.nav, LearnedAtlas) or map_id(o.map) != pend[0]:
+            return
+        cur, frm, to = pend[0], (pend[1], pend[2]), (pend[3], pend[4])
+        try:
+            on_path = set(self.nav.path_cells(cur, frm, to)) & set(o.npcs)
+        except KeyError:
+            on_path = set()
+        if not on_path:
+            self.nav.record_noroute(cur, frm, to)
+
     def clear_option(self, cur: int, o: Obs, h, prefix: str, desc: str, surf: bool, cut: bool) -> Optional[Option]:
         """After the server found no way to this hop although the map data has one: if a person or object (an item
         ball, a guard) stands on the map path, the hop's option becomes 'first clear the way': walk up to it and talk
@@ -555,13 +572,8 @@ class Agent:
             self.s.setdefault("clear_tries", {})[k] = self.s["clear_tries"].get(k, 0) + 1
         nr = re.match(r"no walkable route from \((\d+),(\d+)\) to \((\d+),(\d+)\)", after.head)
         if nr and isinstance(self.nav, LearnedAtlas) and cur is not None:
-            frm, to = (int(nr[1]), int(nr[2])), (int(nr[3]), int(nr[4]))
-            try:
-                on_path = set(self.nav.path_cells(cur, frm, to)) & set(o.npcs)
-            except KeyError:
-                on_path = set()
-            if not on_path:                              # a wall the map view does not show (elevation), not a person
-                self.nav.record_noroute(cur, frm, to)
+            # decided next step, once the map view (with the people in it) has been read: see learn_noroute()
+            self.s["pending_noroute"] = [cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4])]
         if after.map and after.map != o.map:
             pass
         elif "no walkable route" in after.head or (after.mode == "overworld" and after.map == o.map and after.pos == o.pos

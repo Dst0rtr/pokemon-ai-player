@@ -880,3 +880,23 @@ def test_learned_frontier_prefers_the_objectives_maps(tmp_path):
                   _warps_hex([(1, 1, 0, 61), (3, 1, 0, 0xFF), (5, 1, 1, 61)]), [], last_map_text="D365: 0F")
     hops = atlas.frontier(b1, (2, 1), {"Mt. Moon B2F", "Route 4"}, prefer=("Route 4", "Cerulean City"))
     assert (hops[0].x, hops[0].dest_name) == (3, "Route 4")     # the exit: wLastMap names it, the objective lists it
+
+
+def test_learned_refusal_with_a_blocker_on_the_path_is_not_a_wall(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b2 = map_id("Mt. Moon B2F")
+    (tmp_path / "data").mkdir()
+    a = _agent_args(tmp_path, "solo")
+    agent = Agent(a, FakeServer(), J.JevPolicy(J.MockJev()), nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(b2, _view("Mt. Moon B2F", ["#######", "#D..P.#", "#######"]), _warps_hex([(1, 1, 0, 60)]), [])
+    o = J.parse("walked\nf1 Mt. Moon B2F (4,1) facing left | C L24 38/68 | ¥2543 | 1 badges")
+    opt = J.Option("walk to the warp at (1,1) → Mt. Moon B1F", "walk", {"path": "to 1,1"})
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (4,1) to (1,1) on this map"), "")
+    o.npcs = [(2, 1)]                                   # someone stands in the corridor
+    agent.learn_noroute(o)
+    assert not agent.nav.unreachable(b2, (4, 1), (1, 1))
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (4,1) to (1,1) on this map"), "")
+    o.npcs = []                                         # nobody: a wall the map view did not show
+    agent.learn_noroute(o)
+    assert agent.nav.unreachable(b2, (4, 1), (1, 1))
