@@ -215,7 +215,7 @@ class LearnedAtlas(WorldNav):
         return None                                          # handled in reach() from learned edge data
 
     def reach(self, mid: int, start: tuple[int, int], surf: bool = False, cut: bool = False,
-              avoid: frozenset = frozenset()) -> tuple[dict, list]:
+              avoid: frozenset = frozenset(), parents: Optional[dict] = None) -> tuple[dict, list]:
         m = self.map(mid)
         if start == UNKNOWN:                                 # somewhere on this map: everything at a fixed cost
             trans = []
@@ -225,7 +225,7 @@ class LearnedAtlas(WorldNav):
             for side, dm, _, _ in m["conns"]:
                 trans.append((UNKNOWN_COST, Hop(mid, "edge", -1, -1, dm, side=side, steps=UNKNOWN_COST), (dm, *UNKNOWN)))
             return {}, trans
-        dist, trans = super().reach(mid, start, surf=surf, cut=cut, avoid=avoid)
+        dist, trans = super().reach(mid, start, surf=surf, cut=cut, avoid=avoid, parents=parents)
         out = [t for t in trans if t[1].kind == "warp" and not self.unreachable(mid, start, (t[1].x, t[1].y))]
         cells = m["cells"]
         h, w = len(cells), len(cells[0]) if cells else 0

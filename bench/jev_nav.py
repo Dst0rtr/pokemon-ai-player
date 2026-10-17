@@ -102,8 +102,9 @@ class WorldNav:
 
     # ---------------------------------------------------------------- grid search inside one map
     def reach(self, mid: int, start: tuple[int, int], surf: bool = False, cut: bool = False,
-              avoid: frozenset = frozenset()) -> tuple[dict, list]:
-        """Grid BFS from `start`: (distance per reachable cell, transitions [(steps, Hop, (dest map, x, y))])."""
+              avoid: frozenset = frozenset(), parents: Optional[dict] = None) -> tuple[dict, list]:
+        """Grid BFS from `start`: (distance per reachable cell, transitions [(steps, Hop, (dest map, x, y))]).
+        `parents`, if given, is filled with cell -> the cell it was reached from (a ledge jump skips the ledge)."""
         m = self.map(mid)
         cells, tiles, h = m["cells"], m["tiles"], len(m["cells"])
         w = len(cells[0]) if cells else 0
@@ -155,6 +156,8 @@ class WorldNav:
                     if (nx, ny) not in dist:
                         dist[(nx, ny)] = d + 1
                         nq.append((nx, ny))
+                        if parents is not None:
+                            parents[(nx, ny)] = (x, y)
             q = nq
         # warps the start cell itself sits next to diagonally do not count; a warp tile entered as a door from a
         # walkable neighbour is covered above (warps are checked before walkability)
@@ -177,16 +180,17 @@ class WorldNav:
         return None
 
     def path_cells(self, mid: int, start: tuple[int, int], target: tuple[int, int], **kw) -> list[tuple[int, int]]:
-        """Cells of one shortest grid path from start to target (a warp or edge cell), by walking the BFS distances
-        back from the target. Used to find what stands in the way when the server finds no route."""
-        dist, _ = self.reach(mid, start, **kw)
+        """Cells of one shortest grid path from start to target (a warp or edge cell), followed back through the BFS
+        parents (distances alone break at ledge jumps: full run 43 missed Route 9's tree behind one). Used to find
+        what stands in the way when the server finds no route."""
+        parents: dict = {}
+        dist, _ = self.reach(mid, start, parents=parents, **kw)
         cur = target if target in dist else min(((x + dx, y + dy) for x, y in [target] for dx, dy in MOVES.values()
                                                  if (x + dx, y + dy) in dist), key=lambda c: dist[c], default=None)
         out = [target]
         while cur is not None and cur != start:
             out.append(cur)
-            cur = min(((cur[0] + dx, cur[1] + dy) for dx, dy in MOVES.values() if dist.get((cur[0] + dx, cur[1] + dy), 1 << 30)
-                       < dist[cur]), key=lambda c: dist[c], default=None)
+            cur = parents.get(cur)
         if cur == start:
             out.append(start)
         return out[::-1]

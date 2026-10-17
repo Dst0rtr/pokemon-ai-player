@@ -950,6 +950,27 @@ def test_route_through_a_small_tree_offers_cut(tmp_path):
     assert not any("cut the tree" in x.label for x in opts)                # no Cut: no such option
 
 
+def test_tree_behind_a_ledge_is_still_found(tmp_path):
+    """Full run 43: Route 9's tree lies before a maze of ledges; the path traced back through distances broke at
+    the first jump, so no Cut option, and the refusal was learned as a wall."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r9 = map_id("Route 9")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(r9, _view("Route 9", ["########", "#P.T..##", "####v###", "#.....D#", "########"]),
+                      _warps_hex([(6, 3, 0, 60)]), [])
+    assert (3, 1) in agent.nav.path_cells(r9, (1, 1), (6, 3), cut=True)   # tree, then the jump at (4,2)
+    o = J.parse("walked\nf1 Route 9 (1,1) facing right | C L42 38/68 | ¥2543 | 3 badges")
+    opt = J.Option("walk to the warp at (6,3) → Mt. Moon B1F", "walk", {"path": "to 6,3"})
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (1,1) to (6,3) on this map"), "")
+    agent.learn_noroute(o)
+    assert not agent.nav.unreachable(r9, (1, 1), (6, 3))
+    opts, _ = agent.nav_options(o, ["Cerulean City"], SOLO.Facts(badges=3, moves={"Cut"}))
+    assert any("first cut the tree at (3,1)" in x.label for x in opts)
+
+
 def test_vermilion_gym_trash_cans_are_searched_in_order():
     """Full run 42: in the Vermilion Gym with every person talked to, Jev walked out and back in ~600 times."""
     d = SOLO.SoloDirector({"visited": ["Vermilion Gym"], "milestones": []})
