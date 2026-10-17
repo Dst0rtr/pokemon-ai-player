@@ -943,7 +943,12 @@ def test_losing_at_a_gym_raises_its_level_target():
     assert d.objective(f, o)[2] == "misty"                                 # L23 >= 21: no training yet
     d.lost(f)                                                              # the agent calls it on "RED blacked out!"
     d.lost(f)                                                              # (once per black-out: the gym is not re-seen)
-    assert d.s["level_bonus"] == {"misty": 3} and d.objective(f, o)[2] == "train"
+    assert d.s["level_bonus"] == {"misty": 5} and d.objective(f, o)[2] == "train"   # L23 + 3 = 26 (table 21 + 5)
+    d.s["level_bonus"] = {}                            # iteration 38: L25 lost to Misty; 21 + 3 asked for no training
+    f.levels = [25]
+    d.s["gym_map_seen"] = "Cerulean Gym"
+    d.lost(f)
+    assert d.objective(f, o)[0].endswith("reaches level 28 (now 25).")
 
 
 @requires_rom

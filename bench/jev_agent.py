@@ -446,6 +446,9 @@ class Agent:
         if self.director and facts is not None and "blacked out" in reply and \
                 self.s["step"] - self.s.get("blackout_step", -10**9) > 5:
             self.s["blackout_step"] = self.s["step"]
+            gym = self.director.s.get("gym_map_seen", "")
+            if gym.endswith("Gym"):
+                self.s["said"].pop(gym, None)            # lost in a gym: its leader and trainers are to be faced again
             self.director.lost(facts)                    # the milestone event is not reliable; the battle text is
         if "fighting fit" in reply and o.map:
             self.s.setdefault("healed_at", [])

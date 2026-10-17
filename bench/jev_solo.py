@@ -236,7 +236,10 @@ class SoloDirector:
         node = current_node(f)
         if node.id in GYM_NODES and self.s.get("gym_map_seen", "").endswith("Gym"):
             bonus = self.s.setdefault("level_bonus", {})
-            bonus[node.id] = bonus.get(node.id, 0) + 3
+            # at least three levels above the team that just lost (iteration 38: Charmeleon L25 lost to Misty, and the
+            # table's 21 + 3 asked for no training at all)
+            above = max(f.levels) + 3 - LEVEL_TARGET.get(f.badges, 55) if f.levels else 0
+            bonus[node.id] = max(bonus.get(node.id, 0) + 3, above)
             self.s["gym_map_seen"] = ""                  # one black-out, one bonus
 
     def track(self, step: int, o: Obs, f: Facts) -> None:
