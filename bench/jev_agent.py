@@ -342,7 +342,10 @@ class Agent:
                     # on the objective's own map: talk to everyone there before leaving it again
                     opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
                 else:
-                    opts = self.object_options(o) + opts  # then the machines, PCs and furniture of a small room
+                    objects = self.object_options(o)      # then the machines, PCs and furniture of a small room
+                    if any("not tried yet" in (x.desc or "") for x in objects):
+                        opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
+                    opts = objects + opts
             if why == "train" and self.nav:
                 train = self.train_options(o, facts)
                 if train:                                 # pace in real tall grass instead of blind walks
@@ -441,8 +444,8 @@ class Agent:
             said = self.s["said"].setdefault(o.map, {})
             if not after.head.startswith("nothing to talk to"):
                 # a real conversation: the room may have changed (Bill came out), retry the empty spots
-                for k in [k for k, v in said.items() if v.startswith("nothing to talk to")]:
-                    del said[k]
+                for k in [k for k, v in said.items() if v.startswith("nothing to talk to") and re.fullmatch(r"\d+,\d+", k)]:
+                    del said[k]                          # people only: objects do not move
             said[key] = after.head[:80]
         if opt.tool == "manage" and opt.args.get("action") == "save":
             self.s["last_save_step"] = self.s["step"]
