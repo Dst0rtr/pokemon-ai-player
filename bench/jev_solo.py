@@ -20,6 +20,7 @@ Jev still picks every action from the candidates; code only decides which candid
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -34,6 +35,9 @@ POKE_CENTERS = {"Viridian City": "Viridian Poké Center", "Pewter City": "Pewter
                 "Celadon City": "Celadon Poké Center", "Fuchsia City": "Fuchsia Poké Center",
                 "Saffron City": "Saffron Poké Center", "Cinnabar Island": "Cinnabar Poké Center",
                 "Route 10": "Rock Tunnel Poké Center", "Indigo Plateau Lobby": "Indigo Plateau Lobby"}
+# Lt. Surge's door: two switches hidden in the 5x3 grid of trash cans; the second is next to the first (pokered
+# GymTrashScript). A wrong second can resets both locks (and moves the first switch).
+TRASH_CANS = [(x, y) for y in (7, 9, 11) for x in (1, 3, 5, 7, 9)]
 NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
 GYM_NODES = ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni")
 
@@ -299,6 +303,47 @@ class SoloDirector:
             return True
         return False
 
+    # ------------------------------------------------------------- Vermilion Gym trash cans
+    def trash_options(self, o: Obs) -> list[Option]:
+        """Search the cans from below (facing up): untried ones while no switch is found, then the found switch's
+        neighbours. Code keeps the bookkeeping; Jev still picks which can."""
+        t = self.s.setdefault("trash", {"first": None, "tried": [], "open": False})
+        if t["open"]:
+            return []
+        if t["first"]:
+            fx, fy = t["first"]
+            cans = [c for c in TRASH_CANS if abs(c[0] - fx) + abs(c[1] - fy) == 2 and list(c) not in t["tried"]]
+            why = f"the first switch was in the can at ({fx},{fy}); the second is in a can next to it"
+        else:
+            cans = [c for c in TRASH_CANS if list(c) not in t["tried"]] or TRASH_CANS
+            why = "Lt. Surge hid the door switches inside trash cans: search them"
+        px, py = o.pos
+        opts = []
+        for x, y in sorted(cans, key=lambda c: abs(c[0] - px) + abs(c[1] + 1 - py))[:6]:
+            here = (px, py) == (x, y + 1)
+            face = {"path": "up 1", "on_battle": "stop"}
+            opts.append(Option(f"search the trash can at ({x},{y})", "walk",
+                               face if here else {"path": f"to {x},{y + 1}", "on_battle": "stop"}, why,
+                               then=([] if here else [("walk", face)]) + [("talk", {})]))
+        return opts
+
+    def trash_result(self, label: str, reply: str, left: bool = False) -> None:
+        t = self.s.setdefault("trash", {"first": None, "tried": [], "open": False})
+        if left and not t["open"]:
+            t["first"], t["tried"] = None, []       # leaving the gym resets the first lock
+        m = re.match(r"search the trash can at \((\d+),(\d+)\)", label)
+        if not m:
+            return
+        can, low = [int(m[1]), int(m[2])], reply.lower()
+        if "motorized door" in low or "2nd electric lock" in low:
+            t["open"] = True
+        elif "reset" in low:
+            t["first"], t["tried"] = None, []       # the first switch moved: every can is a candidate again
+        elif "switch" in low:
+            t["first"], t["tried"] = can, [can]
+        elif "trash" in low:
+            t["tried"].append(can)
+
     # ------------------------------------------------------------- extra candidates
     def extra_options(self, o: Obs, f: Facts, party: list[dict], exits: list[str], conns: list[tuple[str, str]],
                       why: str) -> list[Option]:
@@ -322,6 +367,8 @@ class SoloDirector:
             opts.append(Option("talk to the nurse across the counter", "walk", first,
                                "the Poké Center nurse heals the whole team: this is what the objective asks for",
                                then=([] if at else [face]) + [("talk", {})]))
+        if o.map == "Vermilion Gym" and f.badges < 3 and o.pos:
+            opts += self.trash_options(o)
         hint = (o.hint or "").lower()
         for move, word in (("Cut", "tree"), ("Surf", "water"), ("Strength", "boulder")):
             if move in f.moves and word in hint:

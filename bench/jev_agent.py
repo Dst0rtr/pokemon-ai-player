@@ -348,6 +348,9 @@ class Agent:
                     if any("not tried yet" in (x.desc or "") for x in objects):
                         opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
                     opts = objects + opts
+            if any(x.label.startswith("search the trash can") for x in opts):
+                # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
+                opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
             if why == "train" and self.nav:
                 train = self.train_options(o, facts)
                 if train:                                 # pace in real tall grass instead of blind walks
@@ -439,6 +442,8 @@ class Agent:
         if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk" or any(t == "talk" for t, _ in opt.then)):
             self.s.setdefault("npcs", {}).pop(o.map, None)   # people move after talking (Bill into his machine)
         self.remember_talk(o, opt, after)
+        if self.director:
+            self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
         if opt.tool == "manage" and opt.args.get("action") == "use" and re.search(r"not compatible|can't learn", reply):
             refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
             self.s.setdefault("hm_no", []).append(refused)   # this Pokémon cannot learn that HM: teach another one

@@ -950,6 +950,27 @@ def test_route_through_a_small_tree_offers_cut(tmp_path):
     assert not any("cut the tree" in x.label for x in opts)                # no Cut: no such option
 
 
+def test_vermilion_gym_trash_cans_are_searched_in_order():
+    """Full run 42: in the Vermilion Gym with every person talked to, Jev walked out and back in ~600 times."""
+    d = SOLO.SoloDirector({"visited": ["Vermilion Gym"], "milestones": []})
+    o = J.parse("walked\nf1 Vermilion Gym (3,8) facing up | Charizard L37 100/120 | ¥3000 | 2 badges")
+    f = SOLO.Facts(badges=2, moves={"Cut"})
+    cans = [x for x in d.extra_options(o, f, [], [], [], "surge") if x.label.startswith("search the trash can")]
+    assert cans[0].label == "search the trash can at (3,7)" and cans[0].args["path"] == "up 1"   # it stands below it
+    assert cans[0].then == [("talk", {})] and cans[1].then[0] == ("walk", {"path": "up 1", "on_battle": "stop"})
+    d.trash_result("search the trash can at (3,7)", "dialogue ended: Nope, there's only trash here.")
+    labels = [x.label for x in d.extra_options(o, f, [], [], [], "surge")]
+    assert "search the trash can at (3,7)" not in labels
+    d.trash_result("search the trash can at (5,9)", "dialogue ended: Hey! There's a switch under the trash! | Turn it on!")
+    labels = {x.label for x in d.extra_options(o, f, [], [], [], "surge") if x.label.startswith("search")}
+    assert labels == {f"search the trash can at ({x},{y})" for x, y in ((3, 9), (7, 9), (5, 7), (5, 11))}
+    d.trash_result("search the trash can at (3,9)", "Nope! There's only trash here. | Hey! The electric locks were reset!")
+    assert d.s["trash"]["first"] is None and not d.s["trash"]["tried"]
+    d.trash_result("search the trash can at (1,7)", "Hey! There's a switch under the trash!")
+    d.trash_result("search the trash can at (1,9)", "The 2nd electric lock opened! | The motorized door opened!")
+    assert not [x for x in d.extra_options(o, f, [], [], [], "surge") if x.label.startswith("search")]
+
+
 def test_rom_maps_and_carried_atlases_are_experiments_only(monkeypatch):
     from bench import run
     from bench.report import map_cell
