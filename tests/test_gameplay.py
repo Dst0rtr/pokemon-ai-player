@@ -1,6 +1,7 @@
 """Integration tests driving a real Pokémon Red ROM headlessly."""
 
 import io
+import json
 import time
 
 from PIL import Image
@@ -735,6 +736,55 @@ def test_walk_waits_out_a_spinner_slide(emu):
     r = emu.walk("left 3, up 2")
     assert "slid on a spinner tile to (1,17)" in r
     assert emu.profile.position() == (45, 1, 17) and not emu.profile.sliding()
+
+
+def test_walk_learns_spinners_and_plans_with_them(emu):
+    """Rocket Hideout B2F is a spinner maze: the server's route crossed spinner tiles it knew nothing about and every
+    walk ended where a spinner dropped it (full run 47: 2,000 decisions there). Each slide is now remembered (spinner
+    cell -> where it ends), the pathfinder uses known spinners as one-way jumps and re-plans after a slide, and the
+    memory survives a restart (world.json). Needs a local saves/<rom>/rocket-b2f.state (B2F at (2,9))."""
+    import pytest
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "rocket-b2f.state"
+    if not state.exists():
+        pytest.skip("no local rocket-b2f.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    assert emu.profile.position() == (200, 2, 9)
+    for _ in range(3):
+        r = emu.walk("to 21,8")
+        if emu.profile.position()[0] != 200:
+            break
+    assert emu.profile.position()[0] == 201, r                        # Rocket Hideout B3F
+    known = emu.profile.spinners[200]
+    assert known[(4, 9)] == (2, 9)                                     # stepping right from (3,9) slides back
+    data = emu.profile.world_data()
+    emu.profile.spinners = {}
+    emu.profile.load_world(json.loads(json.dumps(data)))
+    assert emu.profile.spinners[200] == known
+
+
+def test_find_path_jumps_over_a_known_spinner(emu):
+    """A known spinner is a one-way jump: the path ends with the step onto it; one that leads back is avoided."""
+    prof = emu.profile
+    cells = [list("#######"), list("#.....#"), list("#.###.#"), list("#.....#"), list("#######")]
+    prof.full_map_cells = lambda: [r[:] for r in cells]
+    prof.position = lambda: (200, 1, 1)
+    prof.npcs = lambda: []
+    prof.warps = lambda: []
+    prof.in_battle = lambda: 0
+    prof.started = lambda: True
+    prof.surfing = lambda: False
+    emu.pyboy.memory[0xD35E] = 200
+    assert sum(n for _, n in prof.find_path(5, 3)) == 6
+    prof.spinners = {200: {(2, 1): (1, 1)}}                           # the top row slides back: go round below
+    assert prof.find_path(5, 3) == [("down", 2), ("right", 4)]
+    prof.spinners = {200: {(1, 2): (1, 1)}}                           # the left column slides back: go round above
+    assert prof.find_path(5, 3) == [("right", 4), ("down", 2)]
+    prof.spinners = {200: {(2, 1): (1, 1), (1, 2): (5, 3)}}           # the only way: a spinner that carries there
+    assert prof.find_path(5, 3) == [("down", 1)]
 
 
 def test_battle_switch_reads_the_party_cursor_from_wram(emu):

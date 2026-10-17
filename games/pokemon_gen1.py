@@ -70,6 +70,7 @@ class PokemonGen1Profile(GameProfile):
         self._move_table: Optional[dict] = None   # move id -> (effect, power, type, accuracy); {} = not this ROM
         self._type_chart: dict[tuple[int, int], float] = {}
         self.world: dict[int, dict] = {}        # visited map id -> {"warps": [(x,y,dest)], "conns": [(side,dest)]}
+        self.spinners: dict[int, dict] = {}     # map id -> {spinner cell: cell the slide ends on}, learned by walking
         self._starter_reported = False
 
     # ------------------------------------------------------------------ #
@@ -1293,7 +1294,9 @@ class PokemonGen1Profile(GameProfile):
 
     def find_path(self, tx: int, ty: int, avoid=frozenset()) -> Optional[list[tuple[str, int]]]:
         """Dijkstra over the decoded map. NPC sprites are expensive rather than solid (some are hidden
-        by events, others wander off); cells in `avoid` were found solid by walking and are walls."""
+        by events, others wander off); cells in `avoid` were found solid by walking and are walls. A spinner tile
+        found by walking is a one-way jump to where it carried the player: the path ends with the step onto it
+        (the slide stops the walk) and the caller plans again from where it lands."""
         if self.in_battle() or not self.started():
             return None
         _, px, py = self.position()
@@ -1316,7 +1319,8 @@ class PokemonGen1Profile(GameProfile):
             pairs |= set(D.TILE_PAIR_COLLISIONS_WATER.get(tileset, ()))
         tiles = self.full_map_tiles() if pairs else None       # cave/forest elevation steps you cannot cross
         moves = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
-        prev: dict[tuple[int, int], tuple[tuple[int, int], str]] = {}
+        spin = self.spinners.get(self._u8(D.CUR_MAP), {})
+        prev: dict[tuple[int, int], tuple[tuple[int, int], str, int]] = {}
         # Dijkstra: tall grass costs extra so routes avoid needless wild encounters.
         import heapq
         dist = {(px, py): 0}
@@ -1348,20 +1352,29 @@ class PokemonGen1Profile(GameProfile):
                 step = 4 if c == "," else 1
                 if (nx, ny) in npc_cells and (nx, ny) != (tx, ty):
                     step += 40
+                moved = abs(nx - x) + abs(ny - y)
+                if (nx, ny) in spin:                     # carried on: ~3 steps' time per tile slid
+                    (sx, sy), moved = spin[(nx, ny)], -1
+                    step += 3 * (abs(sx - nx) + abs(sy - ny))
+                    nx, ny = sx, sy
                 nc = cost + step
                 if nc < dist.get((nx, ny), 1 << 30):
                     dist[(nx, ny)] = nc
-                    prev[(nx, ny)] = ((x, y), d)
+                    prev[(nx, ny)] = ((x, y), d, moved)
                     heapq.heappush(heap, (nc, nx, ny))
         if (tx, ty) not in prev:
             return None
         dirs = []                                    # (direction, cells moved) per move; ledge jumps span 2 cells
         cur = (tx, ty)
         while cur != (px, py):
-            (bx, by), d = prev[cur]
-            dirs.append((d, abs(cur[0] - bx) + abs(cur[1] - by)))
+            (bx, by), d, moved = prev[cur]
+            dirs.append((d, moved))
             cur = (bx, by)
         dirs.reverse()
+        for i, (d, moved) in enumerate(dirs):
+            if moved < 0:                            # the step onto a spinner ends this walk
+                dirs = dirs[:i] + [(d, 1)]
+                break
         segs: list[tuple[str, int]] = []
         for d, cells in dirs:
             if segs and segs[-1][0] == d:
@@ -1619,10 +1632,22 @@ class PokemonGen1Profile(GameProfile):
     def world_data(self) -> Optional[dict]:
         if not self.world:
             return None
-        return {str(m): {"warps": [list(w) for w in info["warps"]], "conns": [list(c) for c in info["conns"]],
+        data = {str(m): {"warps": [list(w) for w in info["warps"]], "conns": [list(c) for c in info["conns"]],
                          "outside": info.get("outside")} for m, info in self.world.items()}
+        if self.spinners:
+            data["spinners"] = {str(m): [[*a, *b] for a, b in cells.items()] for m, cells in self.spinners.items()}
+        return data
+
+    def note_spinner(self, mid: int, cell: tuple[int, int], end: tuple[int, int]) -> None:
+        """A spinner tile at `cell` carried the player to `end`; find_path uses it as a one-way jump from now on."""
+        if cell != end:
+            self.spinners.setdefault(mid, {})[cell] = end
 
     def load_world(self, data: dict) -> None:
+        for key, cells in ((data or {}).get("spinners") or {}).items():
+            for c in cells if isinstance(cells, list) else []:
+                if len(c) == 4:
+                    self.note_spinner(int(key), (c[0], c[1]), (c[2], c[3]))
         for key, info in (data or {}).items():
             try:
                 m = int(key)

@@ -139,6 +139,8 @@ after a walk), `hint:` (from `profile.hint()`), then an image only if the screen
 * Spinner tiles (Viridian Gym, Rocket Hideout) set `wd736` (0xD736) bit 7 while they carry the player
   (~48 frames per tile, `wJoyIgnore` 0xFF): `_walk_segment` stops, waits for the bit to clear and reports
   "slid on a spinner tile to (x,y)". The test needs a local `saves/<rom>/viridian-gym.state` (gym entrance).
+  Each slide is remembered (`profile.spinners`, spinner cell -> stop cell, saved in world.json); `find_path` uses known
+  spinners as one-way jumps and `_goto` re-plans after a slide (up to 12). Test state: local `rocket-b2f.state`.
 * Pathfinding: other warps are never crossed en route; NPC sprites cost +40 instead of blocking
   (objects hidden by events keep their sprite slot); a cell that turns out solid while walking is
   remembered and the route re-planned. A "blocked" step waits while `wJoyIgnore` is set (a trainer who

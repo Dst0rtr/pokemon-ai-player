@@ -370,7 +370,9 @@ class Emulator:
         report: list[str] = []
         stop_reason = None
         avoid: set = set()                          # cells that turned out solid (NPC, boulder, hidden object)
-        for attempt in range(4):
+        replans, slides = 0, 0
+        while replans < 4:
+            replans += 1
             segs = prof.find_path(tx, ty, avoid) if avoid else prof.find_path(tx, ty)
             if segs is None:
                 pos = prof.position()
@@ -390,6 +392,14 @@ class Emulator:
                 if reason:
                     stop_reason = reason
                     break
+            if stop_reason and stop_reason.startswith("slid on a spinner") and slides < 12:
+                # carried somewhere (the pathfinder now knows this spinner): plan again from where it ended
+                slides += 1
+                replans -= 1
+                report.append(stop_reason.replace("slid on a spinner tile to", "slid to"))
+                stop_reason = None
+                self.tick(8)
+                continue
             if stop_reason != "blocked":
                 break
             stop_reason = None                      # something is in the way: remember the cell and re-plan
@@ -407,7 +417,8 @@ class Emulator:
         if (stop_reason is None and pos is not None and (pos[1], pos[2]) == (tx, ty)
                 and any((wx, wy) == (tx, ty) for wx, wy, _ in getattr(prof, "warps", list)())):
             # Standing on a door/warp tile: step through it (off the map edge for exits).
-            last_dir = report[-1].split()[0] if report else None
+            walked = [r.split()[0] for r in report if not r.startswith("slid")]
+            last_dir = walked[-1] if walked else None
             edge_dir = getattr(prof, "edge_direction", lambda x, y: None)(tx, ty)
             go = edge_dir or last_dir
             if go:
@@ -516,12 +527,16 @@ class Emulator:
                         break
         if reason == "spinner" or prof.sliding():
             # A spinner tile carries the player (about 48 frames per tile) with input ignored: wait for
-            # the stop tile so the reported position is where the player really ends up.
+            # the stop tile so the reported position is where the player really ends up. The slide starts on the
+            # spinner cell itself; remember where it leads so the pathfinder can plan with it.
+            start = prof.position()
             for _ in range(600):
                 if not prof.sliding():
                     break
                 self.tick(4)
             cur = prof.position()
+            if start[0] == cur[0] and hasattr(prof, "note_spinner"):
+                prof.note_spinner(cur[0], (start[1], start[2]), (cur[1], cur[2]))
             reason = f"slid on a spinner tile to ({cur[1]},{cur[2]})"
         if reason is None and steps < n:
             reason = "blocked"                     # ran out of time without finishing: treat as blocked
