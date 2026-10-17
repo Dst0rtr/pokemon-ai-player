@@ -54,6 +54,8 @@ class Facts:
     hp_ratio: float = 1.0
     manual_done: set = field(default_factory=set)
     explored: int = 0                    # learned atlas: warps and edges taken so far (exploring counts as progress)
+    came_from: str = ""                  # the map before the current one
+    elevator: str = ""                   # the floor last chosen on an elevator panel (until the elevator is left)
 
     def has(self, item: str) -> bool:
         """Ever held (key items can be handed over later: Tea, Gold Teeth, the parcel)."""
@@ -119,9 +121,14 @@ GRAPH: list[Node] = [
          ("Route 8", "Route 7", "Celadon City"), lambda f: f.reached("Celadon City")),
     Node("erika", "Beat Erika in the Celadon Gym (cut the tree in front of it).", ("Celadon Gym",), _badge(4)),
     Node("scope", "Find the Rocket Hideout under the Celadon Game Corner (a switch behind a poster opens the stairs), "
-                  "go down to B4F (a Rocket there drops the Lift Key for the elevator), beat Giovanni and take the Silph Scope.",
+                  "go down to B4F (a Rocket there drops the Lift Key for the elevator), beat Giovanni and take the Silph Scope. "
+                  "Giovanni's side of B4F is reached only by the elevator: with the Lift Key, ride the Rocket Hideout "
+                  "Elevator, examine the panel on its wall, choose B4F and walk out.",
          ("Game Corner", "Rocket Hideout B1F", "Rocket Hideout B2F", "Rocket Hideout B3F", "Rocket Hideout B4F"),
-         lambda f: f.has("Silph Scope")),
+         lambda f: f.has("Silph Scope"),
+         # full run 49: the Lift Key in hand on the stairs side of B4F, the objective's last map, and nothing to route to
+         stages=((lambda f, o: f.has("Lift Key") and f.elevator != "B4F" and not (
+             o.map == "Rocket Hideout B4F" and f.came_from == "Rocket Hideout Elevator"), ("Rocket Hideout Elevator",)),)),
     Node("flute", "Climb Pokémon Tower in Lavender with the Silph Scope, rescue Mr. Fuji and get the Poké Flute.",
          ("Lavender Town",) + tuple(f"Pokémon Tower {n}F" for n in range(1, 8)), lambda f: f.has("Poké Flute"),
          stages=((lambda f, o: o.map == "Mr. Fuji's House", ("Mr. Fuji's House",)),)),   # he takes you home after the rescue
@@ -193,7 +200,8 @@ class SoloDirector:
         return Facts(badges=o.badges if o.map else self.s.get("badges", 0), items=names, ever_items=set(self.s["ever_items"]),
                      moves=moves, visited=set(self.s["visited"]), milestones=list(self.s["milestones"]),
                      levels=[p["level"] for p in party], hp_ratio=(hp[0] / hp[1]) if hp[1] else 1.0,
-                     manual_done=set(self.s["manual_done"]))
+                     manual_done=set(self.s["manual_done"]), came_from=self.s.get("came_from", ""),
+                     elevator=self.s.get("elevator", ""))
 
     # ------------------------------------------------------------- objective
     def objective(self, f: Facts, o: Obs) -> tuple[str, list[str], str]:
@@ -265,6 +273,10 @@ class SoloDirector:
             self.s["gym_map_seen"] = ""                  # one black-out, one bonus
 
     def track(self, step: int, o: Obs, f: Facts) -> None:
+        if o.map and o.map != self.s.get("prev_map"):
+            self.s["came_from"] = self.s.get("prev_map", "")
+            if not o.map.endswith("Elevator"):
+                self.s["elevator"] = ""                  # the chosen floor counts until the elevator is left
         if o.map:
             self.s["prev_map"] = o.map
         if o.map.endswith("Gym"):

@@ -386,6 +386,33 @@ def press_options(intro: bool = False) -> list[Option]:
     return opts
 
 
+CHOICE_RE = re.compile(r"^ {2,}(▶)?\s*(\S.*?)\s*$")
+
+
+def choice_options(o: Obs) -> list[Option]:
+    """A menu list on screen (an elevator's floors, a vendor's drinks): one 'choose <entry>' option per entry, with the
+    presses from the ▶ cursor computed in code instead of Jev counting rows ("press DOWN twice then A")."""
+    lines = (o.screen or o.text).splitlines()
+    best: list = []
+    run: list = []
+    for ln in lines + [""]:
+        m = CHOICE_RE.match(ln)
+        if m and "  " not in m[2]:                  # one entry per row (not a two-column menu)
+            run.append((bool(m[1]), m[2]))
+            continue
+        if len(run) >= 2 and any(c for c, _ in run) and not best:
+            best = run
+        run = []
+    if not best:
+        return []
+    cur = next(i for i, (c, _) in enumerate(best) if c)
+    out = []
+    for i, (_, name) in enumerate(best):
+        keys = ["DOWN"] * (i - cur) + ["UP"] * (cur - i) + ["A"]
+        out.append(Option(f"choose {name}", "press", {"buttons": " ".join(keys)}, f"select '{name}' in the list on screen"))
+    return out
+
+
 def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], allow_auto: bool = True,
                    only_switch: bool = False, run_note: str = "") -> list[Option]:
     """The legal battle actions. Switches name the species: Gen 1 reorders the party in battle, so slot numbers go

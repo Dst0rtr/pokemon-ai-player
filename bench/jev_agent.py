@@ -206,7 +206,7 @@ class Agent:
         if o.mode in ("intro", "unknown"):
             return press_options(intro=True)
         if o.mode == "prompt":
-            return press_options()
+            return J.choice_options(o) + press_options()
         if o.mode == "battle_start":
             return [Option("press A", "press", {"buttons": "A"})]
         if o.mode == "dialogue":
@@ -458,6 +458,7 @@ class Agent:
         if self.director:
             self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
         self.remember_refusal(opt, reply)
+        self.remember_choice(o, opt)
         if opt.tool == "manage" and opt.args.get("action") == "save":
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
@@ -512,6 +513,11 @@ class Agent:
         if opt.tool == "manage" and opt.args.get("action") == "use" and "not compatible" in reply:
             refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
             self.s.setdefault("hm_no", []).append(refused)
+
+    def remember_choice(self, o: Obs, opt: Option) -> None:
+        """The floor chosen on an elevator panel (a prompt carries no status line: the map is the last one seen)."""
+        if opt.label.startswith("choose ") and (o.map or self.s.get("prev_map", "")).endswith("Elevator"):
+            self.s["elevator"] = opt.label[len("choose "):]       # the director's elevator stage reads it
 
     def remember_people(self, o: Obs) -> bool:
         """Keep the last people seen on this map (replies after a warp often carry no map rows). False: none known."""

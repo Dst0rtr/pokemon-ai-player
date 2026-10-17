@@ -1397,6 +1397,50 @@ def test_a_window_view_keeps_the_people_seen_outside_it(tmp_path):
     assert agent.remember_people(bare) and sorted(bare.npcs) == sorted(o.npcs)
 
 
+def test_a_floor_list_offers_each_floor_by_name():
+    """The Rocket Hideout Elevator's panel answers with a list; the presses from the cursor are computed in code."""
+    o = J.parse("choice:\n    ▶B1F\n     B2F\n     B4F\n     CANCEL\nWhich floor do\nyou want?")
+    assert o.mode == "prompt"
+    opts = {x.label: x.args["buttons"] for x in J.choice_options(o)}
+    assert opts == {"choose B1F": "A", "choose B2F": "DOWN A", "choose B4F": "DOWN DOWN A", "choose CANCEL": "DOWN DOWN DOWN A"}
+    up = J.parse("choice:\n     B1F\n     B2F\n    ▶B4F\n     CANCEL\nWhich floor do\nyou want?")
+    assert {x.label: x.args["buttons"] for x in J.choice_options(up)}["choose B1F"] == "UP UP A"
+    assert J.choice_options(J.parse("said: Hello!\nf1 Pallet Town (5,5) facing up | C L5 20/20 | ¥3000 | 0 badges")) == []
+
+
+def test_with_the_lift_key_the_objective_is_the_elevator(tmp_path):
+    """Full run 49: the Lift Key in hand on B4F's stairs side, the scope objective's last map: nothing to route to.
+    With the key the target is the elevator until B4F is chosen on its panel; arriving from it, B4F is the target."""
+    d = SOLO.SoloDirector({})
+    order = [n.id for n in SOLO.GRAPH]
+    f = SOLO.Facts(badges=4, levels=[51], visited={"Celadon City", "Rocket Hideout B4F"},
+                   manual_done=set(order[:order.index("scope")]))
+    at = lambda m: J.parse(f"walked\nf1 {m} (9,6) facing up | C L51 160/170 | ¥3000 | 4 badges")   # noqa: E731
+    b4f = at("Rocket Hideout B4F")
+    assert d.objective(f, b4f)[1][-1] == "Rocket Hideout B4F"            # no key yet: the Rocket on B4F drops it
+    f.ever_items = {"Lift Key"}
+    assert d.objective(f, b4f)[1] == ["Rocket Hideout Elevator"]
+    f.elevator = "B4F"                                                     # chosen on the panel: walk out
+    assert d.objective(f, at("Rocket Hideout Elevator"))[1][-1] == "Rocket Hideout B4F"
+    f.elevator, f.came_from = "", "Rocket Hideout Elevator"                 # arrived on Giovanni's side
+    assert d.objective(f, b4f)[1][-1] == "Rocket Hideout B4F"
+    st = {}
+    d2 = SOLO.SoloDirector(st)
+    for m in ("Rocket Hideout B2F", "Rocket Hideout Elevator"):
+        d2.track(1, at(m), f)
+    st["elevator"] = "B4F"
+    d2.track(2, at("Rocket Hideout B4F"), f)
+    assert st["came_from"] == "Rocket Hideout Elevator" and st["elevator"] == ""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    agent.s["prev_map"] = "Rocket Hideout Elevator"
+    menu = J.parse("choice:\n    ▶B1F\n     B2F\n     B4F\n     CANCEL\nWhich floor do\nyou want?")
+    labels = [x.label for x in agent.options(menu, [], [], [])]
+    assert labels[:4] == ["choose B1F", "choose B2F", "choose B4F", "choose CANCEL"]
+    agent.remember_choice(menu, next(x for x in agent.options(menu, [], [], []) if x.label == "choose B4F"))
+    assert agent.s["elevator"] == "B4F"
+
+
 def test_node_targets_reach_the_room_that_matters():
     from games import gen1_data as D
     nodes = {n.id: n for n in SOLO.GRAPH} if hasattr(SOLO, "GRAPH") else None
