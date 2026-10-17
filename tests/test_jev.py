@@ -573,6 +573,37 @@ def test_improve_apply_refuses_main(tmp_path, monkeypatch):
         improve.apply(argparse.Namespace(iteration=1, branch=None))
 
 
+def test_improve_apply_only_touches_the_scaffolding(tmp_path, monkeypatch):
+    """Codex review: the prompt limits the patch to four files; apply must enforce that, and fail loudly."""
+    from bench import improve
+    import argparse
+    import subprocess
+    monkeypatch.setattr(improve, "ROOT", tmp_path)
+    subprocess.run(["git", "init", "-q", "-b", "work", str(tmp_path)], check=True)
+    (tmp_path / "bench").mkdir()
+    for f in ("bench/jev.py", "server.py"):
+        (tmp_path / f).write_text("x = 1\n")
+    g = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    subprocess.run(g + ["add", "."], check=True)
+    subprocess.run(g + ["commit", "-q", "-m", "init"], check=True)
+    it = tmp_path / "bench" / "iterations" / "it1"
+    it.mkdir(parents=True)
+    hunk = "@@ -1 +1 @@\n-x = 1\n+x = 2\n"
+    (it / "proposal.patch").write_text(f"--- a/server.py\n+++ b/server.py\n{hunk}")
+    with pytest.raises(SystemExit, match="outside the scaffolding.*server.py"):
+        improve.apply(argparse.Namespace(iteration=1, branch=None))
+    (it / "proposal.patch").write_text(f"--- a/bench/jev.py\n+++ b/bench/jev.py\n{hunk}"
+                                       f"diff --git a/server.py b/bench/jev_nav.py\nsimilarity index 100%\n"
+                                       f"rename from server.py\nrename to bench/jev_nav.py\n")
+    with pytest.raises(SystemExit, match="server.py"):                    # a rename out of a protected file
+        improve.apply(argparse.Namespace(iteration=1, branch=None))
+    assert (tmp_path / "server.py").exists() and not (tmp_path / "bench" / "jev_nav.py").exists()
+    assert subprocess.run(g + ["branch", "--show-current"], capture_output=True, text=True).stdout.strip() == "work"
+    (it / "proposal.patch").write_text(f"--- a/bench/jev.py\n+++ b/bench/jev.py\n{hunk}")
+    improve.apply(argparse.Namespace(iteration=1, branch=None))
+    assert (tmp_path / "bench" / "jev.py").read_text() == "x = 2\n"
+
+
 def test_results_md_iteration_trend():
     from tests.test_bench import _result
     rows = []

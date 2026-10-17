@@ -185,10 +185,37 @@ def apply(a: argparse.Namespace) -> None:
     check = git("apply", "--check", str(patch))
     if check.returncode:
         raise SystemExit(f"the patch does not apply cleanly:\n{check.stderr}")
+    # the prompt limits edits to the scaffolding files; the code enforces it (renames list both paths)
+    paths, toks = set(), iter(git("apply", "--numstat", "-z", str(patch)).stdout.split("\0"))
+    for tok in toks:                                      # "added\tdeleted\tpath", or "added\tdeleted\t" old new
+        parts = tok.split("\t")
+        if len(parts) == 3:
+            paths |= {parts[2]} if parts[2] else {next(toks, ""), next(toks, "")}
+    paths.discard("")
+    outside = sorted(p for p in paths if p not in SCAFFOLDING)
+    if not paths or outside:
+        raise SystemExit("the patch changes files outside the scaffolding (" + ", ".join(SCAFFOLDING) + "): "
+                         + (", ".join(outside) or "no files listed"))
+    untracked = set(git("ls-files", "--others", "--exclude-standard").stdout.split("\n"))
     r = git("checkout", "-b", new)
     if r.returncode:
         raise SystemExit(r.stderr)
-    git("apply", str(patch))
+
+    def undo(why: str) -> None:
+        for f in set(git("ls-files", "--others", "--exclude-standard").stdout.split("\n")) - untracked - {""}:
+            (ROOT / f).unlink(missing_ok=True)
+        git("checkout", "-f", branch)
+        git("branch", "-D", new)
+        raise SystemExit(f"{why}; back on {branch}, branch {new} removed")
+    r = git("apply", str(patch))
+    if r.returncode:
+        undo(f"git apply failed:\n{r.stderr}")
+    # what really changed (numstat shows only the new name of a rename): tracked edits, deletions and new files
+    changed = set(git("diff", "--name-only", "HEAD").stdout.split("\n")) | \
+        (set(git("ls-files", "--others", "--exclude-standard").stdout.split("\n")) - untracked)
+    outside = sorted(p for p in changed - {""} if p not in SCAFFOLDING)
+    if outside:
+        undo("the patch changed files outside the scaffolding: " + ", ".join(outside))
     print(f"applied {patch} on new branch {new} (from {branch}); nothing committed. Review with `git diff`, run the tests, "
           f"then rerun the same segment with --iteration {a.iteration + 1}.")
 
