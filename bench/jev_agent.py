@@ -330,8 +330,7 @@ class Agent:
                 opts = nav_opts + [x for x in opts if not (x.tool == "walk" and NAME_WALK_RE.match(x.args.get("path", "")))
                                    and not (x.tool == "walk" and x.args.get("path", "").endswith(" edge"))   # nav lists reachable edges
                                    and not (quiet and x.label.startswith("walk ") and x.label.endswith(" 4 tiles"))]
-            if why in GYM_NODES and o.map.endswith("Gym") and any(x.label.startswith("talk to the person") for x in opts) \
-                    and self.s.get("recovery", 0) < 2:
+            if why in GYM_NODES and o.map.endswith("Gym") and any(x.label.startswith("talk to the person") for x in opts):
                 # in the gym the objective names: the trainers and the leader are the options (blind walks only pace)
                 opts = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))
                         and x.label != "talk to what you are facing"]
@@ -425,6 +424,8 @@ class Agent:
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
             self.s["refresh_items"] = True              # the bag, HMs or moves may have changed
+        if self.director and facts is not None and "blacked out" in reply:
+            self.director.lost(facts)                    # the milestone event is not reliable; the battle text is
         if "fighting fit" in reply:
             self.team_step = -10**9                      # healed at a Poké Center: re-read the party (heal rule)
         if opt.tool == "battle" and (opt.args.get("action") == "switch" or "fainted" in reply.lower()):

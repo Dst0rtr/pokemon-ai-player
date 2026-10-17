@@ -216,15 +216,19 @@ class SoloDirector:
         return None
 
     # ------------------------------------------------------------- progress / stuck
+    def lost(self, f: Facts) -> None:
+        """A black-out. In the gym the objective names (leader or its trainers): train harder before the next try."""
+        node = current_node(f)
+        if node.id in GYM_NODES and self.s.get("gym_map_seen", "").endswith("Gym"):
+            bonus = self.s.setdefault("level_bonus", {})
+            bonus[node.id] = bonus.get(node.id, 0) + 3
+            self.s["gym_map_seen"] = ""                  # one black-out, one bonus
+
     def track(self, step: int, o: Obs, f: Facts) -> None:
         if o.map:
             self.s["prev_map"] = o.map
         if any("blacked out" in e for e in o.events):
-            node = current_node(f)
-            if node.id in GYM_NODES and self.s.get("gym_map_seen", "").endswith("Gym"):
-                # lost to the gym (leader or trainers): train harder before the next try (learned per gym)
-                bonus = self.s.setdefault("level_bonus", {})
-                bonus[node.id] = bonus.get(node.id, 0) + 3
+            self.lost(f)
         if o.map.endswith("Gym"):
             self.s["gym_map_seen"] = o.map
         elif o.map:
