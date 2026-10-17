@@ -602,6 +602,9 @@ class Agent:
         moves = set(facts.moves) if facts else set()
         surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
         cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
+        # the Pokémon Tower's top floor is walled off by the ghost Marowak until the Silph Scope: exploring towards it
+        # only replays an unwinnable battle (full run 53, ~2,000 steps on 6F)
+        closed = {"Pokémon Tower 7F"} if not (facts and facts.has("Silph Scope")) else set()
         tt = self.s.get("tree_target")
         if cut and tt and tt[0] == cur and self.s["step"] - tt[3] <= NAV_BLOCK_STEPS:
             # a walk on this map (to a person, a warp, a cell) was refused because of a small tree: cut it first
@@ -636,6 +639,7 @@ class Agent:
                                       prefer=tuple(targets))
             pending = [h for h in front if self.s["step"] - self.s["nav_noroute"].get(f"{h.map}:{h.x},{h.y}", -10**9)
                        <= NAV_BLOCK_STEPS]          # a hop waiting for its way to be cleared goes first
+            front = [h for h in front if h.dest_name not in closed]
             for h in (pending[:1] + [x for x in front if x not in pending[:1]])[:3]:
                 walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
                 if not walk:
@@ -667,8 +671,9 @@ class Agent:
                     # only where the unexplored exits can be reached from the arrival point (bills-house iteration 32:
                     # Route 4's exits lie beyond its one-way ledge, and Jev crossed to it and back ~400 times)
                     try:
-                        if arr[1] >= 0 and not self.nav.frontier(mid, (arr[1], arr[2]), visited, surf=surf, cut=cut,
-                                                                 blocked=blocked):
+                        if arr[1] >= 0 and not [h for h in self.nav.frontier(mid, (arr[1], arr[2]), visited, surf=surf,
+                                                                             cut=cut, blocked=blocked)
+                                                if h.dest_name not in closed]:
                             continue
                     except (KeyError, IndexError, ValueError):
                         continue
@@ -704,6 +709,8 @@ class Agent:
             if (x, y) not in near or (x, y) == skip:
                 continue
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
+            if dests & closed:
+                continue
             name = dests.pop() if len(dests) == 1 else "outside"
             new = "" if name in visited else " (not visited yet)"
             walk = self.hop_walk(cur, tuple(o.pos), x, y)
@@ -908,6 +915,9 @@ class Agent:
                 and cur is not None and map_id(after.map) is not None:
             side, ex_, ey_ = self.edge_hop
             self.nav.record_edge(cur, side, ex_, ey_, map_id(after.map), *after.pos)
+        if isinstance(self.nav, LearnedAtlas) and self.edge_hop and cur is not None and after.map == o.map and \
+                after.pos and tuple(after.pos) == tuple(self.edge_hop[1:]) and "blocked" in after.head:
+            self.nav.record_nocross(cur, self.edge_hop[1], self.edge_hop[2], self.edge_hop[0])   # at the cell, not across
         if "first cut the tree" in opt.label:
             return                                       # standing still while cutting is not a failed hop
         cl = re.search(r"first clear the way at \((\d+),(\d+)\)", opt.label)

@@ -1370,6 +1370,57 @@ def test_a_failed_edge_crossing_is_blocked_by_its_cell(tmp_path):
     assert not any("south edge" in x.label for x in opts)
 
 
+def test_an_edge_cell_that_walks_up_and_bumps_is_dropped(tmp_path):
+    """Full run 53: Lavender Town's west edge crosses to Route 8 only on row 8. Each try walked to another edge cell
+    and bumped, the position changed, so no cell was ever blocked; the agent went exploring the Pokémon Tower."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    lav = map_id("Lavender Town")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(lav, _view("Lavender Town", ["######", ".....#", ".....#", ".....#", "######"]), _warps_hex([]),
+                      [("west", "Route 8")])
+    agent.s["visited"] = ["Lavender Town"]
+    tried = []
+    for k in range(6):
+        o = J.parse("walked\nf1 Lavender Town (4,1) facing left | C L40 99/99 | ¥3000 | 3 badges")
+        opts, _ = agent.nav_options(o, ["Celadon City"], SOLO.Facts(badges=3))
+        opt = next((x for x in opts if "west edge" in x.label), None)
+        if opt is None:
+            break
+        agent.edge_hop = agent.edge_opts.get(opt.label)
+        _, ex, ey = agent.edge_hop
+        tried.append((ex, ey))
+        if (ex, ey) == (0, 3):
+            break                                      # the real crossing is offered
+        agent.nav_feedback(o, opt, J.parse(f"walked left 0/1 — stopped: blocked\n"
+                                           f"f1 Lavender Town ({ex},{ey}) facing left | C L40 99/99 | ¥3000 | 3 badges"), "")
+        agent.s["step"] += 400                         # long after any short-term block expired
+    assert tried == [(0, 1), (0, 1), (0, 2), (0, 2), (0, 3)]   # twice each (a person may stand across once)
+    agent.nav.save()
+    again = LearnedAtlas(tmp_path / "x.json", seed=tmp_path / "data" / "jev_atlas.json")
+    _, trans = again.reach(lav, (4, 1))
+    assert {(h.x, h.y) for _, h, _ in trans if h.kind == "edge"} == {(0, 3)}   # remembered across runs of the atlas
+
+
+def test_the_tower_top_is_not_explored_without_the_silph_scope(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    t6 = map_id("Pokémon Tower 6F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(t6, _view("Pokémon Tower 6F", ["#######", "#D...D#", "#######"]),
+                      _warps_hex([(1, 1, 0, map_id("Pokémon Tower 5F")), (5, 1, 0, map_id("Pokémon Tower 7F"))]), [])
+    agent.s["visited"] = ["Pokémon Tower 6F"]
+    o = J.parse("walked\nf1 Pokémon Tower 6F (3,1) facing left | C L48 99/99 | ¥3000 | 4 badges")
+    opts, _ = agent.nav_options(o, ["Celadon City"], SOLO.Facts(badges=4))
+    assert not any("7F" in x.label for x in opts) and any("5F" in x.label for x in opts)
+    opts, _ = agent.nav_options(o, ["Celadon City"], SOLO.Facts(badges=4, items={"Silph Scope"}))
+    assert any("7F" in x.label for x in opts)
+
+
 def test_talk_option_avoids_cells_other_people_stand_on():
     rows = ["..........", ".~~~..~~~.", ".~......~."]           # Cerulean Gym rows 1-3: Misty at (4,2)
     grid = {(x, y + 1): c for y, r in enumerate(rows) for x, c in enumerate(r)}

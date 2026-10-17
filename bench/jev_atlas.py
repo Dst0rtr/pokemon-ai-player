@@ -88,6 +88,9 @@ class LearnedAtlas(WorldNav):
                 if wk not in mine["arrivals"] or not mine["arrivals"][wk].get("seen") and arr.get("seen"):
                     mine["arrivals"][wk] = arr
             mine["visits"] = max(mine.get("visits", 0), m.get("visits", 0))
+            for nk, n in (m.get("nocross") or {}).items():
+                nc = mine.setdefault("nocross", {})
+                nc[nk] = max(nc.get(nk, 0), n)
             for key in ("noroute", "walked"):
                 for rec in m.get(key, []):
                     if rec not in mine.setdefault(key, []):
@@ -155,6 +158,17 @@ class LearnedAtlas(WorldNav):
             m["noroute"].append(rec)
             self._maps.pop(mid, None)
             self.dirty = True
+
+    def record_nocross(self, mid: int, x: int, y: int, side: str) -> None:
+        """Walking across the `side` edge from (x,y) was blocked: the cell across is solid. Twice (a person may have
+        stood there once) and the cell is no longer a crossing (Lavender Town's west edge crosses to Route 8 only on
+        row 8; full run 53 tried rows 5-7 and 13-14, then explored the Pokémon Tower instead)."""
+        m = self.data["maps"].setdefault(str(mid), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
+        k = f"{x},{y},{side}"
+        nc = m.setdefault("nocross", {})
+        nc[k] = nc.get(k, 0) + 1
+        self._maps.pop(mid, None)
+        self.dirty = True
 
     def record_walk(self, mid: int, a: tuple[int, int], b: tuple[int, int]) -> None:
         """The player got from a to b on this map without a warp: both lie in the same walkable section."""
@@ -267,7 +281,8 @@ class LearnedAtlas(WorldNav):
             if not edge:
                 continue
             e = self.data["edges"].get(f"{mid}:{side}")
-            edge = [c for c in edge if not self.unreachable(mid, start, c)]
+            nocross = (self.data["maps"].get(str(mid)) or {}).get("nocross", {})
+            edge = [c for c in edge if not self.unreachable(mid, start, c) and nocross.get(f"{c[0]},{c[1]},{side}", 0) < 2]
             for c in sorted(edge, key=lambda c: dist[c])[:6]:  # a few nearest crossing cells per side
                 if e and e["map"] == dm:
                     arr = (dm, c[0] + e["offset"], e["fixed"]) if side in ("north", "south") else (dm, e["fixed"], c[1] + e["offset"])
