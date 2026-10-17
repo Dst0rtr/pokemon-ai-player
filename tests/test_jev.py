@@ -941,3 +941,22 @@ def test_losing_at_a_gym_raises_its_level_target():
     lost.map, lost.events = "", ["blacked out (lost a battle)"]             # the events arrive with the battle reply
     d.track(2, lost, f)
     assert d.s["level_bonus"] == {"misty": 3} and d.objective(f, o)[2] == "train"
+
+
+@requires_rom
+def test_training_paces_in_real_tall_grass(nav, tmp_path):
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=nav)
+    agent.s["visited"] = ["Pallet Town", "Route 1", "Viridian City"]
+    o = J.parse("walked\nf1 Route 1 (10,30) facing up | Charmander L6 20/22 | ¥3000 | 0 badges")
+    opt = agent.train_options(o, None)[0]
+    gx, gy = map(int, opt.label.split("(")[1].rstrip(")").split(","))
+    assert opt.label.startswith("train in the tall grass") and nav.map(nav_id("Route 1"))["cells"][gy][gx] == ","
+    assert len(opt.then) >= 7 and opt.then[0][1]["path"].endswith(" 1")
+    town = J.parse("walked\nf1 Viridian City (21,26) facing up | Charmander L6 20/22 | ¥3000 | 0 badges")
+    assert agent.train_options(town, None)[0].label.startswith("follow the map route to the tall grass on Route 1")
+
+
+def nav_id(name):
+    from bench.jev_nav import map_id
+    return map_id(name)

@@ -334,6 +334,11 @@ class Agent:
                 # in the gym the objective names: the trainers and the leader are the options (blind walks only pace)
                 opts = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))
                         and x.label != "talk to what you are facing"]
+            if why == "train" and self.nav:
+                train = self.train_options(o, facts)
+                if train:                                 # pace in real tall grass instead of blind walks
+                    opts = train + [x for x in opts if not x.label.endswith("through grass")
+                                    and not (x.label.startswith("walk ") and x.label.endswith(" tiles"))]
             if why == "heal" and o.map.endswith("Poké Center"):
                 opts = [x for x in opts if not x.label.startswith("talk to the person")]   # the nurse option replaces them
             seen, uniq = set(), []
@@ -549,6 +554,50 @@ class Agent:
             opts.append(Option(f"walk to the warp at ({x},{y}) → {name}{new}{here}", "walk", walk[0],
                                "this particular door, ladder or stairway", then=walk[1]))
         return opts, route_key
+
+    def train_options(self, o: Obs, facts) -> list[Option]:
+        """Training: walk into the nearest reachable tall grass and pace there (wild battles come from grass); with no
+        grass here, the map route to the nearest visited map that has some."""
+        cur = map_id(o.map) if o.map else None
+        if cur is None or not o.pos:
+            return []
+        try:
+            m = self.nav.map(cur)
+            dist, _ = self.nav.reach(cur, tuple(o.pos))
+        except (KeyError, IndexError):
+            return []
+        cells = m["cells"]
+        grass = sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
+        for d, (gx, gy) in grass[:40]:
+            for name, (dx, dy) in MOVES.items():
+                nb = (gx + dx, gy + dy)
+                if nb in dist and cells[nb[1]][nb[0]] == ",":
+                    back = {"up": "down", "down": "up", "left": "right", "right": "left"}[name]
+                    pace = [("walk", {"path": f"{name} 1", "on_battle": "stop"}), ("walk", {"path": f"{back} 1", "on_battle": "stop"})] * 4
+                    first = {"path": f"to {gx},{gy}", "on_battle": "stop"} if (gx, gy) != tuple(o.pos) else pace[0][1]
+                    return [Option(f"train in the tall grass at ({gx},{gy})", "walk", first,
+                                   "pace back and forth in tall grass until a wild Pokémon appears, then fight it",
+                                   then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
+        best = None
+        for name in self.s["visited"]:
+            mid = map_id(name)
+            if mid is None or mid == cur:
+                continue
+            try:
+                if not any("," in "".join(r) for r in self.nav.map(mid)["cells"]):
+                    continue
+            except (KeyError, IndexError):
+                continue
+            r = self.nav.route(cur, tuple(o.pos), mid)
+            if r and (best is None or len(r) < len(best[1])):
+                best = (name, r)
+        if best:
+            h = best[1][0]
+            walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
+            if walk:
+                return [Option(f"follow the map route to the tall grass on {best[0]}: {h.label()}", "walk", walk[0],
+                               "no tall grass on this map: the nearest visited map with grass to train in", then=walk[1])]
+        return []
 
     def learn_noroute(self, o: Obs) -> None:
         """Learned atlas: a refusal with nobody on the path is a wall the map view does not show (cave elevation);
