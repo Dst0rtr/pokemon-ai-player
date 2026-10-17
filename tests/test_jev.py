@@ -1036,3 +1036,26 @@ def test_harness_stops_an_agent_that_keeps_crashing(monkeypatch):
         return {"exit_reason": "exited", "exit_code": 1, "seconds": 5.0, "tool_calls_seen": 3}
     monkeypatch.setattr(r, "run_chunk", chunk, raising=False)
     assert r.loop() == "crashed" and len(calls) == 3
+
+
+def test_a_guard_who_stops_the_walk_every_time_blocks_the_hop(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    gate, r5 = map_id("Route 5 Gate"), map_id("Route 5")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(gate, _view("Route 5 Gate", ["###D###", "#.....#", "#.....#", "###D###"]),
+                      _warps_hex([(3, 0, 0, 0xFF), (3, 3, 1, 0xFF)]), [])
+    agent.nav.record_warp(gate, 3, 0, r5, 10, 29)
+    agent.s["visited"] = ["Route 5", "Route 5 Gate"]
+    o = J.parse("walked\nf1 Route 5 Gate (3,1) facing down | C L24 38/68 | ¥2543 | 2 badges")
+    opt = J.Option("explore the frontier: walk to the untaken warp at (3,3) → Route 5", "walk", {"path": "to 3,3"})
+    stopped = J.parse("went toward (3,3): down 1/2 — stopped: dialogue appeared\n"
+                      "f1 Route 5 Gate (3,2) facing down | C L24 38/68 | ¥2543 | 2 badges")
+    for _ in range(2):                                 # iteration 34: "Gee, I'm thirsty… the road's closed", every time
+        agent.nav_feedback(o, opt, stopped, "")
+        agent.s["step"] += 2
+    assert f"{gate}:3,3" in agent.s["nav_blocked"]
+    opts, _ = agent.nav_options(o, ["Vermilion City"], SOLO.Facts(badges=2))
+    assert not any("(3,3)" in x.label and x.label.startswith("explore") for x in opts)

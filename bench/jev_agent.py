@@ -803,7 +803,10 @@ class Agent:
         if after.map and after.map != o.map:
             pass
         elif "no walkable route" in after.head or (after.mode == "overworld" and after.map == o.map and after.pos == o.pos
-                                                    and "already at" not in after.head):
+                                                    and "already at" not in after.head) \
+                or ("stopped: dialogue appeared" in after.head and after.map in ("", o.map)):
+            # (a person who stops the walk every time, e.g. Saffron's thirsty gate guards, blocks the hop like a wall;
+            # bills-house iteration 34 walked into the Route 5 gate guard ~430 times. A trainer stops it only once.)
             # (a refusal carries no status line: no map in `after`)
             key = f"{cur}:{m[1]},{m[2]}" if m else (route_key if opt.label.startswith("follow the map route") else "")
             if key:
