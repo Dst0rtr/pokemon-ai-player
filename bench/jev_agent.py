@@ -432,6 +432,10 @@ class Agent:
             self.s["refresh_items"] = True              # the bag, HMs or moves may have changed
         if self.director and facts is not None and "blacked out" in reply:
             self.director.lost(facts)                    # the milestone event is not reliable; the battle text is
+        if "fighting fit" in reply and o.map:
+            self.s.setdefault("healed_at", [])
+            if o.map not in self.s["healed_at"]:
+                self.s["healed_at"].append(o.map)        # the black-out respawn point
         if "fighting fit" in reply:
             self.team_step = -10**9                      # healed at a Poké Center: re-read the party (heal rule)
         if opt.tool == "battle" and (opt.args.get("action") == "switch" or "fainted" in reply.lower()):

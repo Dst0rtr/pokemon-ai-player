@@ -232,6 +232,8 @@ def test_solo_objective_progression_and_rules():
     assert d.objective(weak, o)[2] == "heal" and d.objective(weak, o)[1][0] == "Pewter Poké Center"
     train = SOLO.Facts(badges=0, levels=[9], hp_ratio=1.0, visited={"Pewter City", "Viridian Forest", "Viridian City"},
                        milestones=["game started", "starter: X"], ever_items={"Oak's Parcel"})
+    assert d.objective(train, o)[2] == "heal"                              # first visit to Pewter: use its Poké Center once
+    d.s.setdefault("healed_at", []).append("Pewter Poké Center")
     assert d.objective(train, o)[2] == "train"
     hm = SOLO.Facts(items={"HM01"}, moves={"Tackle"})
     labels = [x.label for x in d.extra_options(o, hm, J.parse_party(PARTY), [], [], "cut")]

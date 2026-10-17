@@ -186,6 +186,11 @@ class SoloDirector:
                 return (f"Your team is weak ({round(100 * f.hp_ratio)}% HP): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
                         pcs[:2], "heal")
         self.s["healing"] = False
+        pc = POKE_CENTERS.get(o.map)
+        if pc and pc not in self.s.get("healed_at", []) and f.levels and pc != "Indigo Plateau Lobby":
+            # the last Poké Center used is where a black-out sends you: use each new town's once
+            return (f"Heal at the {pc} once (walk in, talk to the nurse, answer YES): after a lost battle you wake up "
+                    f"at the last Poké Center you used.", [pc], "heal")
         target = LEVEL_TARGET.get(f.badges, 55) + self.s.get("level_bonus", {}).get(node.id, 0)
         if node.id in ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni", "champion") and f.levels \
                 and max(f.levels) < target:
