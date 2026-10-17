@@ -326,7 +326,7 @@ class Agent:
             self.learn_noroute(o)
             nav_opts, route_key = self.nav_options(o, targets, facts, why)
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
-                quiet = (bool(route_key) or self.exploring) and self.s.get("recovery", 0) == 0   # blind walks dilute the choice
+                quiet = (bool(route_key) or self.exploring) and self.s.get("recovery", 0) < 3   # blind walks dilute the choice
                 opts = nav_opts + [x for x in opts if not (x.tool == "walk" and NAME_WALK_RE.match(x.args.get("path", "")))
                                    and not (x.tool == "walk" and x.args.get("path", "").endswith(" edge"))   # nav lists reachable edges
                                    and not (quiet and x.label.startswith("walk ") and x.label.endswith(" 4 tiles"))]
@@ -504,6 +504,10 @@ class Agent:
                 if r is not None and (best is None or len(r) < best[0]):
                     best = (len(r), mid)
             goal = best[1] if best else goal
+        if why == "heal" and len(targets) == 1 and goal != cur and goal is not None and \
+                self.nav.route(cur, tuple(o.pos), goal) is None and "once" in (self.s.get("last_objective") or ""):
+            # the one-off "use this town's Poké Center" visit has no known way there (Route 4's is behind a ledge)
+            self.s.setdefault("pc_unreachable", []).append(targets[0])
         moves = set(facts.moves) if facts else set()
         surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
         cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
@@ -533,7 +537,7 @@ class Agent:
                                       prefer=tuple(targets))
             pending = [h for h in front if self.s["step"] - self.s["nav_noroute"].get(f"{h.map}:{h.x},{h.y}", -10**9)
                        <= NAV_BLOCK_STEPS]          # a hop waiting for its way to be cleared goes first
-            for h in (pending[:1] + [x for x in front if x not in pending[:1]])[:2]:
+            for h in (pending[:1] + [x for x in front if x not in pending[:1]])[:3]:
                 walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
                 if not walk:
                     continue
