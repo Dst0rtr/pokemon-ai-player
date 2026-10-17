@@ -1308,6 +1308,7 @@ def test_a_walk_that_failed_is_not_what_the_person_said(tmp_path):
     said = agent.s["said"]["Cerulean Gym"]
     for head, kept in (("went toward (4,3): left 0/1, left 0/1 — could not get closer", False),
                        ("went toward (4,3): up 1/3 — stopped: dialogue appeared", False),
+                       ("no walkable route from (5,3) to (4,3) on this map", False),
                        ("dialogue ended: Hi, you're a new face!", True)):
         said.clear()
         agent.remember_talk(o, opt, J.parse(head + "\nf1 Cerulean Gym (5,3) facing left | C L27 70/80 | ¥3000 | 1 badges"))

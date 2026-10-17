@@ -517,9 +517,10 @@ class Agent:
         if m and opt.label.startswith("examine the object"):
             key += " " + opt.label.rsplit(" from ", 1)[-1]     # each side is a different try
         if m and opt.label.startswith("talk to the person") and \
-                re.search(r"could not get closer|— stopped: (?!entered)", after.head):
+                re.search(r"could not get closer|— stopped: (?!entered)|^no walkable route", after.head):
             # a walk that did not get there is not what the person said: it read "already talked to it, it said:
-            # … could not get closer" and Jev left Misty alone (iteration 37, ~1,900 steps in and out of the gym)
+            # … could not get closer" and Jev left Misty alone (iteration 37, ~1,900 steps in and out of the gym);
+            # "no walkable route" to Lt. Surge behind his locked door did the same after the door opened (run 46)
             return
         said = self.s["said"].setdefault(o.map, {})
         if not after.head.startswith("nothing to talk to"):
