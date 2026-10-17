@@ -196,6 +196,10 @@ class SoloDirector:
                 and max(f.levels) < target:
             return (f"Train before the next gym: walk through tall grass and win wild battles until your best Pokémon "
                     f"reaches level {target} (now {max(f.levels)}).", [], "train")
+        if node.id == "starter":
+            # Oak's scene starts when you try to leave Pallet Town north; walking into the lab first does nothing.
+            # In the lab (after the scene) the starter balls are the choice: no route out.
+            return node.objective, (["Oak's Lab"] if o.map == "Oak's Lab" else ["Pallet Town", "Route 1"]), node.id
         return node.objective, list(node.targets), node.id
 
     def check_questions(self, f: Facts) -> dict[str, str]:
