@@ -16,6 +16,7 @@ import pytest
 from bench import jev as J
 from bench import jev_solo as SOLO
 from bench.jev_agent import Agent
+from bench import jev_agent as AG
 from bench.report import build_results_md, derive
 from bench.stream import ChunkStats
 from tests.conftest import ROOT, requires_rom
@@ -1356,6 +1357,44 @@ def test_a_walk_that_failed_is_not_what_the_person_said(tmp_path):
         said.clear()
         agent.remember_talk(o, opt, J.parse(head + "\nf1 Cerulean Gym (5,3) facing left | C L27 70/80 | ¥3000 | 1 badges"))
         assert ("4,2" in said) is kept, head
+
+
+def test_a_person_with_no_way_there_is_not_offered_for_a_while(tmp_path):
+    """Full run 48: Rocket Hideout B4F's guard stands behind a wall; 'no walkable route' was (rightly) not stored as
+    what he said, but he stayed on offer and Jev chose him ~1,000 times over the Rocket with the Lift Key."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    status = "\nf1 Rocket Hideout B4F (20,12) facing down | C L51 160/170 | ¥3000 | 4 badges"
+    view = "Rocket Hideout B4F (20,12) facing down, window x16..25 y8..16\n" + "\n".join(
+        ["....#....."] * 4 + ["....P#.N.."] + ["....#....."] * 4)
+    o = J.parse("walked" + status + "\n" + view)
+    o.npcs.append((11, 2))                                          # remembered from the full map view
+    o.grid[(11, 3)] = "."
+    guard = J.Option("talk to the person or object at (23,12)", "walk", {"path": "to 22,12"}, then=[("talk", {})])
+    agent.s["step"] = 100
+    labels = lambda: [x.label for x in agent.options(o, [], [], [])]   # noqa: E731
+    assert "talk to the person or object at (23,12)" in labels()
+    agent.remember_talk(o, guard, J.parse("no walkable route from (20,12) to (22,12) on this map" + status))
+    assert "23,12" not in agent.s["said"].get("Rocket Hideout B4F", {})
+    assert "talk to the person or object at (23,12)" not in labels()
+    assert "talk to the person or object at (11,2)" in labels()
+    agent.s["step"] = 100 + AG.NAV_BLOCK_STEPS + 1                  # the door may have opened since
+    assert "talk to the person or object at (23,12)" in labels()
+
+
+def test_a_window_view_keeps_the_people_seen_outside_it(tmp_path):
+    """Full run 48: a 10x9 window view replaced B4F's nine remembered people with the one inside it."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    agent.s["npcs"] = {"Rocket Hideout B4F": [[11, 2], [23, 12], [10, 12], [18, 9]]}
+    status = "walked\nf1 Rocket Hideout B4F (14,15) facing down | C L51 160/170 | ¥3000 | 4 badges\n"
+    o = J.parse(status + "Rocket Hideout B4F (14,15) facing down, window x9..18 y11..19\n"
+                + "\n".join([".N........"] + [".........."] * 3 + [".....P...."] + [".........."] * 4))
+    assert agent.remember_people(o)
+    assert sorted(o.npcs) == [(10, 11), (11, 2), (18, 9), (23, 12)]  # (10,12) was inside the window: gone
+    assert sorted(map(tuple, agent.s["npcs"]["Rocket Hideout B4F"])) == sorted(o.npcs)
+    bare = J.parse(status)                                           # no map rows at all: the remembered list
+    assert agent.remember_people(bare) and sorted(bare.npcs) == sorted(o.npcs)
 
 
 def test_node_targets_reach_the_room_that_matters():

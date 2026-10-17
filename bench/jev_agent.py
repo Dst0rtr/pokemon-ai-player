@@ -215,9 +215,16 @@ class Agent:
             return battle_options(o.battle, self.party, self.items, allow_auto=True, run_note=self.run_note(o))
         if o.mode == "faint_switch":
             return battle_options(o.battle, self.party, self.items, only_switch=True) or press_options()
-        return overworld_options(o, ex, cn, targets, self.party, self.items, self.s["step"] - self.s["last_save_step"],
+        opts = overworld_options(o, ex, cn, targets, self.party, self.items, self.s["step"] - self.s["last_save_step"],
                                  grid=self.grid(o.map), said=self.s["said"].get(o.map, {}),
                                  facing_said=self.s["said"].get(o.map, {}).get(f"facing {o.pos} {o.facing}", ""))
+        # a person the server just found no way to (a guard behind a wall) is not offered again for a while: full run
+        # 48 picked Rocket Hideout B4F's walled-off guard ~1,000 times over the reachable Rocket with the Lift Key
+        noroute = self.s.get("talk_noroute", {}).get(o.map, {})
+        def refused(x: Option) -> bool:
+            m = re.match(r"talk to the person or object at \((\d+),(\d+)\)", x.label)
+            return bool(m) and self.s["step"] - noroute.get(f"{m[1]},{m[2]}", -10**9) <= NAV_BLOCK_STEPS
+        return [x for x in opts if not refused(x)]
 
     def run_note(self, o: Obs) -> str:
         """Whether fleeing a wild battle fits the objective is decided in code; Jev reads it as the option's criterion."""
@@ -274,10 +281,8 @@ class Agent:
         if o.mode == "overworld" and o.map:
             # replies after a warp often carry no map rows: keep the last people seen on this map
             known = self.s.setdefault("npcs", {})
-            if o.npcs:
-                known[o.map] = [list(n) for n in o.npcs]
-            elif known.get(o.map):
-                o.npcs = [tuple(n) for n in known[o.map]]
+            if self.remember_people(o):
+                pass
             elif o.map not in known:
                 o.npcs = parse(await self.tool("state", section="map")).npcs
                 known[o.map] = [list(n) for n in o.npcs]
@@ -508,6 +513,20 @@ class Agent:
             refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
             self.s.setdefault("hm_no", []).append(refused)
 
+    def remember_people(self, o: Obs) -> bool:
+        """Keep the last people seen on this map (replies after a warp often carry no map rows). False: none known."""
+        known = self.s.setdefault("npcs", {})
+        if o.grid and known.get(o.map):
+            # a window view shows only the people near the player: keep the ones remembered outside it (full run
+            # 48: a 10x9 window replaced Rocket Hideout B4F's nine people with one, the Lift Key Rocket was gone)
+            o.npcs = [tuple(n) for n in known[o.map] if tuple(n) not in o.grid] + list(o.npcs)
+        elif not o.npcs and known.get(o.map):
+            o.npcs = [tuple(n) for n in known[o.map]]
+        elif not o.npcs:
+            return False
+        known[o.map] = [list(n) for n in o.npcs]
+        return True
+
     def remember_talk(self, o: Obs, opt: Option, after: Obs) -> None:
         """What a person or object answered, per map (shown in the next talk options; empty spots are dropped)."""
         if not (o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk")):
@@ -521,6 +540,8 @@ class Agent:
             # a walk that did not get there is not what the person said: it read "already talked to it, it said:
             # … could not get closer" and Jev left Misty alone (iteration 37, ~1,900 steps in and out of the gym);
             # "no walkable route" to Lt. Surge behind his locked door did the same after the door opened (run 46)
+            if after.head.startswith("no walkable route"):
+                self.s.setdefault("talk_noroute", {}).setdefault(o.map, {})[key] = self.s["step"]
             return
         said = self.s["said"].setdefault(o.map, {})
         if not after.head.startswith("nothing to talk to"):
