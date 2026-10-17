@@ -941,9 +941,8 @@ def test_losing_at_a_gym_raises_its_level_target():
     o = J.parse("walked\nf1 Cerulean Gym (4,3) facing up | Charmeleon L24 60/68 | ¥3000 | 1 badges")
     d.track(1, o, f)
     assert d.objective(f, o)[2] == "misty"                                 # L23 >= 21: no training yet
-    lost = J.parse("battle over\nf2 Cerulean Poké Center (3,3) facing up | Charmeleon L24 60/68 | ¥1500 | 1 badges")
-    lost.map, lost.events = "", ["blacked out (lost a battle)"]             # the events arrive with the battle reply
-    d.track(2, lost, f)
+    d.lost(f)                                                              # the agent calls it on "RED blacked out!"
+    d.lost(f)                                                              # (once per black-out: the gym is not re-seen)
     assert d.s["level_bonus"] == {"misty": 3} and d.objective(f, o)[2] == "train"
 
 

@@ -232,8 +232,6 @@ class SoloDirector:
     def track(self, step: int, o: Obs, f: Facts) -> None:
         if o.map:
             self.s["prev_map"] = o.map
-        if any("blacked out" in e for e in o.events):
-            self.lost(f)
         if o.map.endswith("Gym"):
             self.s["gym_map_seen"] = o.map
         elif o.map:

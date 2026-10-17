@@ -430,7 +430,9 @@ class Agent:
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
             self.s["refresh_items"] = True              # the bag, HMs or moves may have changed
-        if self.director and facts is not None and "blacked out" in reply:
+        if self.director and facts is not None and "blacked out" in reply and \
+                self.s["step"] - self.s.get("blackout_step", -10**9) > 5:
+            self.s["blackout_step"] = self.s["step"]
             self.director.lost(facts)                    # the milestone event is not reliable; the battle text is
         if "fighting fit" in reply and o.map:
             self.s.setdefault("healed_at", [])
@@ -485,6 +487,15 @@ class Agent:
         # healing: the targets list the nearest Poké Center first; otherwise the route ends at the last target
         order = targets if why == "heal" else list(reversed(targets))
         goal = next((map_id(t) for t in order if map_id(t) is not None), None)
+        if why == "heal" and len(targets) > 1:
+            # the nearest Poké Center the map knowledge can reach (the town's own can be behind a ledge)
+            best = None
+            for t in targets:
+                mid = map_id(t)
+                r = self.nav.route(cur, tuple(o.pos), mid) if mid is not None else None
+                if r is not None and (best is None or len(r) < best[0]):
+                    best = (len(r), mid)
+            goal = best[1] if best else goal
         moves = set(facts.moves) if facts else set()
         surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
         cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
@@ -572,6 +583,9 @@ class Agent:
             return []
         cells = m["cells"]
         grass = sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
+        no_grass = self.s.setdefault("no_grass", [])
+        if not grass and any("," in "".join(r) for r in cells) and o.map not in no_grass:
+            no_grass.append(o.map)                       # its grass is out of reach from where you arrive
         for d, (gx, gy) in grass[:40]:
             for name, (dx, dy) in MOVES.items():
                 nb = (gx + dx, gy + dy)
@@ -585,7 +599,7 @@ class Agent:
         best = None
         for name in self.s["visited"]:
             mid = map_id(name)
-            if mid is None or mid == cur:
+            if mid is None or mid == cur or name in no_grass:
                 continue
             try:
                 if not any("," in "".join(r) for r in self.nav.map(mid)["cells"]):
