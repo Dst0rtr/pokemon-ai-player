@@ -1095,3 +1095,27 @@ def test_a_failed_edge_crossing_is_blocked_by_its_cell(tmp_path):
     assert f"{pallet}:1,2" in agent.s["nav_blocked"]
     opts, _ = agent.nav_options(o, ["Pewter City"], SOLO.Facts())
     assert not any("south edge" in x.label for x in opts)
+
+
+def test_talk_option_avoids_cells_other_people_stand_on():
+    rows = ["..........", ".~~~..~~~.", ".~......~."]           # Cerulean Gym rows 1-3: Misty at (4,2)
+    grid = {(x, y + 1): c for y, r in enumerate(rows) for x, c in enumerate(r)}
+    o = J.parse("walked\nf1 Cerulean Gym (7,3) facing left | C L27 70/80 | ¥3000 | 1 badges")
+    o.npcs = [(4, 2), (4, 3)]                          # iteration 37: the beaten trainer stood right below Misty
+    misty = next(x for x in J.talk_to_options(o, grid) if x.label.endswith("(4,2)"))
+    assert misty.args["path"] == "to 5,2" and misty.then[0][1]["path"] == "left 1"
+
+
+def test_a_walk_that_failed_is_not_what_the_person_said(tmp_path):
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    o = J.parse("walked\nf1 Cerulean Gym (5,3) facing left | C L27 70/80 | ¥3000 | 1 badges")
+    opt = J.Option("talk to the person or object at (4,2)", "walk", {"path": "to 4,3"}, then=[("talk", {})])
+    agent.s["said"]["Cerulean Gym"] = {}
+    said = agent.s["said"]["Cerulean Gym"]
+    for head, kept in (("went toward (4,3): left 0/1, left 0/1 — could not get closer", False),
+                       ("went toward (4,3): up 1/3 — stopped: dialogue appeared", False),
+                       ("dialogue ended: Hi, you're a new face!", True)):
+        said.clear()
+        agent.remember_talk(o, opt, J.parse(head + "\nf1 Cerulean Gym (5,3) facing left | C L27 70/80 | ¥3000 | 1 badges"))
+        assert ("4,2" in said) is kept, head

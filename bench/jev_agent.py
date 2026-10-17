@@ -438,17 +438,7 @@ class Agent:
             self.nav_feedback(o, opt, after, route_key)
         if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk" or any(t == "talk" for t, _ in opt.then)):
             self.s.setdefault("npcs", {}).pop(o.map, None)   # people move after talking (Bill into his machine)
-        if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk"):
-            m = re.search(r"\((\d+),(\d+)\)", opt.label) if opt.label.startswith(("talk to the person", "examine the object")) else None
-            key = f"{m[1]},{m[2]}" if m else f"facing {o.pos} {o.facing}"
-            if m and opt.label.startswith("examine the object"):
-                key += " " + opt.label.rsplit(" from ", 1)[-1]     # each side is a different try
-            said = self.s["said"].setdefault(o.map, {})
-            if not after.head.startswith("nothing to talk to"):
-                # a real conversation: the room may have changed (Bill came out), retry the empty spots
-                for k in [k for k, v in said.items() if v.startswith("nothing to talk to") and re.fullmatch(r"\d+,\d+", k)]:
-                    del said[k]                          # people only: objects do not move
-            said[key] = after.head[:80]
+        self.remember_talk(o, opt, after)
         if opt.tool == "manage" and opt.args.get("action") == "save":
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
@@ -494,6 +484,26 @@ class Agent:
         return ""
 
     # ------------------------------------------------------------- navigation (static warp graph, no LLM)
+    def remember_talk(self, o: Obs, opt: Option, after: Obs) -> None:
+        """What a person or object answered, per map (shown in the next talk options; empty spots are dropped)."""
+        if not (o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk")):
+            return
+        m = re.search(r"\((\d+),(\d+)\)", opt.label) if opt.label.startswith(("talk to the person", "examine the object")) else None
+        key = f"{m[1]},{m[2]}" if m else f"facing {o.pos} {o.facing}"
+        if m and opt.label.startswith("examine the object"):
+            key += " " + opt.label.rsplit(" from ", 1)[-1]     # each side is a different try
+        if m and opt.label.startswith("talk to the person") and \
+                re.search(r"could not get closer|— stopped: (?!entered)", after.head):
+            # a walk that did not get there is not what the person said: it read "already talked to it, it said:
+            # … could not get closer" and Jev left Misty alone (iteration 37, ~1,900 steps in and out of the gym)
+            return
+        said = self.s["said"].setdefault(o.map, {})
+        if not after.head.startswith("nothing to talk to"):
+            # a real conversation: the room may have changed (Bill came out), retry the empty spots
+            for k in [k for k, v in said.items() if v.startswith("nothing to talk to") and re.fullmatch(r"\d+,\d+", k)]:
+                del said[k]                          # people only: objects do not move
+        said[key] = after.head[:80]
+
     def nav_options(self, o: Obs, targets: list[str], facts, why: str = "") -> tuple[list[Option], str]:
         """The next hop of the shortest route to the objective's last target map, plus one option per warp on this
         map (by coordinates, so a ladder is never confused with another ladder to the same floor)."""

@@ -438,8 +438,10 @@ def talk_to_options(o: Obs, grid: dict, limit: int = 10, said: Optional[dict] = 
     px, py = o.pos
     said = said or {}
     for nx, ny in sorted(set(o.npcs), key=lambda n: (f"{n[0]},{n[1]}" in said, abs(n[0] - px) + abs(n[1] - py)))[:limit]:
+        # not a cell another person stands on (Cerulean Gym, iteration 37: a beaten trainer stood right below Misty)
         stands = [((nx + dx, ny + dy), face) for (dx, dy), face in STEP_TOWARD.items()
-                  if grid.get((nx + dx, ny + dy)) in WALKABLE or (nx + dx, ny + dy) == (px, py)]
+                  if (grid.get((nx + dx, ny + dy)) in WALKABLE and (nx + dx, ny + dy) not in o.npcs)
+                  or (nx + dx, ny + dy) == (px, py)]
         if not stands:
             continue
         (sx, sy), face = min(stands, key=lambda s: abs(s[0][0] - px) + abs(s[0][1] - py))
