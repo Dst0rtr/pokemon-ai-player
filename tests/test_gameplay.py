@@ -772,3 +772,27 @@ def test_battle_switch_reads_the_party_cursor_from_wram(emu):
             if not p.in_battle() or "FIGHT" in (p.screen_text() or ""):
                 break
             emu.press("A")
+
+
+def test_walk_into_a_small_tree_then_cut_it(emu):
+    """What Jev's 'first cut the tree' option does: walk next to the tree, bump into it (faces it), field Cut.
+    Needs a local saves/<rom>/cerulean.state (Cerulean City; its tree is at (19,28))."""
+    import pytest
+    from games import gen1_data as D
+    from tests.conftest import ROOT
+
+    state = ROOT / "saves" / emu.rom_path.stem / "cerulean.state"
+    if not state.exists():
+        pytest.skip("no local cerulean.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    _inject_mon(emu, 0, 0xB0, 20, [15, 10], nick="CHARMANDER")              # Cut Scratch
+    emu.pyboy.memory[D.BADGES] |= 0x03                                      # Cascade Badge: Cut outside battle
+    assert emu.profile.full_map_cells()[28][19] == "T"
+    assert emu.walk("to 19,27").startswith("arrived")
+    assert "blocked" in emu.walk("down 1")
+    assert "CUT" in emu.manage("field", "Cut")
+    assert emu.profile.full_map_cells()[28][19] == "."
+    assert emu.walk("down 1").startswith("walked down 1/1")

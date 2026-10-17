@@ -928,6 +928,28 @@ def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
     assert agent.nav.unreachable(b2, (4, 1), (1, 1)) and not agent.s.get("clear_tries")
 
 
+def test_route_through_a_small_tree_offers_cut(tmp_path):
+    """Full run 41: Cut learned, but the server's walk never crosses a tree (the Vermilion Gym is behind one)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b2 = map_id("Mt. Moon B2F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(b2, _view("Mt. Moon B2F", ["########", "#D.T.P.#", "########"]), _warps_hex([(1, 1, 0, 60)]), [])
+    o = J.parse("walked\nf1 Mt. Moon B2F (5,1) facing left | C L24 38/68 | ¥2543 | 2 badges")
+    opt = J.Option("walk to the warp at (1,1) → Mt. Moon B1F", "walk", {"path": "to 1,1"})
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (5,1) to (1,1) on this map"), "")
+    agent.learn_noroute(o)
+    assert not agent.nav.unreachable(b2, (5, 1), (1, 1))                   # the tree is not a hidden wall
+    opts, _ = agent.nav_options(o, ["Cerulean City"], SOLO.Facts(badges=2, moves={"Cut"}))
+    cut = next(x for x in opts if "first cut the tree at (3,1)" in x.label)
+    assert cut.args["path"] == "to 4,1" and cut.then == [("walk", {"path": "left 1", "on_battle": "stop"}),
+                                                          ("manage", {"action": "field", "target": "Cut"})]
+    opts, _ = agent.nav_options(o, ["Cerulean City"], SOLO.Facts(badges=2, moves={"Tackle"}))
+    assert not any("cut the tree" in x.label for x in opts)                # no Cut: no such option
+
+
 def test_rom_maps_and_carried_atlases_are_experiments_only(monkeypatch):
     from bench import run
     from bench.report import map_cell

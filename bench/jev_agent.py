@@ -763,7 +763,10 @@ class Agent:
             on_path = set(self.nav.path_cells(cur, frm, to)) & set(o.npcs)
         except KeyError:
             on_path = set()
-        if not on_path:
+        cells = self.nav.map(cur)["cells"]
+        tree = any(0 <= y < len(cells) and 0 <= x < len(cells[y]) and cells[y][x] == "T"
+                   for x, y in self.nav.path_cells(cur, frm, to, cut=True))
+        if not on_path and not tree:                     # a small tree on the way is Cut's job, not a wall (full run 41)
             self.nav.record_noroute(cur, frm, to)
 
     def clear_option(self, cur: int, o: Obs, h, prefix: str, desc: str, surf: bool, cut: bool) -> Optional[Option]:
@@ -776,6 +779,8 @@ class Agent:
         path = set(self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=cut))
         tried = self.s.setdefault("clear_tries", {})
         blockers = [n for n in o.npcs if n in path and tried.get(f"{h.map}:{n[0]},{n[1]}", 0) < 2]   # 2 tries: it stays
+        if not blockers and cut:
+            return self.cut_option(cur, o, h, prefix, desc, surf)
         if not blockers:
             return None
         grid = self.grid(o.map) or o.grid or {(x, y): c for y, row in enumerate(self.nav.map(cur)["cells"]) for x, c in enumerate(row)}
@@ -788,6 +793,27 @@ class Agent:
         self.clear_for[label] = (h.x, h.y)
         return Option(label, c.tool, c.args, desc + f"; the only way on is blocked by someone or something at ({bx},{by})",
                       then=c.then)
+
+    def cut_option(self, cur: int, o: Obs, h, prefix: str, desc: str, surf: bool) -> Optional[Option]:
+        """The map path to this hop goes through a small tree that the server's walk refuses to cross: walk up to it,
+        face it and use Cut (full run 41 had Cut and walked around Vermilion for 9,000 steps: the gym is behind a tree)."""
+        cells = self.nav.map(cur)["cells"]
+        seq = self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=True)
+        at = next((k for k, (x, y) in enumerate(seq) if k and 0 <= y < len(cells) and 0 <= x < len(cells[y])
+                   and cells[y][x] == "T"), None)
+        if not at:
+            return None
+        (sx, sy), (tx, ty) = seq[at - 1], seq[at]
+        d = {(0, -1): "up", (0, 1): "down", (-1, 0): "left", (1, 0): "right"}.get((tx - sx, ty - sy))
+        if not d:
+            return None
+        label = f"{prefix}: first cut the tree at ({tx},{ty})"
+        self.clear_for[label] = (h.x, h.y)
+        face, use = ("walk", {"path": f"{d} 1", "on_battle": "stop"}), ("manage", {"action": "field", "target": "Cut"})
+        desc += f"; a small tree at ({tx},{ty}) blocks the only way on: face it and use Cut"
+        if tuple(o.pos) == (sx, sy):
+            return Option(label, "walk", face[1], desc, then=[use])
+        return Option(label, "walk", {"path": f"to {sx},{sy}", "on_battle": "stop"}, desc, then=[face, use])
 
     def nav_feedback(self, o: Obs, opt: Option, after: Obs, route_key: str) -> None:
         """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
@@ -803,6 +829,8 @@ class Agent:
                 and cur is not None and map_id(after.map) is not None:
             side, ex_, ey_ = self.edge_hop
             self.nav.record_edge(cur, side, ex_, ey_, map_id(after.map), *after.pos)
+        if "first cut the tree" in opt.label:
+            return                                       # standing still while cutting is not a failed hop
         cl = re.search(r"first clear the way at \((\d+),(\d+)\)", opt.label)
         if cl and cur is not None:
             if "no walkable route" in after.head:
