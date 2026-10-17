@@ -891,9 +891,45 @@ def test_learned_atlas_remembers_unreachable_targets(tmp_path):
     assert {(h.x, h.y) for h in atlas.frontier(b2, (4, 1), set())} == {(1, 1), (5, 1)}
     atlas.record_noroute(b2, (4, 1), (1, 1))            # the map view hid an elevation step
     assert {(h.x, h.y) for h in atlas.frontier(b2, (4, 1), set())} == {(5, 1)}
+    atlas.record_walk(b2, (4, 1), (3, 1))
     assert {(h.x, h.y) for h in atlas.frontier(b2, (4, 1), set(), blocked=frozenset({f"{b2}:5,1"}))} == set()
     atlas.save()
     assert LearnedAtlas(tmp_path / "b.json", seed=tmp_path / "a.json").unreachable(b2, (3, 1), (1, 1))
+
+
+def test_unreachable_record_only_counts_in_its_own_section(tmp_path):
+    # Rock Tunnel B1F (full run 51): "no route to (3,3)" from (23,16) hid the way from (23,11), behind a wall 5 cells off
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b1 = map_id("Rock Tunnel B1F")
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    atlas.observe(b1, _view("Rock Tunnel B1F", ["#######", "#D...D#", "##.#.##", "#....D#", "#######"]),
+                  _warps_hex([(1, 1, 0, 82), (5, 1, 1, 82), (5, 3, 2, 82)]), [])   # the map view shows no elevation step
+    atlas.record_walk(b1, (4, 3), (2, 3))
+    atlas.record_noroute(b1, (2, 3), (1, 1))           # learned below, where (1,1) really is out of reach
+    assert atlas.unreachable(b1, (4, 3), (1, 1))       # walked from there: it counts
+    assert {(h.x, h.y) for h in atlas.frontier(b1, (2, 1), set())} == {(1, 1), (5, 1), (5, 3)}   # came by ladder: try
+    atlas.record_noroute(b1, (2, 1), (1, 1))           # refused from there too: now it counts there as well
+    assert {(h.x, h.y) for h in atlas.frontier(b1, (2, 1), set())} == {(5, 1), (5, 3)}
+    atlas.save()
+    assert LearnedAtlas(tmp_path / "b.json", seed=tmp_path / "a.json").unreachable(b1, (4, 3), (1, 1))   # walks persist
+
+
+def test_agent_links_consecutive_positions_on_a_map(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    b1 = map_id("Rock Tunnel B1F")
+    agent.learn_walked(J.parse("walked\nf1 Rock Tunnel B1F (33,25) facing up | C L24 38/68 | ¥2543 | 3 badges"))
+    agent.s["step"] += 4                                 # a battle cut the walk short
+    agent.learn_walked(J.parse("walked\nf1 Rock Tunnel B1F (23,16) facing up | C L24 38/68 | ¥2543 | 3 badges"))
+    agent.s["step"] += 1
+    agent.learn_walked(J.parse("walked\nf1 Rock Tunnel 1F (17,11) facing up | C L24 38/68 | ¥2543 | 3 badges"))
+    agent.s["step"] += 1
+    agent.learn_walked(J.parse("walked\nf1 Rock Tunnel B1F (23,11) facing up | C L24 38/68 | ¥2543 | 3 badges"))
+    assert agent.nav.linked(b1, (33, 25), (23, 16)) and not agent.nav.linked(b1, (23, 16), (23, 11))
 
 
 @requires_rom

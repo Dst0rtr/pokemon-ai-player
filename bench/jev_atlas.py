@@ -68,6 +68,7 @@ class LearnedAtlas(WorldNav):
         super().__init__(b"")
         self.path = Path(path) if path else None
         self.data: dict = {"maps": {}, "edges": {}, "version": 1}
+        self._groups: dict[int, dict] = {}               # map id -> cell -> section root, from the walks made
         for p in (seed, self.path):
             if p and Path(p).exists():
                 try:
@@ -87,12 +88,14 @@ class LearnedAtlas(WorldNav):
                 if wk not in mine["arrivals"] or not mine["arrivals"][wk].get("seen") and arr.get("seen"):
                     mine["arrivals"][wk] = arr
             mine["visits"] = max(mine.get("visits", 0), m.get("visits", 0))
-            for rec in m.get("noroute", []):
-                if rec not in mine.setdefault("noroute", []):
-                    mine["noroute"].append(rec)
+            for key in ("noroute", "walked"):
+                for rec in m.get(key, []):
+                    if rec not in mine.setdefault(key, []):
+                        mine[key].append(rec)
         for k, e in (other.get("edges") or {}).items():
             self.data["edges"].setdefault(k, e)
         self._maps.clear()
+        self._groups.clear()
 
     def save(self) -> None:
         if self.path and self.dirty:
@@ -153,10 +156,39 @@ class LearnedAtlas(WorldNav):
             self._maps.pop(mid, None)
             self.dirty = True
 
+    def record_walk(self, mid: int, a: tuple[int, int], b: tuple[int, int]) -> None:
+        """The player got from a to b on this map without a warp: both lie in the same walkable section."""
+        if a == b or self.linked(mid, a, b):
+            return
+        m = self.data["maps"].setdefault(str(mid), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
+        m.setdefault("walked", []).append([a[0], a[1], b[0], b[1]])
+        self._groups.pop(mid, None)
+        self.dirty = True
+
+    def linked(self, mid: int, a: tuple[int, int], b: tuple[int, int]) -> bool:
+        if a == b:
+            return True
+        if mid not in self._groups:
+            root: dict = {}
+            def find(c):
+                while root.setdefault(c, c) != c:
+                    root[c] = root[root[c]]
+                    c = root[c]
+                return c
+            for x1, y1, x2, y2 in (self.data["maps"].get(str(mid)) or {}).get("walked", []):
+                root[find((x1, y1))] = find((x2, y2))
+            self._groups[mid] = {c: find(c) for c in list(root)}
+        g = self._groups[mid]
+        return a in g and b in g and g[a] == g[b]
+
     def unreachable(self, mid: int, start: tuple[int, int], target: tuple[int, int]) -> bool:
+        """A "no walkable route" counts only near the cell it was learned at, and only where the player has walked
+        from that cell: the map view hides cave elevation, so Rock Tunnel B1F's (23,16) looks connected to the ladder
+        arrival at (23,11) 5 cells away, and its "no route to (3,3)" hid the real way out (full run 51, ~6,000 steps
+        exploring elsewhere). A start never walked to from there retries once and learns its own record."""
         m = self.data["maps"].get(str(mid)) or {}
         return any((tx, ty) == target and abs(fx - start[0]) + abs(fy - start[1]) <= NOROUTE_NEAR
-                   for fx, fy, tx, ty in m.get("noroute", []))
+                   and self.linked(mid, start, (fx, fy)) for fx, fy, tx, ty in m.get("noroute", []))
 
     def record_edge(self, mid: int, side: str, x: int, y: int, dest: int, ax: int, ay: int) -> None:
         """Crossing the `side` edge at (x,y) arrived at (ax,ay): that edge's offset, and the way back."""

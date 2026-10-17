@@ -336,6 +336,7 @@ class Agent:
             opts = self.director.extra_options(o, facts, self.party, ex, cn, why) + opts
             if self.nav and not o.npcs and any(self.s["step"] - v <= 3 for v in self.s["nav_noroute"].values()):
                 o.npcs = parse(await self.tool("state", section="map")).npcs   # who stands in the way (no view in a refusal)
+            self.learn_walked(o)
             self.learn_noroute(o)
             nav_opts, route_key = self.nav_options(o, targets, facts, why)
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
@@ -818,6 +819,15 @@ class Agent:
                 return [Option(f"follow the map route to the tall grass on {best[0]}: {h.label()}", "walk", walk[0],
                                "no tall grass on this map: the nearest visited map with grass to train in", then=walk[1])]
         return []
+
+    def learn_walked(self, o: Obs) -> None:
+        """Learned atlas: consecutive overworld positions on the same map (a walk, or one cut short by a battle) are in
+        the same walkable section; "no walkable route" records only apply within a section (LearnedAtlas.unreachable)."""
+        if not isinstance(self.nav, LearnedAtlas) or not o.map or not o.pos or map_id(o.map) is None:
+            return
+        last, self.s["last_ow"] = self.s.get("last_ow"), [o.map, o.pos[0], o.pos[1], self.s["step"]]
+        if last and last[0] == o.map and self.s["step"] - last[3] <= 40:
+            self.nav.record_walk(map_id(o.map), (last[1], last[2]), tuple(o.pos))
 
     def learn_noroute(self, o: Obs) -> None:
         """Learned atlas: a refusal with nobody on the path is a wall the map view does not show (cave elevation);
