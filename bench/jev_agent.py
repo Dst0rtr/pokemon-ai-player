@@ -605,8 +605,10 @@ class Agent:
         _, trans = self.nav.reach(cur, tuple(o.pos), surf=surf, cut=cut)
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}   # warps this section of the map can reach
         sides: dict = {}
+        now_blocked = {k for k, until in self.s["nav_blocked"].items() if until > self.s["step"]}
         for steps, h, _ in trans:                         # edges this section reaches: the nearest cell per side
-            if h.kind == "edge" and h.x >= 0 and (h.side not in sides or steps < sides[h.side][0]):
+            if h.kind == "edge" and h.x >= 0 and f"{cur}:{h.x},{h.y}" not in now_blocked and \
+                    (h.side not in sides or steps < sides[h.side][0]):
                 sides[h.side] = (steps, h)
         for _, h in sides.values():
             walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side)
@@ -809,6 +811,10 @@ class Agent:
             # bills-house iteration 34 walked into the Route 5 gate guard ~430 times. A trainer stops it only once.)
             # (a refusal carries no status line: no map in `after`)
             key = f"{cur}:{m[1]},{m[2]}" if m else (route_key if opt.label.startswith("follow the map route") else "")
+            if not key and self.edge_hop:
+                # an edge crossing that fails (Pallet Town's south edge is water: full-run iteration 36 tried it ~2,800
+                # times) is blocked by its cell like a warp; the next cell on that side is offered instead
+                key = f"{cur}:{self.edge_hop[1]},{self.edge_hop[2]}"
             if key:
                 if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) <= NAV_BLOCK_STEPS:
                     self.s["nav_blocked"][key] = self.s["step"] + NAV_BLOCK_STEPS   # failed again: try another way

@@ -136,7 +136,10 @@ class LearnedAtlas(WorldNav):
         self.data["maps"].setdefault(str(mid), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
         self.data["maps"][str(mid)]["arrivals"][f"{x},{y}"] = {"map": dest, "x": ax, "y": ay, "seen": True}
         back = self.data["maps"].setdefault(str(dest), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
-        if any((w[0], w[1]) == (ax, ay) for w in back.get("warps", [])) and not back["arrivals"].get(f"{ax},{ay}", {}).get("seen"):
+        # stored even before the destination's warp list is known: observe() reads it on the next step, so on a first
+        # visit the check left Mt. Moon 1F's other door tile pointing at "Route 4, anywhere" (the east edge to Cerulean
+        # looked one hop away; full-run iteration 36 walked back out and on to Pallet Town)
+        if not back["arrivals"].get(f"{ax},{ay}", {}).get("seen"):
             back["arrivals"][f"{ax},{ay}"] = {"map": mid, "x": x, "y": y, "seen": False}
         self._maps.pop(mid, None)
         self._maps.pop(dest, None)

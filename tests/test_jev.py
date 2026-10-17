@@ -1059,3 +1059,39 @@ def test_a_guard_who_stops_the_walk_every_time_blocks_the_hop(tmp_path):
     assert f"{gate}:3,3" in agent.s["nav_blocked"]
     opts, _ = agent.nav_options(o, ["Vermilion City"], SOLO.Facts(badges=2))
     assert not any("(3,3)" in x.label and x.label.startswith("explore") for x in opts)
+
+
+def test_first_visit_records_the_way_back_before_the_map_is_observed(tmp_path):
+    from bench.jev_atlas import LearnedAtlas, UNKNOWN
+    from bench.jev_nav import map_id
+    r4, m1 = map_id("Route 4"), map_id("Mt. Moon 1F")
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    atlas.observe(r4, _view("Route 4", ["###D###", "#.....#", "#.....#"]), _warps_hex([(3, 0, 0, m1)]), [("east", "Cerulean City")])
+    atlas.record_warp(r4, 3, 0, m1, 3, 2)              # walked in; Mt. Moon 1F is observed only on the next step
+    atlas.observe(m1, _view("Mt. Moon 1F", ["#######", "#.....#", "#..DD.#"]),
+                  _warps_hex([(3, 2, 0, 0xFF), (4, 2, 0, 0xFF)]), [], last_map_text="D365: 0F")
+    assert atlas.warp_dest(m1, 0) == [(r4, 3, 0)] and atlas.warp_dest(m1, 1) == [(r4, 3, 0)]   # not (r4, *UNKNOWN)
+    assert (r4, *UNKNOWN) not in atlas.warp_dest(m1, 1)
+    assert atlas.route(m1, (3, 1), map_id("Cerulean City")) is None   # no optimistic shortcut back out
+
+
+def test_a_failed_edge_crossing_is_blocked_by_its_cell(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    pallet = map_id("Pallet Town")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(pallet, _view("Pallet Town", ["#######", "#.....#", "#.~~~~#"]), _warps_hex([]), [("south", "Route 21")])
+    agent.s["visited"] = ["Pallet Town"]
+    o = J.parse("walked\nf1 Pallet Town (1,2) facing down | C L6 20/20 | ¥3000 | 0 badges")
+    for _ in range(2):                                 # iteration 36: "walked down 0/1 — stopped: blocked", ~2,800 times
+        opts, _ = agent.nav_options(o, ["Pewter City"], SOLO.Facts())
+        opt = next(x for x in opts if "south edge" in x.label)
+        agent.edge_hop = agent.edge_opts.get(opt.label)
+        agent.nav_feedback(o, opt, J.parse("walked down 0/1 — stopped: blocked\n"
+                                           "f1 Pallet Town (1,2) facing down | C L6 20/20 | ¥3000 | 0 badges"), "")
+        agent.s["step"] += 2
+    assert f"{pallet}:1,2" in agent.s["nav_blocked"]
+    opts, _ = agent.nav_options(o, ["Pewter City"], SOLO.Facts())
+    assert not any("south edge" in x.label for x in opts)
