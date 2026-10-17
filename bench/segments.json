@@ -19,7 +19,8 @@
   "cerulean": {
     "state": "saves/Pokemon-Red_Version/cerulean.state",
     "goal": "badge: Cascade",
-    "initial_milestones": []
+    "initial_milestones": [],
+    "progress": "cerulean"
   },
   "bills-house": {
     "state": "saves/Pokemon-Red_Version/bills-house.state",

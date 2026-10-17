@@ -109,6 +109,8 @@ class Run:
                       f"--fallback-budget-usd={a.fallback_budget_usd}", f"--max-fallbacks={a.max_fallbacks}",
                       f"--map-source={a.map_source}"] + ([f"--atlas={Path(a.atlas).resolve()}"] if a.atlas else [])
         self.segment = load_segment(a.segment) if a.segment else None
+        if self.segment and self.segment.get("progress"):
+            agent_args.append(f"--progress={self.segment['progress']}")
         self.provider = make_provider(a.provider, a.model, variant=a.variant, jev_model=a.jev_model, mock=a.mock,
                                       agent_args=agent_args, fallback_model=a.fallback_model)
         self.model = self.provider.model
@@ -544,7 +546,8 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv=None) -> None:
+def parse_args(argv=None) -> argparse.Namespace:
+    """CLI arguments with the mode/model aliases resolved, checked, and the smoke-test budgets applied."""
     a = build_parser().parse_args(argv)
     a.provider, a.variant, a.mode = resolve_mode(a.mode, a.provider, a.variant)
     a.model, a.fallback_model = resolve_model(a.model), resolve_model(a.fallback_model)
@@ -559,6 +562,11 @@ def main(argv=None) -> None:
         a.chunk_minutes, a.max_chunks, a.budget_hours, a.max_calls, a.stall_minutes = 4, 2, 0.5, 400, 5
         if a.provider == "jev" and a.variant != "battles":
             a.chunk_minutes, a.max_calls, a.stall_minutes = (0.4 if a.mock else 2), 3000, 2
+    return a
+
+
+def main(argv=None) -> None:
+    a = parse_args(argv)
     run = Run(a)
     run.prepare()
 

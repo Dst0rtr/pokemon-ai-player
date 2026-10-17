@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, ClaudePlanner, JevError, drop_repeats,  # noqa: E402
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
-from bench.jev_solo import GYM_NODES, STUCK_Q, SoloDirector  # noqa: E402
+from bench.jev_solo import GRAPH, GYM_NODES, STUCK_Q, SoloDirector  # noqa: E402
 from bench.jev_nav import MOVES, Hop, WorldNav, map_id  # noqa: E402
 from bench.jev_atlas import LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
@@ -87,6 +87,9 @@ class Agent:
                      "fallback_cost": 0.0, "fallback_capped": False}.items():
             self.s.setdefault(k, v)
         self.director = SoloDirector(self.s) if a.variant in ("solo", "assist") else None
+        if self.director and getattr(a, "progress", "") and not self.resumed:
+            ids = [n.id for n in GRAPH]                 # a segment start state: nodes up to this one are finished
+            self.s["manual_done"] = ids[:ids.index(a.progress) + 1]
         self.party: list[dict] = []
         self.items: list[tuple[str, int]] = []
         self.team_step = -10**9
@@ -1105,6 +1108,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="learned (default): Jev builds its own atlas while playing; rom: world graph from the ROM map tables")
     p.add_argument("--atlas", default="", help="learned: start from this atlas (an earlier run's data/jev_atlas.json)")
     p.add_argument("--max-steps", type=int, default=0)
+    p.add_argument("--progress", default="", help="segment start: the last objective-graph node the state has finished")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--mock", action="store_true", help="offline: MockJev (and MockPlanner for hybrid), no network")
     return p

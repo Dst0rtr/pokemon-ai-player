@@ -1058,9 +1058,39 @@ def test_rom_maps_and_carried_atlases_are_experiments_only(monkeypatch):
     assert map_cell(h) == "learned (carried atlas) — experiment"
 
 
+def test_a_later_map_visited_early_does_not_skip_objectives():
+    """Codex review: with Vermilion visited (Route 5, Underground Path) before Misty, the furthest-done rule returned
+    'cut' and skipped Misty and the S.S. Ticket. Only badges and confirmed nodes skip ahead now."""
+    f = SOLO.Facts(badges=1, levels=[24], visited={"Mt. Moon 1F", "Cerulean City", "Vermilion City"},
+                   milestones=["game started", "starter: X"])
+    assert SOLO.current_node(f).id == "misty"
+    f.badges = 2
+    assert SOLO.current_node(f).id == "ticket"
+    f.badges = 0                                                            # no badge yet: Brock comes first
+    f.visited |= {"Viridian City", "Viridian Forest", "Pewter City"}
+    f.ever_items = {"Oak's Parcel"}
+    assert SOLO.current_node(f).id == "brock"
+    seg = SOLO.Facts(badges=1, levels=[24], visited={"Cerulean City"}, manual_done={"intro", "starter", "viridian",
+                     "parcel", "deliver", "forest", "pewter", "brock", "mtmoon", "cerulean"})   # cerulean segment
+    assert SOLO.current_node(seg).id == "misty"
+
+
+
+def test_segment_progress_reaches_the_agent(tmp_path, monkeypatch):
+    from bench import run
+    monkeypatch.setenv("TYPESAFE_API_KEY", "x")
+    monkeypatch.setattr(run, "load_segment", lambda name: {"name": name, "state": None, "goal": "badge: Cascade",
+                                                           "progress": "cerulean"})
+    r = run.Run(run.parse_args(["--mode", "jev-solo", "--mock", "--segment", "cerulean"]))
+    assert "--progress=cerulean" in r.provider.agent_args
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo", progress="cerulean"), FakeServer(), J.JevPolicy(J.MockJev()))
+    assert agent.s["manual_done"][-1] == "cerulean" and "misty" not in agent.s["manual_done"]
+
+
 def test_losing_at_a_gym_raises_its_level_target():
     d = SOLO.SoloDirector({"visited": ["Cerulean City", "Cerulean Gym"]})
-    f = SOLO.Facts(badges=1, levels=[23, 15], hp_ratio=1.0, visited={"Cerulean City", "Cerulean Gym"},
+    f = SOLO.Facts(badges=1, levels=[23, 15], hp_ratio=1.0, visited={"Mt. Moon 1F", "Cerulean City", "Cerulean Gym"},
                    milestones=["reached: Cerulean City"])
     o = J.parse("walked\nf1 Cerulean Gym (4,3) facing up | Charmeleon L24 60/68 | ¥3000 | 1 badges")
     d.track(1, o, f)

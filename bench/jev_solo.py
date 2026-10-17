@@ -77,7 +77,10 @@ class Node:
 
 
 def _badge(n: int) -> Callable[[Facts], bool]:
-    return lambda f: f.badges >= n
+    def done(f: Facts) -> bool:
+        return f.badges >= n
+    done.anchor = True                                 # a badge count implies everything before it is done
+    return done
 
 
 GRAPH: list[Node] = [
@@ -154,11 +157,12 @@ GRAPH: list[Node] = [
 
 
 def current_node(f: Facts) -> Node:
-    # A run that starts from a segment save state has no milestone history: everything before the furthest node
-    # whose code-side test passes (badges, bag, maps incl. the current one; the starter once a party exists) is done.
+    # Only anchors skip ahead: the badge count, nodes confirmed done (manual_done, incl. a segment's --progress) and the
+    # starter once a party exists. From there the first unfinished node wins, so visiting a later map early (Vermilion
+    # through the Underground Path before Misty) does not skip Misty and the S.S. Ticket (Codex review).
     start = 0
     for i, n in enumerate(GRAPH):
-        if n.id == "starter" and bool(f.levels) or n.done is not None and n.done(f) or n.id in f.manual_done:
+        if n.id == "starter" and bool(f.levels) or getattr(n.done, "anchor", False) and n.done(f) or n.id in f.manual_done:
             start = i + 1
     for n in GRAPH[start:]:
         if n.id in f.manual_done:
