@@ -439,6 +439,9 @@ class Agent:
         if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk" or any(t == "talk" for t, _ in opt.then)):
             self.s.setdefault("npcs", {}).pop(o.map, None)   # people move after talking (Bill into his machine)
         self.remember_talk(o, opt, after)
+        if opt.tool == "manage" and opt.args.get("action") == "use" and re.search(r"not compatible|can't learn", reply):
+            refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
+            self.s.setdefault("hm_no", []).append(refused)   # this Pokémon cannot learn that HM: teach another one
         if opt.tool == "manage" and opt.args.get("action") == "save":
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):

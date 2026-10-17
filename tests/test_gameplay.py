@@ -574,6 +574,9 @@ def test_manage_use_teaches_hm_and_asks_which_move_to_forget(emu):
     _inject_mon(emu, 2, 0x99, 12, [33], nick="BULBASAUR")
     r = emu.manage("use", "HM01", "Bulbasaur")                             # room for a 2nd move: no question asked
     assert "Cut" in [n for n, _ in emu.profile.party()[2]["moves"]], r
+    _inject_mon(emu, 3, 0xB4, 41, [163, 52, 43, 10], nick="CHARIZARD")   # Slash Ember Leer Scratch
+    r = emu.manage("use", "HM01", "Charizard: weakest")                    # iteration 40: 853 teach attempts failed
+    assert [n for n, _ in emu.profile.party()[3]["moves"]] == ["Slash", "Ember", "Cut", "Scratch"], r
 
 
 def test_manage_use_potion_on_named_pokemon(emu):

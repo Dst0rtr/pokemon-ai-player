@@ -1079,7 +1079,7 @@ class PokemonGen1Profile(GameProfile):
 
     def _use_item(self, emu, target: str, target2: str) -> str:
         """START → ITEM → item → USE, answering the prompts: a Pokémon to use it on (target2), and for
-        TMs/HMs the move to forget ("Charmander: Growl")."""
+        TMs/HMs the move to forget ("Charmander: Growl", or "Charmander: weakest" for the move with the least power)."""
         bag = self.items()
         want = self._norm(target)
         hit = next((k for k, (n, _) in enumerate(bag) if want and want in self._norm(n)), None)
@@ -1137,6 +1137,13 @@ class PokemonGen1Profile(GameProfile):
                 mon = self.party()[picked] if picked < len(self.party()) else None
                 names = [self._norm(n) for n, _ in mon["moves"]] if mon else []
                 fk = self._norm(forget)
+                if fk == "weakest" and mon:                   # the move with the least power (status moves first); HMs stay
+                    table = self._load_move_data()
+                    ids = {D.move_name(i): i for i in range(1, 166)}
+                    keep = {self._norm(m) for m in D.FIELD_MOVES}
+                    ranked = sorted((table.get(ids.get(n, 0), (0, 0, 0, 0))[1], j) for j, (n, _) in enumerate(mon["moves"])
+                                    if self._norm(n) not in keep)
+                    fk = names[ranked[0][1]] if ranked else ""
                 idx = next((i for i, n in enumerate(names) if fk and (n.startswith(fk) or fk in n)), None)
                 if idx is None:
                     emu.press("B", settle=1)                  # → "Abandon learning X?"
@@ -1158,7 +1165,7 @@ class PokemonGen1Profile(GameProfile):
             mon = self.party()[picked] if picked is not None and picked < len(self.party()) else None
             moves = ", ".join(n for n, _ in mon["moves"]) if mon else "?"
             result += (f" — {mon['species'] if mon else 'it'} already knows 4 moves ({moves}): repeat with "
-                       f"manage('use', '{item_name}', '{mon['species'] if mon else mon_target}: <move to forget>')")
+                       f"manage('use', '{item_name}', '{mon['species'] if mon else mon_target}: <move to forget or weakest>')")
         return result + " | " + self._bag_text()
 
     def _field_move(self, emu, move: str, where: str = "") -> str:

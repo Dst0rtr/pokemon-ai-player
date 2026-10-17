@@ -240,6 +240,11 @@ def test_solo_objective_progression_and_rules():
     hm = SOLO.Facts(items={"HM01"}, moves={"Tackle"})
     labels = [x.label for x in d.extra_options(o, hm, J.parse_party(PARTY), [], [], "cut")]
     assert "teach HM01 (Cut) to Butterfree" in labels
+    teach = next(x for x in d.extra_options(o, hm, J.parse_party(PARTY), [], [], "cut") if x.label.startswith("teach"))
+    assert teach.args["target2"] == "Butterfree: weakest"                  # iteration 40: no move to forget was named
+    d.s["hm_no"] = ["HM01:Butterfree"]                                     # the game refused: try the next one
+    labels = [x.label for x in d.extra_options(o, hm, J.parse_party(PARTY), [], [], "cut")]
+    assert "teach HM01 (Cut) to Charmeleon" in labels and "teach HM01 (Cut) to Butterfree" not in labels
 
 
 def test_solo_jev_done_votes_and_stuck_tracking():

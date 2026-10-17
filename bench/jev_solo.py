@@ -304,12 +304,15 @@ class SoloDirector:
                       why: str) -> list[Option]:
         opts: list[Option] = []
         visited = set(self.s["visited"])
-        # teach an HM in the bag that nobody knows yet (to the first Pokémon; the server picks the move to forget)
+        # teach an HM in the bag that nobody knows yet: to the first Pokémon the game has not refused ("not
+        # compatible", remembered by the agent); with 4 moves known the server forgets the one with the least power
         for move, hm in FIELD_MOVES.items():
-            if hm in f.items and move not in f.moves and party and move in ("Cut", "Surf", "Strength", "Flash"):
-                opts.append(Option(f"teach {hm} ({move}) to {party[0]['species']}", "manage",
-                                   {"action": "use", "target": hm, "target2": party[0]["species"]},
-                                   f"{move} is needed to pass obstacles"))
+            if hm in f.items and move not in f.moves and move in ("Cut", "Surf", "Strength", "Flash"):
+                mon = next((p["species"] for p in party if f"{hm}:{p['species']}" not in self.s.get("hm_no", [])), None)
+                if mon:
+                    opts.append(Option(f"teach {hm} ({move}) to {mon}", "manage",
+                                       {"action": "use", "target": hm, "target2": f"{mon}: weakest"},
+                                       f"{move} is needed to pass obstacles"))
         if why == "heal" and o.map.endswith("Poké Center") and o.pos:
             # code knows where the nurse is: every Gen 1 Poké Center has her at (3,1) behind the counter, talked to
             # from (3,3) facing up; the generic talk-to options cannot reach her across the counter
