@@ -136,11 +136,18 @@ class Run:
                   "jev_model": a.jev_model, "fallback_model": a.fallback_model, "map_source": a.map_source,
                   "atlas": str(Path(a.atlas).resolve()) if a.atlas else None, "segment": a.segment or None,
                   "experiment": a.experiment or None, "iteration": a.iteration,
-                  "budget": {"hours": a.budget_hours, "max_calls": a.max_calls}, "agent_args": agent_args}
+                  "budget": {"hours": a.budget_hours, "max_calls": a.max_calls}, "agent_args": agent_args,
+                  # jev-hybrid: --model is the Claude planner, not self.model (Codex review)
+                  "planner_model": getattr(self.provider, "planner_model", None) if a.variant == "hybrid" else None}
         old = self.state.get("config")
-        if old is not None and old != config:
+        if old is not None:
             diff = ", ".join(f"{k}: {old.get(k)!r} -> {config.get(k)!r}" for k in sorted(set(old) | set(config))
                              if old.get(k) != config.get(k))
+        elif a.resume_run:
+            diff = self._legacy_mismatch(a, agent_args)     # checkpoint from before `config` existed
+        else:
+            diff = ""
+        if diff:
             raise SystemExit(f"--resume-run with different settings than the run was started with ({diff}); "
                              "pass the original arguments")
         self.state.setdefault("config", config)
@@ -165,6 +172,39 @@ class Run:
         self.max_seconds = a.budget_hours * 3600
         self.stop_requested = False
         self.proc: subprocess.Popen | None = None
+
+    def _legacy_mismatch(self, a: argparse.Namespace, agent_args: list[str]) -> str:
+        """A checkpoint without `config`: compare what it did record (metadata, and the first chunk's agent command
+        line for Jev runs). Returns the differences, or why compatibility cannot be established ("" = compatible)."""
+        st, p = self.state, self.provider
+        if not st.get("provider") or not st.get("model"):
+            return "the checkpoint records no provider/model, so compatibility cannot be established"
+        want = {"provider": a.provider, "model": self.model, "mode": a.mode,
+                "budget": {"hours": a.budget_hours, "max_calls": a.max_calls}, "iteration": a.iteration,
+                "experiment": a.experiment or None, "segment": a.segment or None}
+        have = {k: st.get(k) for k in want}
+        have["segment"] = (st.get("segment") or {}).get("name")
+        if "mode" not in st:
+            del want["mode"], have["mode"]
+        if p.track != "cli":
+            want.update(variant=p.variant, display_model=getattr(p, "display_model", self.model), mock=bool(a.mock),
+                        jev_model=getattr(p, "jev_model", self.model))
+            have.update({k: st.get(k) for k in ("variant", "display_model", "mock", "jev_model")})
+        if p.name == "jev" and a.variant != "battles":
+            want["map_source"] = {"source": a.map_source, "atlas_seed": a.atlas or None}
+            ms = st.get("map_source") or {}
+            have["map_source"] = {"source": ms.get("source"), "atlas_seed": ms.get("atlas_seed")}
+        diff = [f"{k}: {have[k]!r} -> {want[k]!r}" for k in want if have.get(k) != want[k]]
+        cmd = self.dir / "chunks" / "001.cmd"
+        if p.name == "jev" and a.variant != "battles" and cmd.exists():
+            words = cmd.read_text().split()
+            ran = words[words.index("--variant"):words.index("--")] if "--variant" in words and "--" in words else []
+            now = ["--variant", p.variant, "--jev-model", p.model, "--planner-model", p.planner_model,
+                   "--fallback-model", p.fallback_model] + agent_args + (["--mock"] if p.mock else [])
+            if ran != now:
+                diff.append(f"agent command: {' '.join(x for x in ran if x not in now)!r} -> "
+                            f"{' '.join(x for x in now if x not in ran)!r}")
+        return ", ".join(diff)
 
     # ------------------------------------------------------------- setup
     def prepare(self) -> None:

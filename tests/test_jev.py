@@ -1092,6 +1092,49 @@ def test_resume_rejects_other_settings(tmp_path, monkeypatch):
                                 "--experiment", "x"]))
 
 
+def test_resume_rejects_another_hybrid_planner(tmp_path, monkeypatch):
+    """Codex review: jev-hybrid's --model is the Claude planner (provider.planner_model), not the recorded model."""
+    from bench import run
+    monkeypatch.setattr(run, "ROOT", tmp_path)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "x")
+    base = ["--mode", "jev-hybrid", "--mock"]
+    r = run.Run(run.parse_args(base + ["--model", "claude-haiku-4-5-20251001"]))
+    assert r.state["config"]["planner_model"] == "claude-haiku-4-5-20251001"
+    r.dir.mkdir(parents=True)
+    r.state_path.write_text(json.dumps(r.state))
+    resume = base + ["--smoke", "--resume-run", str(r.dir)]
+    run.Run(run.parse_args(resume + ["--model", "claude-haiku-4-5-20251001"]))
+    with pytest.raises(SystemExit, match="planner_model"):
+        run.Run(run.parse_args(resume + ["--model", "claude-sonnet-4-5"]))
+
+
+def test_resume_checks_a_checkpoint_without_config(tmp_path, monkeypatch):
+    """Codex review: checkpoints from before `config` skipped the check and adopted whatever was passed. They are now
+    compared on their metadata and the first chunk's agent command; without provider/model the resume is refused."""
+    from bench import run
+    monkeypatch.setattr(run, "ROOT", tmp_path)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "x")
+    r = run.Run(run.parse_args(["--mode", "jev-solo", "--mock", "--smoke"]))
+    legacy = {k: v for k, v in r.state.items() if k != "config"}
+    legacy.update(mode="jev-solo", map_source={"source": "learned", "atlas_seed": None, "start": "blank"},
+                  track="jev", variant="solo", display_model=r.provider.display_model, mock=True, jev_model=r.model)
+    (r.dir / "chunks").mkdir(parents=True)
+    r.state_path.write_text(json.dumps(legacy))
+    resume = ["--mock", "--smoke", "--resume-run", str(r.dir)]
+    ok = run.Run(run.parse_args(["--mode", "jev-solo"] + resume))
+    assert ok.state["config"]["mode"] == "jev-solo"
+    with pytest.raises(SystemExit, match="mode: 'jev-solo' -> 'jev-assist'"):
+        run.Run(run.parse_args(["--mode", "jev-assist"] + resume))
+    r.provider.prepare(r.dir, ["python", "server.py"])
+    (r.dir / "chunks" / "001.cmd").write_text(" ".join(r.provider.command(r.dir, None, r.run_id, True)) + "\n")
+    run.Run(run.parse_args(["--mode", "jev-solo"] + resume))
+    with pytest.raises(SystemExit, match="agent command.*stuck-fail-steps=50"):
+        run.Run(run.parse_args(["--mode", "jev-solo", "--stuck-fail-steps", "50"] + resume))
+    r.state_path.write_text(json.dumps({k: v for k, v in legacy.items() if k not in ("provider", "model")}))
+    with pytest.raises(SystemExit, match="cannot be established"):
+        run.Run(run.parse_args(["--mode", "jev-solo"] + resume))
+
+
 def test_a_later_map_visited_early_does_not_skip_objectives():
     """Codex review: with Vermilion visited (Route 5, Underground Path) before Misty, the furthest-done rule returned
     'cut' and skipped Misty and the S.S. Ticket. Only badges and confirmed nodes skip ahead now."""
