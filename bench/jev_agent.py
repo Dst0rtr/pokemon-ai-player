@@ -590,6 +590,9 @@ class Agent:
             walk = self.hop_walk(cur, tuple(o.pos), x, y)
             if not walk:
                 continue
+            if self.exploring and self.s.get("recovery", 0) < 3 and isinstance(self.nav, LearnedAtlas) and \
+                    self.nav.map(cur)["arrivals"].get(f"{x},{y}", {}).get("seen"):
+                continue                                  # exploring: warps already taken only dilute the frontier
             here = " (you stand on it: step off and back on)" if (x, y) == tuple(o.pos) else ""
             opts.append(Option(f"walk to the warp at ({x},{y}) → {name}{new}{here}", "walk", walk[0],
                                "this particular door, ladder or stairway", then=walk[1]))
