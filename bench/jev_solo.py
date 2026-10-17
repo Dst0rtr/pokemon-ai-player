@@ -95,7 +95,9 @@ GRAPH: list[Node] = [
                      "which ladder leads on); beat trainers who block the way.",
          ("Mt. Moon B1F", "Mt. Moon B2F", "Route 4", "Cerulean City"), lambda f: f.reached("Cerulean City")),
     Node("misty", "Beat Misty in the Cerulean Gym.", ("Cerulean Gym",), _badge(2)),
-    Node("ticket", "Go north over Nugget Bridge (Route 24) and east on Route 25 to Bill's house; help Bill to get the S.S. Ticket.",
+    Node("ticket", "Go north over Nugget Bridge (Route 24) and east on Route 25 to Bill's house; help Bill to get the S.S. Ticket: "
+                   "talk to Bill (he looks like a Pokémon), then use the computer at the right end of the room (stand below it, "
+                   "face up, talk), then talk to Bill again when he comes out.",
          ("Route 24", "Route 25", "Bill's House"), lambda f: f.has("S.S. Ticket") or f.reached("S.S. Anne 1F")),
     Node("vermilion", "Go south through Route 5, the Underground Path and Route 6 to Vermilion City.",
          ("Route 5", "Route 6", "Vermilion City"), lambda f: f.reached("Vermilion City")),

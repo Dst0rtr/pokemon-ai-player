@@ -21,6 +21,12 @@
     "goal": "badge: Cascade",
     "initial_milestones": []
   },
+  "bills-house": {
+    "state": "saves/Pokemon-Red_Version/bills-house.state",
+    "goal": "reached: Vermilion City",
+    "initial_milestones": [],
+    "_made_by": "end of the full jev-solo run iteration 24 (blank atlas): Bill's House (2,7), 2 badges, Charmeleon L35"
+  },
   "viridian-gym": {
     "state": "saves/Pokemon-Red_Version/viridian-gym.state",
     "goal": "badge: Earth",

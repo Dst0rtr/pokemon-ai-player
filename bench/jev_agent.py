@@ -334,6 +334,12 @@ class Agent:
                 # in the gym the objective names: the trainers and the leader are the options (blind walks only pace)
                 opts = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))
                         and x.label != "talk to what you are facing"]
+            if targets and o.map == targets[-1] and why not in ("heal", "train"):
+                if any(x.label.startswith("talk to the person") and "not talked to yet" in (x.desc or "") for x in opts):
+                    # on the objective's own map: talk to everyone there before leaving it again
+                    opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
+                else:
+                    opts = self.object_options(o) + opts  # then the machines, PCs and furniture of a small room
             if why == "train" and self.nav:
                 train = self.train_options(o, facts)
                 if train:                                 # pace in real tall grass instead of blind walks
@@ -422,8 +428,10 @@ class Agent:
         after = parse(reply)
         if self.nav and o.map and opt.tool == "walk":
             self.nav_feedback(o, opt, after, route_key)
-        if o.map and (opt.label.startswith("talk to") or opt.tool == "talk"):
-            m = re.search(r"\((\d+),(\d+)\)", opt.label) if opt.label.startswith("talk to the person") else None
+        if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk" or any(t == "talk" for t, _ in opt.then)):
+            self.s.setdefault("npcs", {}).pop(o.map, None)   # people move after talking (Bill into his machine)
+        if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk"):
+            m = re.search(r"\((\d+),(\d+)\)", opt.label) if opt.label.startswith(("talk to the person", "examine the object")) else None
             key = f"{m[1]},{m[2]}" if m else f"facing {o.pos} {o.facing}"
             self.s["said"].setdefault(o.map, {})[key] = after.head[:80]
         if opt.tool == "manage" and opt.args.get("action") == "save":
@@ -569,6 +577,33 @@ class Agent:
             opts.append(Option(f"walk to the warp at ({x},{y}) → {name}{new}{here}", "walk", walk[0],
                                "this particular door, ladder or stairway", then=walk[1]))
         return opts, route_key
+
+    def object_options(self, o: Obs) -> list[Option]:
+        """Small indoor room: the solid cells below the top wall that touch the floor are furniture, machines or a
+        PC (the map view shows them as walls). Offer to examine them, untried first."""
+        cur = map_id(o.map) if o.map else None
+        if self.nav is None or cur is None or not o.pos:
+            return []
+        try:
+            cells = self.nav.map(cur)["cells"]
+        except (KeyError, IndexError):
+            return []
+        h, w = len(cells), len(cells[0]) if cells else 0
+        if h > 20 or w > 20:
+            return []
+        top = 0
+        while top < h and all(c == "#" for c in cells[top]):
+            top += 1
+        objs = [(x, y) for y in range(top, h) for x in range(w) if cells[y][x] == "#" and any(
+            0 <= x + dx < w and 0 <= y + dy < h and cells[y + dy][x + dx] in (".", ",") for dx, dy in MOVES.values())]
+        if not objs or len(objs) > 12:
+            return []
+        said = self.s["said"].get(o.map, {})
+        grid = self.grid(o.map) or {(x, y): c for y, row in enumerate(cells) for x, c in enumerate(row)}
+        opts = J.talk_to_options(dataclasses.replace(o, npcs=objs), grid, limit=6, said=said)
+        for x in opts:
+            x.label = x.label.replace("talk to the person or object", "examine the object")
+        return opts
 
     def train_options(self, o: Obs, facts) -> list[Option]:
         """Training: walk into the nearest reachable tall grass and pace there (wild battles come from grass); with no
