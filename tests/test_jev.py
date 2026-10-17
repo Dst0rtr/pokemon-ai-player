@@ -1058,6 +1058,23 @@ def test_rom_maps_and_carried_atlases_are_experiments_only(monkeypatch):
     assert map_cell(h) == "learned (carried atlas) — experiment"
 
 
+def test_resume_rejects_other_settings(tmp_path, monkeypatch):
+    """Codex review: --resume-run kept the old metadata but ran the new CLI settings."""
+    from bench import run
+    monkeypatch.setattr(run, "ROOT", tmp_path)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "x")
+    r = run.Run(run.parse_args(["--mode", "jev-solo", "--mock"]))
+    r.dir.mkdir(parents=True)
+    r.state_path.write_text(json.dumps(r.state))
+    again = run.Run(run.parse_args(["--mode", "jev-solo", "--mock", "--smoke", "--resume-run", str(r.dir)]))
+    assert again.state["config"] == r.state["config"]
+    with pytest.raises(SystemExit, match="stuck-fail-steps"):
+        run.Run(run.parse_args(["--mode", "jev-solo", "--mock", "--smoke", "--resume-run", str(r.dir), "--stuck-fail-steps", "50"]))
+    with pytest.raises(SystemExit, match="map_source"):
+        run.Run(run.parse_args(["--mode", "jev-solo", "--mock", "--smoke", "--resume-run", str(r.dir), "--map-source", "rom",
+                                "--experiment", "x"]))
+
+
 def test_a_later_map_visited_early_does_not_skip_objectives():
     """Codex review: with Vermilion visited (Route 5, Underground Path) before Misty, the furthest-done rule returned
     'cut' and skipped Misty and the S.S. Ticket. Only badges and confirmed nodes skip ahead now."""

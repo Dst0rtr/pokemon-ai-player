@@ -131,6 +131,19 @@ class Run:
             "server_commit": _git_commit(), "budget": {"hours": a.budget_hours, "max_calls": a.max_calls},
             "chunks": [], "active_seconds": 0.0, "paused_seconds": 0.0, "exit_reason": None, "cli_session": None,
         }
+        # what defines the run; a resume with other settings would publish a result that misdescribes it (Codex review)
+        config = {"provider": a.provider, "model": self.model, "mode": a.mode, "variant": a.variant, "mock": bool(a.mock),
+                  "jev_model": a.jev_model, "fallback_model": a.fallback_model, "map_source": a.map_source,
+                  "atlas": str(Path(a.atlas).resolve()) if a.atlas else None, "segment": a.segment or None,
+                  "experiment": a.experiment or None, "iteration": a.iteration,
+                  "budget": {"hours": a.budget_hours, "max_calls": a.max_calls}, "agent_args": agent_args}
+        old = self.state.get("config")
+        if old is not None and old != config:
+            diff = ", ".join(f"{k}: {old.get(k)!r} -> {config.get(k)!r}" for k in sorted(set(old) | set(config))
+                             if old.get(k) != config.get(k))
+            raise SystemExit(f"--resume-run with different settings than the run was started with ({diff}); "
+                             "pass the original arguments")
+        self.state.setdefault("config", config)
         self.state.setdefault("mode", a.mode)
         if a.experiment:
             self.state.setdefault("experiment", a.experiment)
