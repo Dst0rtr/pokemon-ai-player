@@ -95,6 +95,7 @@ class Agent:
         self.route_hint = ""
         self.why = ""                                  # the director's reason for the objective (heal, train, node id)
         self.exploring = False
+        self.clear_for: dict = {}                       # clear-the-way option label -> the hop it unblocks
         self.edge_hop: Optional[tuple] = None           # (side, x, y) of the chosen edge-crossing option (learned atlas)
         self.edge_opts: dict = {}
         self.planner_cost = 0.0
@@ -452,6 +453,7 @@ class Agent:
         opts, route_key, skip = [], "", None
         self.route_hint = ""
         self.edge_opts = {}
+        self.clear_for = {}
         self.exploring = False
         # healing: the targets list the nearest Poké Center first; otherwise the route ends at the last target
         order = targets if why == "heal" else list(reversed(targets))
@@ -552,8 +554,10 @@ class Agent:
             return None
         c = clear[0]
         bx, by = re.search(r"\((\d+),(\d+)\)", c.label).groups()
-        return Option(f"{prefix}: first clear the way at ({bx},{by}) (talk to it / take it)", c.tool, c.args,
-                      desc + f"; the only way on is blocked by someone or something at ({bx},{by})", then=c.then)
+        label = f"{prefix}: first clear the way at ({bx},{by}) (talk to it / take it)"
+        self.clear_for[label] = (h.x, h.y)
+        return Option(label, c.tool, c.args, desc + f"; the only way on is blocked by someone or something at ({bx},{by})",
+                      then=c.then)
 
     def nav_feedback(self, o: Obs, opt: Option, after: Obs, route_key: str) -> None:
         """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
@@ -571,6 +575,13 @@ class Agent:
             self.nav.record_edge(cur, side, ex_, ey_, map_id(after.map), *after.pos)
         cl = re.search(r"first clear the way at \((\d+),(\d+)\)", opt.label)
         if cl and cur is not None:
+            if "no walkable route" in after.head:
+                # the blocker cannot even be reached from here: the hop is behind a wall (elevation), not a person
+                hop = self.clear_for.get(opt.label)
+                if hop and isinstance(self.nav, LearnedAtlas) and o.pos:
+                    self.nav.record_noroute(cur, tuple(o.pos), hop)
+                self.s["nav_noroute"].pop(f"{cur}:{hop[0]},{hop[1]}" if hop else "", None)
+                return
             k = f"{cur}:{cl[1]},{cl[2]}"
             self.s.setdefault("clear_tries", {})[k] = self.s["clear_tries"].get(k, 0) + 1
         nr = re.match(r"no walkable route from \((\d+),(\d+)\) to \((\d+),(\d+)\)", after.head)

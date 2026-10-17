@@ -900,3 +900,20 @@ def test_learned_refusal_with_a_blocker_on_the_path_is_not_a_wall(tmp_path):
     o.npcs = []                                         # nobody: a wall the map view did not show
     agent.learn_noroute(o)
     assert agent.nav.unreachable(b2, (4, 1), (1, 1))
+
+
+def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b2 = map_id("Mt. Moon B2F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(b2, _view("Mt. Moon B2F", ["#######", "#D..P.#", "#######"]), _warps_hex([(1, 1, 0, 60)]), [])
+    o = J.parse("walked\nf1 Mt. Moon B2F (4,1) facing left | C L24 38/68 | ¥2543 | 1 badges")
+    o.npcs = [(2, 1)]
+    agent.s["nav_noroute"][f"{b2}:1,1"] = agent.s["step"]
+    opts, _ = agent.nav_options(o, ["Cerulean City"], SOLO.Facts(badges=1))
+    clear = next(x for x in opts if "first clear the way" in x.label)
+    agent.nav_feedback(o, clear, J.parse("no walkable route from (4,1) to (3,1) on this map"), "")
+    assert agent.nav.unreachable(b2, (4, 1), (1, 1)) and not agent.s.get("clear_tries")
