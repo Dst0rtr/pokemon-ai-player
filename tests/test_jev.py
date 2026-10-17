@@ -996,6 +996,22 @@ def test_learned_twin_doors_and_global_frontier(tmp_path):
     opts, _ = agent.nav_options(o, ["Vermilion City"], SOLO.Facts(badges=2))
     go = next(x for x in opts if x.label.startswith("explore the frontier: go to "))
     assert go.label.endswith("(south edge)") and agent.edge_opts[go.label][0] == "south"
+    # back in the city with a west neighbour whose only unexplored exit lies beyond a one-way ledge: not that one
+    # (bills-house iteration 32 crossed to Route 4 and back ~400 times)
+    r4 = map_id("Route 4")
+    atlas.observe(city, _view("Cerulean City", ["#.....#", "...D..#", "#.....#"]), _warps_hex([(3, 1, 0, house)]),
+                  [("north", "Route 24"), ("west", "Route 4")])
+    atlas.record_edge(city, "north", 2, 0, r24, 2, 2)
+    atlas.observe(r4, _view("Route 4", ["#######", "#D.>...", "#######"]), _warps_hex([(1, 1, 0, map_id("Mt. Moon 1F"))]),
+                  [("east", "Cerulean City")])
+    atlas.record_edge(city, "west", 0, 1, r4, 6, 1)
+    atlas.record_edge(r4, "east", 6, 1, city, 0, 1)
+    atlas.data["maps"] = {str(r4): atlas.data["maps"].pop(str(r4)), **atlas.data["maps"]}   # listed first, nearest
+    agent.s["visited"].append("Route 4")
+    o = J.parse("walked\nf1 Cerulean City (1,1) facing left | C L24 38/68 | ¥2543 | 2 badges")
+    opts, _ = agent.nav_options(o, ["Vermilion City"], SOLO.Facts(badges=2))
+    go = next(x for x in opts if x.label.startswith("explore the frontier: go to "))
+    assert go.label.startswith("explore the frontier: go to Cerulean Trashed House"), go.label
 
 
 def test_harness_stops_an_agent_that_keeps_crashing(monkeypatch):

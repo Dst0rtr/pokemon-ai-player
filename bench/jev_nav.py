@@ -193,10 +193,12 @@ class WorldNav:
 
     # ---------------------------------------------------------------- route
     def route(self, mid: int, pos: tuple[int, int], goal: int, surf: bool = False, cut: bool = False,
-              taken: Optional[dict] = None, blocked: frozenset = frozenset(), max_nodes: int = 4000) -> Optional[list[Hop]]:
-        """Cheapest hop list from (mid, pos) to any cell of map `goal`; [] when already there, None if no route."""
+              taken: Optional[dict] = None, blocked: frozenset = frozenset(), max_nodes: int = 4000,
+              arrival: bool = False):
+        """Cheapest hop list from (mid, pos) to any cell of map `goal`; [] when already there, None if no route.
+        With arrival=True: (hops, (map, x, y) where the last hop lands), or None."""
         if mid == goal:
-            return []
+            return ([], (mid, pos[0], pos[1])) if arrival else []
         taken = taken or {}
         start = (mid, pos[0], pos[1])
         best = {start: 0}
@@ -209,11 +211,11 @@ class WorldNav:
                 continue
             n += 1
             if node[0] == goal:
-                hops = []
+                end, hops = node, []
                 while node in prev:
                     node, hop = prev[node]
                     hops.append(hop)
-                return hops[::-1]
+                return (hops[::-1], end) if arrival else hops[::-1]
             try:
                 _, trans = self.reach(node[0], (node[1], node[2]), surf=surf, cut=cut)
             except (IndexError, ValueError, KeyError):         # a map with no data (learned atlas): a dead end

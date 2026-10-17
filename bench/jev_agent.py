@@ -570,13 +570,25 @@ class Agent:
                     self.edge_opts[label] = (h.side, h.x, h.y)
             if not front:
                 # nothing unexplored here: the map route to the nearest known map that still has unexplored exits
-                best = None
-                for mid in frontier_maps(self.nav, set(self.s["visited"])):
+                best, visited = None, set(self.s["visited"])
+                for mid in frontier_maps(self.nav, visited):
                     if mid == cur:
                         continue
-                    r = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut, blocked=blocked)
-                    if r and (best is None or len(r) < len(best[1])):
-                        best = (mid, r)
+                    found = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut, blocked=blocked, arrival=True)
+                    if not found or not found[0]:
+                        continue
+                    r, arr = found
+                    # only where the unexplored exits can be reached from the arrival point (bills-house iteration 32:
+                    # Route 4's exits lie beyond its one-way ledge, and Jev crossed to it and back ~400 times)
+                    try:
+                        if arr[1] >= 0 and not self.nav.frontier(mid, (arr[1], arr[2]), visited, surf=surf, cut=cut,
+                                                                 blocked=blocked):
+                            continue
+                    except (KeyError, IndexError, ValueError):
+                        continue
+                    key = (len(r), sum(h.steps for h in r))
+                    if best is None or key < best[2]:
+                        best = (mid, r, key)
                 if best:
                     h = best[1][0]
                     walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
