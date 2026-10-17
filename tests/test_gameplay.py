@@ -732,3 +732,40 @@ def test_walk_waits_out_a_spinner_slide(emu):
     r = emu.walk("left 3, up 2")
     assert "slid on a spinner tile to (1,17)" in r
     assert emu.profile.position() == (45, 1, 17) and not emu.profile.sliding()
+
+
+def test_battle_switch_reads_the_party_cursor_from_wram(emu):
+    """The battle party menu remembers its cursor and draws ▶ on each entry's HP line: after one switch, switching
+    by name used to assume row 0 and brought out the wrong Pokémon (Jev Cerulean runs). Needs a local
+    saves/<rom>/after-brock.state; the Route 3 trainer fight is reached by walking east."""
+    import pytest
+    from tests.conftest import ROOT
+    from games import gen1_data as D
+    state = ROOT / "saves" / emu.rom_path.stem / "after-brock.state"
+    if not state.exists():
+        pytest.skip("no local after-brock.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    p = emu.profile
+    emu.walk("to outside")
+    for _ in range(8):
+        if p.in_battle():
+            break
+        on3 = D.map_name(p.position()[0]) == "Route 3"
+        emu.walk("right 12" if on3 else "to east edge")
+        if not p.in_battle() and (p.screen_text() or "").strip():
+            emu.talk()
+    assert p.in_battle()
+    for _ in range(8):
+        if "FIGHT" in (p.screen_text() or ""):
+            break
+        emu.press("A")
+    for name in ("Charmeleon", "Pidgey", "Butterfree"):
+        emu.battle("switch", name)
+        assert p.battle()["mine"]["species"] == name
+        for _ in range(6):
+            if not p.in_battle() or "FIGHT" in (p.screen_text() or ""):
+                break
+            emu.press("A")

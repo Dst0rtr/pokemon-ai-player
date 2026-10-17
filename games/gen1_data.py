@@ -336,6 +336,7 @@ TILE_PAIR_COLLISIONS_LAND = {
 }
 TILE_PAIR_COLLISIONS_WATER = {3: {frozenset((0x14, 0x2E)), frozenset((0x48, 0x2E))}, 17: {frozenset((0x14, 0x05))}}
 TILE_IN_FRONT = 0xCFC6      # wTileInFrontOfPlayer: what Cut / Surf / talking would act on
+CURRENT_MENU_ITEM = 0xCC26  # wCurrentMenuItem: the cursor row of the open menu (the party menu's ▶ is on the HP line)
 PLAYER_MON_NUMBER = 0xCC2F  # wPlayerMonNumber: party index of the Pokémon currently in battle
 # ROM map header table (pokered MapHeaderPointers / MapHeaderBanks): header = tileset, height, width, ...
 MAP_HEADER_PTRS = 0x01AE

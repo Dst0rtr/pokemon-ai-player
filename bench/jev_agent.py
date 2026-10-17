@@ -356,7 +356,8 @@ class Agent:
             # a switch the game refused ("is already out", "no will to fight") is not offered again right away
             failed = {h.removeprefix(J.AUTO).split(" -> ", 1)[0] for h in self.s["history"][-4:]
                       if "is already out" in h or "no will to fight" in h}
-            opts = [x for x in opts if x.label not in failed] or opts
+            kept = [x for x in opts if x.label not in failed]
+            opts = kept or (press_options() if kind == "faint_switch" else opts)   # every switch refused: use the menu
         screen, screen_stuck = self.screen_entry(o), False
         if kind != "overworld" and screen["n"] >= SCREEN_LOOP and len(opts) > 1:
             # the same menu/dialog/prompt screen keeps coming back without progress: try what was not tried here yet;

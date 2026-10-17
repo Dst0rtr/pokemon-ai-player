@@ -737,8 +737,10 @@ class PokemonGen1Profile(GameProfile):
                 if not self._select_main(emu, (1, 0)):
                     return "cannot open the party menu now"
                 emu.press("A", settle=1)
-            names = [self._norm(p["species"]) for p in party]
-            cur = self._list_cursor(self.screen_text() or "", names) or 0
+            # the party menu remembers its cursor and draws ▶ on each entry's HP line, not the name: read the row from WRAM
+            cur = self._u8(D.CURRENT_MENU_ITEM)
+            if not 0 <= cur < len(party):
+                cur = self._list_cursor(self.screen_text() or "", [self._norm(p["species"]) for p in party]) or 0
             steps = idx - cur
             if steps:
                 emu.press(("DOWN " if steps > 0 else "UP ") * abs(steps), settle=1)
