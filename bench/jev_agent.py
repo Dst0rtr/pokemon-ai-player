@@ -268,6 +268,16 @@ class Agent:
             await self.refresh_team()
             self.s["refresh_items"] = False
         ex, cn = await self.map_info(o) if o.mode == "overworld" else ([], [])
+        if o.mode == "overworld" and o.map:
+            # replies after a warp often carry no map rows: keep the last people seen on this map
+            known = self.s.setdefault("npcs", {})
+            if o.npcs:
+                known[o.map] = [list(n) for n in o.npcs]
+            elif known.get(o.map):
+                o.npcs = [tuple(n) for n in known[o.map]]
+            elif o.map not in known:
+                o.npcs = parse(await self.tool("state", section="map")).npcs
+                known[o.map] = [list(n) for n in o.npcs]
         if isinstance(self.nav, LearnedAtlas) and o.mode == "overworld" and o.map and map_id(o.map) is not None \
                 and (not self.nav.known(map_id(o.map)) or o.map != self.s.get("atlas_map")):
             # learned atlas: record what the player can see on entering a map (full map view + wWarpEntries in WRAM)
