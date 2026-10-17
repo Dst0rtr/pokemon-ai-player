@@ -1441,6 +1441,26 @@ def test_with_the_lift_key_the_objective_is_the_elevator(tmp_path):
     assert agent.s["elevator"] == "B4F"
 
 
+def test_a_black_out_is_seen_without_the_words(tmp_path):
+    """Full run 50: the last turns of a loss to Misty were plain 'pressed A' replies; the black-out went unnoticed, so
+    Misty stayed 'already talked to' (Jev 0.02) and no training bonus followed. Out of a battle onto another map with
+    the money halved is a black-out too."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    gym = J.parse("walked\nf1 Cerulean Gym (4,3) facing up | C L33 90/90 | ¥3000 | 1 badges")
+    fight = J.parse("pressed A\nbattle: trainer | enemy STARYU L18 40/40 | you CHARMELEON L33 10/90 | menu: text")
+    assert fight.mode != "overworld"
+    assert not agent.blacked_out(gym, fight, "dialogue ended: Hi, you're a new face!")
+    won = J.parse("pressed A\nf1 Cerulean Gym (4,3) facing up | C L33 50/90 | ¥4980 | 2 badges")
+    assert not agent.blacked_out(fight, won, "pressed A")                 # same map, more money: a win
+    town = J.parse("pressed A\nf1 Cerulean City (19,18) facing down | C L33 90/90 | ¥2490 | 2 badges")
+    assert not agent.blacked_out(won, town, "walked down 1/1 — entered Cerulean City")   # a walk, not a battle
+    agent.blacked_out(town, gym, "went toward (30,19) — entered Cerulean Gym")
+    lost = J.parse("pressed A\nf1 Cerulean City (19,18) facing down | C L33 90/90 | ¥1500 | 1 badges")
+    assert agent.blacked_out(fight, lost, "pressed A")
+    assert agent.blacked_out(fight, lost, "AAAAAAA blacked out!")
+
+
 def test_node_targets_reach_the_room_that_matters():
     from games import gen1_data as D
     nodes = {n.id: n for n in SOLO.GRAPH} if hasattr(SOLO, "GRAPH") else None

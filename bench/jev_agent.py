@@ -463,7 +463,7 @@ class Agent:
             self.s["last_save_step"] = self.s["step"]
         if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
             self.s["refresh_items"] = True              # the bag, HMs or moves may have changed
-        if self.director and facts is not None and "blacked out" in reply and \
+        if self.director and facts is not None and self.blacked_out(o, after, reply) and \
                 self.s["step"] - self.s.get("blackout_step", -10**9) > 5:
             self.s["blackout_step"] = self.s["step"]
             gym = self.director.s.get("gym_map_seen", "")
@@ -513,6 +513,19 @@ class Agent:
         if opt.tool == "manage" and opt.args.get("action") == "use" and "not compatible" in reply:
             refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
             self.s.setdefault("hm_no", []).append(refused)
+
+    def blacked_out(self, o: Obs, after: Obs, reply: str) -> bool:
+        """A lost battle: the text says so, or (full run 50: the last turns of a loss to Misty were plain "pressed A"
+        replies) the game state does: out of a battle onto another map with the money halved."""
+        prev = self.s.get("ow") or ["", 0]
+        if after.mode == "overworld" and after.map:
+            self.s["ow"] = [after.map, after.money]
+        elif o.mode == "overworld" and o.map:
+            self.s["ow"] = [o.map, o.money]
+        if "blacked out" in reply:
+            return True
+        return (o.mode != "overworld" and after.mode == "overworld" and bool(after.map) and bool(prev[0])
+                and after.map != prev[0] and prev[1] > 0 and after.money < prev[1] and after.money * 2 <= prev[1] + 1)
 
     def remember_choice(self, o: Obs, opt: Option) -> None:
         """The floor chosen on an elevator panel (a prompt carries no status line: the map is the last one seen)."""
