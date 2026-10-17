@@ -193,9 +193,10 @@ def map_cell(h: dict) -> str:
     ms = h.get("map_source") or {}
     if h.get("variant") == "battles":
         return "—"
+    exp = " — experiment" if h.get("experiment") else ""
     if ms.get("source") == "learned":
-        return "learned (carried atlas)" if ms.get("atlas_seed") else "learned (blank)"
-    return "rom"
+        return ("learned (carried atlas)" if ms.get("atlas_seed") else "learned (blank)") + exp
+    return "rom" + exp
 
 
 def jev_leaderboard(results: list[dict]) -> str:

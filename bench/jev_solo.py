@@ -34,8 +34,8 @@ POKE_CENTERS = {"Viridian City": "Viridian Poké Center", "Pewter City": "Pewter
                 "Celadon City": "Celadon Poké Center", "Fuchsia City": "Fuchsia Poké Center",
                 "Saffron City": "Saffron Poké Center", "Cinnabar Island": "Cinnabar Poké Center",
                 "Route 10": "Rock Tunnel Poké Center", "Indigo Plateau Lobby": "Indigo Plateau Lobby"}
-NURSE_SPOT = (3, 3)
-GYM_NODES = ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni")                                  # where the player talks to a Poké Center nurse (facing up)
+NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
+GYM_NODES = ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni")
 
 
 @dataclass
@@ -186,7 +186,7 @@ class SoloDirector:
                 return (f"Your team is weak ({round(100 * f.hp_ratio)}% HP): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
                         pcs[:2], "heal")
         self.s["healing"] = False
-        target = LEVEL_TARGET.get(f.badges, 55)
+        target = LEVEL_TARGET.get(f.badges, 55) + self.s.get("level_bonus", {}).get(node.id, 0)
         if node.id in ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni", "champion") and f.levels \
                 and max(f.levels) < target:
             return (f"Train before the next gym: walk through tall grass and win wild battles until your best Pokémon "
@@ -217,6 +217,18 @@ class SoloDirector:
 
     # ------------------------------------------------------------- progress / stuck
     def track(self, step: int, o: Obs, f: Facts) -> None:
+        if o.map:
+            self.s["prev_map"] = o.map
+        if any("blacked out" in e for e in o.events):
+            node = current_node(f)
+            if node.id in GYM_NODES and self.s.get("gym_map_seen", "").endswith("Gym"):
+                # lost to the gym (leader or trainers): train harder before the next try (learned per gym)
+                bonus = self.s.setdefault("level_bonus", {})
+                bonus[node.id] = bonus.get(node.id, 0) + 3
+        if o.map.endswith("Gym"):
+            self.s["gym_map_seen"] = o.map
+        elif o.map:
+            self.s["gym_map_seen"] = ""
         sig = f"{len(f.visited)}|{len(f.milestones)}|{len(f.ever_items)}|{f.badges}|{sorted(f.moves)}|{sum(f.levels)}"
         if sig != self.s["progress_sig"]:
             self.s["progress_sig"] = sig

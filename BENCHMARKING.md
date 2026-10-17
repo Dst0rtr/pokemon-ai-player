@@ -40,7 +40,9 @@ Jev runs also pick where map knowledge comes from, `--map-source`:
 | `--map-source` | What the Jev player knows about maps | Use it when |
 |---|---|---|
 | `learned` (default) | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run. Results record whether a run started blank or with a carried atlas | every benchmark run, including the jev-solo goal and the full run (started blank): exploring is the better test of the model |
-| `rom` | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | comparison and debugging only (run ids get `-rommap`) |
+| `rom` | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | comparison and debugging only: needs `--experiment LABEL` (run ids get `-rommap`) |
+
+**Rule for benchmark and goal runs:** every run builds its own map and finishes on its own: `--mode jev-solo`, `--map-source learned`, no `--atlas` (the atlas starts blank; results record `atlas_seed: null`). A rom map or a carried atlas (`--atlas FILE`) is refused unless the run is labelled with `--experiment LABEL`; such runs are marked "experiment" in RESULTS.md.
 
 ### One command per mode
 
@@ -53,9 +55,9 @@ comes first.
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo
 # Jev + an LLM fallback on uncertain or stuck decisions (the self-improvement run mode)
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-assist --fallback-model haiku --fallback-budget-usd 25 --segment mt-moon --iteration 3
-# carry an earlier run's atlas over (recorded as "learned (carried atlas)"), or compare with the ROM map graph
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --atlas bench/runs/<earlier_run>/data/jev_atlas.json
-TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --map-source rom
+# experiments only (labelled): carry an earlier run's atlas over, or compare with the ROM map graph
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --atlas bench/runs/<earlier_run>/data/jev_atlas.json --experiment carry
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo --map-source rom --experiment rommap
 # Jev picks actions, an LLM plans objectives
 TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-hybrid --model haiku
 # Jev picks actions toward a fixed route list (ablation)

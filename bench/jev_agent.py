@@ -318,6 +318,7 @@ class Agent:
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
                 quiet = (bool(route_key) or self.exploring) and self.s.get("recovery", 0) == 0   # blind walks dilute the choice
                 opts = nav_opts + [x for x in opts if not (x.tool == "walk" and NAME_WALK_RE.match(x.args.get("path", "")))
+                                   and not (x.tool == "walk" and x.args.get("path", "").endswith(" edge"))   # nav lists reachable edges
                                    and not (quiet and x.label.startswith("walk ") and x.label.endswith(" 4 tiles"))]
             if why in GYM_NODES and o.map.endswith("Gym") and any(x.label.startswith("talk to the person") for x in opts) \
                     and self.s.get("recovery", 0) < 2:
@@ -513,6 +514,16 @@ class Agent:
         visited = set(self.s["visited"])
         _, trans = self.nav.reach(cur, tuple(o.pos), surf=surf, cut=cut)
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}   # warps this section of the map can reach
+        sides: dict = {}
+        for steps, h, _ in trans:                         # edges this section reaches: the nearest cell per side
+            if h.kind == "edge" and h.x >= 0 and (h.side not in sides or steps < sides[h.side][0]):
+                sides[h.side] = (steps, h)
+        for _, h in sides.values():
+            walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side)
+            label = f"walk to {h.dest_name} ({h.side} edge)"
+            if walk and not any(x.label == label for x in opts):
+                opts.append(Option(label, "walk", walk[0], f"leave this map by its {h.side} edge", then=walk[1]))
+                self.edge_opts[label] = (h.side, h.x, h.y)
         for i, (x, y, _, _) in enumerate(self.nav.map(cur)["warps"]):
             if (x, y) not in near or (x, y) == skip:
                 continue

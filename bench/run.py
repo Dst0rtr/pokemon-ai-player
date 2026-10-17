@@ -118,7 +118,8 @@ class Run:
         else:
             seg = f"_{a.segment}" if a.segment else ""
             it = f"_it{a.iteration}" if a.iteration is not None else ""
-            learned = "-rommap" if a.provider == "jev" and a.map_source == "rom" else ""
+            learned = ("-rommap" if a.provider == "jev" and a.map_source == "rom" else "") + \
+                (f"-exp-{_slug(a.experiment)}" if a.experiment else "")
             self.run_id = f"{self.provider.label}{learned}{seg}{it}_{_slug(self.model)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             self.dir = ROOT / "bench" / "runs" / self.run_id
         self.state_path = self.dir / "harness.json"
@@ -129,6 +130,8 @@ class Run:
             "chunks": [], "active_seconds": 0.0, "paused_seconds": 0.0, "exit_reason": None, "cli_session": None,
         }
         self.state.setdefault("mode", a.mode)
+        if a.experiment:
+            self.state.setdefault("experiment", a.experiment)
         if self.provider.name == "jev" and a.variant != "battles":
             self.state.setdefault("map_source", {"source": a.map_source, "atlas_seed": a.atlas or None,
                                                  "start": ("carried atlas" if a.atlas else "blank") if a.map_source == "learned" else "rom"})
@@ -503,7 +506,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="jev: where map knowledge comes from: learned (default; no ROM map tables, Jev builds an atlas while "
                         "playing, data/jev_atlas.json, blank unless --atlas) or rom (world/warp graph from the ROM map tables; "
                         "for comparison and debugging)")
-    p.add_argument("--atlas", default="", help="jev --map-source learned: start from an earlier run's data/jev_atlas.json")
+    p.add_argument("--atlas", default="", help="jev --map-source learned: start from an earlier run's data/jev_atlas.json "
+                                               "(experiments only: needs --experiment)")
+    p.add_argument("--experiment", default="", help="label for a run that is not a benchmark/goal run: required with "
+                                                    "--map-source rom or --atlas (it is recorded and shown as an experiment)")
     p.add_argument("--variant", default="solo", choices=["solo", "assist", "hybrid", "scripted", "battles"],
                    help="jev: solo = Jev + code only, no LLM, stuck = fail (final exam); assist = solo + Haiku fallback per "
                         "uncertain/stuck decision, logged to fallbacks.jsonl; hybrid = Haiku planner; scripted = short route; "
@@ -535,6 +541,9 @@ def main(argv=None) -> None:
     a = build_parser().parse_args(argv)
     a.provider, a.variant, a.mode = resolve_mode(a.mode, a.provider, a.variant)
     a.model, a.fallback_model = resolve_model(a.model), resolve_model(a.fallback_model)
+    if a.provider == "jev" and (a.map_source == "rom" or a.atlas) and not a.experiment:
+        raise SystemExit("benchmark and goal runs build their own map from a blank atlas (--map-source learned, no --atlas); "
+                         "a rom map or a carried atlas is an experiment: add --experiment LABEL")
     if a.provider == "jev" and not a.mock and not os.environ.get("TYPESAFE_API_KEY"):
         raise SystemExit("TYPESAFE_API_KEY is not set (Jev needs it); use --mock for an offline run")
     if a.provider == "jev" and a.mock and not a.smoke and not a.resume_run:

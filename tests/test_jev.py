@@ -917,3 +917,27 @@ def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
     clear = next(x for x in opts if "first clear the way" in x.label)
     agent.nav_feedback(o, clear, J.parse("no walkable route from (4,1) to (3,1) on this map"), "")
     assert agent.nav.unreachable(b2, (4, 1), (1, 1)) and not agent.s.get("clear_tries")
+
+
+def test_rom_maps_and_carried_atlases_are_experiments_only(monkeypatch):
+    from bench import run
+    from bench.report import map_cell
+    monkeypatch.setenv("TYPESAFE_API_KEY", "x")
+    for extra in (["--map-source", "rom"], ["--atlas", "a.json"]):
+        with pytest.raises(SystemExit, match="experiment"):
+            run.main(["--mode", "jev-solo"] + extra)
+    h = {"variant": "solo", "experiment": "carry", "map_source": {"source": "learned", "atlas_seed": "a.json"}}
+    assert map_cell(h) == "learned (carried atlas) — experiment"
+
+
+def test_losing_at_a_gym_raises_its_level_target():
+    d = SOLO.SoloDirector({"visited": ["Cerulean City", "Cerulean Gym"]})
+    f = SOLO.Facts(badges=1, levels=[23, 15], hp_ratio=1.0, visited={"Cerulean City", "Cerulean Gym"},
+                   milestones=["reached: Cerulean City"])
+    o = J.parse("walked\nf1 Cerulean Gym (4,3) facing up | Charmeleon L24 60/68 | ¥3000 | 1 badges")
+    d.track(1, o, f)
+    assert d.objective(f, o)[2] == "misty"                                 # L23 >= 21: no training yet
+    lost = J.parse("battle over\nf2 Cerulean Poké Center (3,3) facing up | Charmeleon L24 60/68 | ¥1500 | 1 badges")
+    lost.map, lost.events = "", ["blacked out (lost a battle)"]             # the events arrive with the battle reply
+    d.track(2, lost, f)
+    assert d.s["level_bonus"] == {"misty": 3} and d.objective(f, o)[2] == "train"

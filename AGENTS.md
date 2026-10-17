@@ -61,7 +61,9 @@ Jev runs also pick where map knowledge comes from, `--map-source`:
 | `--map-source` | What the Jev player knows about maps | Use it when |
 |---|---|---|
 | `learned` (default) | nothing at the start; Jev builds an atlas while playing (`bench/jev_atlas.py`): the map view and wWarpEntries (WRAM 0xD3AE) of each map it enters, and where each warp or edge it takes really leads. It explores frontier-first (untaken warps to unvisited maps, then uncrossed edges). Saved as `data/jev_atlas.json`; `--atlas FILE` carries an earlier run's atlas into a new run. Results record whether a run started blank or with a carried atlas | every benchmark run, including the jev-solo goal and the full run (started blank): exploring is the better test of the model |
-| `rom` | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | comparison and debugging only (run ids get `-rommap`) |
+| `rom` | the whole world/warp graph decoded from the ROM map headers and warp tables (`bench/jev_nav.py`): which ladder on which floor leads where, every edge connection | comparison and debugging only: needs `--experiment LABEL` (run ids get `-rommap`) |
+
+**Rule for benchmark and goal runs:** every run builds its own map and finishes on its own: `--mode jev-solo`, `--map-source learned`, no `--atlas` (the atlas starts blank; results record `atlas_seed: null`). A rom map or a carried atlas (`--atlas FILE`) is refused unless the run is labelled with `--experiment LABEL`; such runs are marked "experiment" in RESULTS.md.
 
 Checklist for a coding agent:
 
