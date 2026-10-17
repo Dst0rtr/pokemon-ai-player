@@ -1124,3 +1124,24 @@ def test_a_walk_that_failed_is_not_what_the_person_said(tmp_path):
         said.clear()
         agent.remember_talk(o, opt, J.parse(head + "\nf1 Cerulean Gym (5,3) facing left | C L27 70/80 | ¥3000 | 1 badges"))
         assert ("4,2" in said) is kept, head
+
+
+def test_node_targets_reach_the_room_that_matters():
+    from games import gen1_data as D
+    nodes = {n.id: n for n in SOLO.GRAPH} if hasattr(SOLO, "GRAPH") else None
+    nodes = nodes or {n.id: n for v in vars(SOLO).values() if isinstance(v, list) and v and isinstance(v[0], SOLO.Node) for n in v}
+    names = set(D.MAPS.values())
+    assert all(t in names for n in nodes.values() for t in n.targets)
+    # iteration 39: the targets ended at S.S. Anne 2F, so the map route took Jev out of the captain's room each time
+    assert nodes["cut"].targets[-1] == "S.S. Anne Captain's Room"
+    assert nodes["scope"].targets[-1] == "Rocket Hideout B4F" and nodes["silph"].targets[-1] == "Silph Co. 11F"
+    assert nodes["champion"].targets[-1] == "Champion's Room" and "tea" not in nodes   # Red/Blue: any drink, no Tea
+    d = SOLO.SoloDirector({})
+    f = SOLO.Facts(badges=4, levels=[60], visited={"Lavender Town"}, ever_items={"Silph Scope"})
+    tower = J.parse("walked\nf1 Pokémon Tower 7F (10,4) facing up | C L60 100/100 | ¥3000 | 4 badges")
+    home = J.parse("walked\nf1 Mr. Fuji's House (3,5) facing up | C L60 100/100 | ¥3000 | 4 badges")
+    order = list(nodes)
+    f.manual_done = set(order[:order.index("flute")])
+    assert SOLO.current_node(f).id == "flute"
+    assert d.objective(f, tower)[1][-1] == "Pokémon Tower 7F"
+    assert d.objective(f, home)[1] == ["Mr. Fuji's House"]        # he takes you home after the rescue

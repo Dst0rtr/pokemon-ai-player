@@ -69,6 +69,7 @@ class Node:
     targets: tuple
     done: Optional[Callable[[Facts], bool]]          # None = only Jev can tell (jev_check)
     jev_check: str = ""                              # Noul question used when done is None (or as a backup)
+    stages: tuple = ()                               # ((condition(facts, obs), targets), ...): later steps of the node
 
 
 def _badge(n: int) -> Callable[[Facts], bool]:
@@ -103,38 +104,47 @@ GRAPH: list[Node] = [
     Node("vermilion", "Go south through Route 5, the Underground Path and Route 6 to Vermilion City.",
          ("Route 5", "Route 6", "Vermilion City"), lambda f: f.reached("Vermilion City")),
     Node("cut", "Board the S.S. Anne in Vermilion harbor and talk to the captain on the top deck to get HM01 (Cut).",
-         ("Vermilion Dock", "S.S. Anne 1F", "S.S. Anne 2F"), lambda f: f.has("HM01")),
+         ("Vermilion Dock", "S.S. Anne 1F", "S.S. Anne 2F", "S.S. Anne Captain's Room"), lambda f: f.has("HM01")),
     Node("surge", "Cut the small tree in front of the Vermilion Gym and beat Lt. Surge.", ("Vermilion Gym",), _badge(3)),
     Node("lavender", "Go to Lavender Town: east of Cerulean via Route 9 and Route 10, through Rock Tunnel.",
          ("Route 9", "Route 10", "Rock Tunnel 1F", "Lavender Town"), lambda f: f.reached("Lavender Town")),
     Node("celadon", "Go west from Lavender via Route 8 and the Underground Path to Route 7 and Celadon City.",
          ("Route 8", "Route 7", "Celadon City"), lambda f: f.reached("Celadon City")),
     Node("erika", "Beat Erika in the Celadon Gym (cut the tree in front of it).", ("Celadon Gym",), _badge(4)),
-    Node("scope", "Find the Rocket Hideout under the Celadon Game Corner, beat Giovanni and take the Silph Scope.",
-         ("Game Corner", "Rocket Hideout B1F"), lambda f: f.has("Silph Scope")),
+    Node("scope", "Find the Rocket Hideout under the Celadon Game Corner (a switch behind a poster opens the stairs), "
+                  "go down to B4F (a Rocket there drops the Lift Key for the elevator), beat Giovanni and take the Silph Scope.",
+         ("Game Corner", "Rocket Hideout B1F", "Rocket Hideout B2F", "Rocket Hideout B3F", "Rocket Hideout B4F"),
+         lambda f: f.has("Silph Scope")),
     Node("flute", "Climb Pokémon Tower in Lavender with the Silph Scope, rescue Mr. Fuji and get the Poké Flute.",
-         ("Lavender Town", "Pokémon Tower 1F", "Mr. Fuji's House"), lambda f: f.has("Poké Flute")),
+         ("Lavender Town",) + tuple(f"Pokémon Tower {n}F" for n in range(1, 8)), lambda f: f.has("Poké Flute"),
+         stages=((lambda f, o: o.map == "Mr. Fuji's House", ("Mr. Fuji's House",)),)),   # he takes you home after the rescue
     Node("fuchsia", "Wake the sleeping Snorlax with the Poké Flute and travel south to Fuchsia City.",
          ("Route 12", "Route 13", "Fuchsia City"), lambda f: f.reached("Fuchsia City")),
     Node("koga", "Beat Koga in the Fuchsia Gym.", ("Fuchsia Gym",), _badge(5)),
-    Node("surf", "Enter the Safari Zone and find the Secret House to get HM03 (Surf).", ("Safari Zone Gate", "Safari Zone Center"),
-         lambda f: f.has("HM03")),
+    Node("surf", "Enter the Safari Zone and find the Secret House in its west area to get HM03 (Surf).",
+         ("Safari Zone Gate", "Safari Zone Center", "Safari Zone West", "Safari Zone Secret House"), lambda f: f.has("HM03")),
     Node("strength", "Find the Safari Zone's Gold Teeth and give them to the Warden in Fuchsia for HM04 (Strength).",
-         ("Safari Zone Center", "Warden's House"), lambda f: f.has("HM04")),
-    Node("tea", "Get the Tea from the old woman in Celadon Mansion so the Saffron gate guards let you in.",
-         ("Celadon City", "Celadon Mansion 1F"), lambda f: f.has("Tea") or f.reached("Saffron City")),
+         ("Safari Zone Gate", "Safari Zone Center", "Safari Zone West"), lambda f: f.has("HM04"),
+         stages=((lambda f, o: f.has("Gold Teeth"), ("Fuchsia City", "Warden's House")),)),
+    # Red/Blue have no Tea (that is FireRed): the thirsty Saffron gate guards take any drink
+    Node("drink", "Buy a drink (Fresh Water, Soda Pop or Lemonade) from a vending machine on the Celadon Mart roof, "
+                  "then walk into a Saffron gate: the thirsty guard takes it and lets you through.",
+         ("Celadon City", "Celadon Mart 1F", "Celadon Mart Roof"),
+         lambda f: any(f.has(d) for d in ("Fresh Water", "Soda Pop", "Lemonade")) or f.reached("Saffron City")),
     Node("silph", "Enter Saffron City and clear Silph Co. (find the Card Key, beat Giovanni).",
-         ("Saffron City", "Silph Co. 1F"), None, "Has the player beaten Giovanni in Silph Co. (the Silph Co. president thanked the player)?"),
+         ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 12)), None, "Has the player beaten Giovanni in Silph Co. (the Silph Co. president thanked the player)?"),
     Node("sabrina", "Beat Sabrina in the Saffron Gym.", ("Saffron Gym",), _badge(6)),
     Node("cinnabar", "Surf south from Pallet Town (or through the Seafoam Islands) to Cinnabar Island.",
          ("Route 21", "Cinnabar Island"), lambda f: f.reached("Cinnabar Island")),
-    Node("key", "Explore the Pokémon Mansion on Cinnabar Island to find the Secret Key.", ("Pokémon Mansion 1F",),
+    Node("key", "Explore the Pokémon Mansion on Cinnabar Island to find the Secret Key (in the basement).",
+         ("Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"),
          lambda f: f.has("Secret Key")),
     Node("blaine", "Beat Blaine in the Cinnabar Gym.", ("Cinnabar Gym",), _badge(7)),
     Node("giovanni", "Beat Giovanni in the Viridian Gym.", ("Viridian City", "Viridian Gym"), _badge(8)),
     Node("plateau", "Go west from Viridian City on Route 22 and north on Route 23 through Victory Road to Indigo Plateau.",
          ("Route 22", "Route 23", "Victory Road 1F", "Indigo Plateau Lobby"), lambda f: f.reached("Indigo Plateau Lobby")),
-    Node("champion", "Beat the Elite Four and the Champion.", ("Indigo Plateau Lobby", "Lorelei's Room"),
+    Node("champion", "Beat the Elite Four and the Champion.",
+         ("Indigo Plateau Lobby", "Lorelei's Room", "Bruno's Room", "Agatha's Room", "Lance's Room", "Champion's Room"),
          lambda f: f.milestone("champion defeated")),
 ]
 
@@ -206,7 +216,11 @@ class SoloDirector:
             # Oak's scene starts when you try to leave Pallet Town north; walking into the lab first does nothing.
             # In the lab (after the scene) the starter balls are the choice: no route out.
             return node.objective, (["Oak's Lab"] if o.map == "Oak's Lab" else ["Pallet Town", "Route 1"]), node.id
-        return node.objective, list(node.targets), node.id
+        targets = list(node.targets)
+        for cond, later in node.stages:
+            if cond(f, o):
+                targets = list(later)
+        return node.objective, targets, node.id
 
     def check_questions(self, f: Facts) -> dict[str, str]:
         node = current_node(f)
