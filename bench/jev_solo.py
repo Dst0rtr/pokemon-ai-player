@@ -188,7 +188,9 @@ class SoloDirector:
                 return (f"Your team is weak ({round(100 * f.hp_ratio)}% HP): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
                         pcs[:2], "heal")
         self.s["healing"] = False
-        pc = POKE_CENTERS.get(o.map) or (o.map if o.map.endswith("Poké Center") else None)   # stay on it inside
+        town = o.map.endswith(("City", "Town", "Island"))  # route Poké Centers (Mt. Moon's, Rock Tunnel's) are not homes
+        pc = (POKE_CENTERS.get(o.map) if town else None) or \
+            (o.map if o.map.endswith("Poké Center") and o.map not in ("Mt. Moon Poké Center", "Rock Tunnel Poké Center") else None)
         if pc and pc not in self.s.get("healed_at", []) + self.s.get("pc_unreachable", []) and f.levels \
                 and pc != "Indigo Plateau Lobby":
             # the last Poké Center used is where a black-out sends you: use each new town's once
