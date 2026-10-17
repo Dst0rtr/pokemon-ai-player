@@ -566,6 +566,8 @@ class Agent:
                     continue
                 opts.insert(0, Option(label, "walk", walk[0], desc, then=walk[1]))
                 self.exploring = True
+                if h.kind == "edge":
+                    self.edge_opts[label] = (h.side, h.x, h.y)
             if not front:
                 # nothing unexplored here: the map route to the nearest known map that still has unexplored exits
                 best = None
@@ -585,8 +587,6 @@ class Agent:
                         self.exploring = True
                         if h.kind == "edge":
                             self.edge_opts[opts[0].label] = (h.side, h.x, h.y)
-                if h.kind == "edge":
-                    self.edge_opts[label] = (h.side, h.x, h.y)
         visited = set(self.s["visited"])
         _, trans = self.nav.reach(cur, tuple(o.pos), surf=surf, cut=cut)
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}   # warps this section of the map can reach

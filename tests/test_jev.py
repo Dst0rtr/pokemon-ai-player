@@ -978,3 +978,36 @@ def test_learned_twin_doors_and_global_frontier(tmp_path):
     assert atlas.warp_dest(house, 1) == [(city, 3, 2)]                 # (4,2) is the other half of the front door
     assert [(h.x, h.y) for h in atlas.frontier(house, (3, 1), {"Cerulean City"})] == [(3, 0)]   # only the back door
     assert house in frontier_maps(atlas, {"Cerulean City", "Cerulean Trashed House"})
+    # the agent outside, nothing left to explore in the city: offered the way back to the house (iteration 31 crashed here)
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s["visited"] = ["Cerulean City", "Cerulean Trashed House"]
+    o = J.parse("walked\nf1 Cerulean City (3,2) facing down | C L24 38/68 | ¥2543 | 2 badges")
+    opts, _ = agent.nav_options(o, ["Vermilion City"], SOLO.Facts(badges=2))
+    assert any(x.label.startswith("explore the frontier: go to Cerulean Trashed House") for x in opts)
+    # the same from a map whose way there starts with an edge crossing (iteration 31 crashed on that hop)
+    r24 = map_id("Route 24")
+    atlas.observe(r24, _view("Route 24", ["#######", "#.....#", "#.....#"]), _warps_hex([]), [("south", "Cerulean City")])
+    atlas.observe(city, _view("Cerulean City", ["#.....#", "#..D..#", "#.....#"]), _warps_hex([(3, 1, 0, house)]),
+                  [("north", "Route 24")])
+    atlas.record_edge(r24, "south", 2, 2, city, 2, 0)
+    agent.s["visited"].append("Route 24")
+    o = J.parse("walked\nf1 Route 24 (2,1) facing down | C L24 38/68 | ¥2543 | 2 badges")
+    opts, _ = agent.nav_options(o, ["Vermilion City"], SOLO.Facts(badges=2))
+    go = next(x for x in opts if x.label.startswith("explore the frontier: go to "))
+    assert go.label.endswith("(south edge)") and agent.edge_opts[go.label][0] == "south"
+
+
+def test_harness_stops_an_agent_that_keeps_crashing(monkeypatch):
+    from bench import run
+    r = run.Run.__new__(run.Run)
+    r.stop_requested, r.state = False, {"paused_seconds": 0}
+    monkeypatch.setattr(r, "stop_reason", lambda: None, raising=False)
+    monkeypatch.setattr(r, "log", lambda *a: None, raising=False)
+    monkeypatch.setattr(run.time, "sleep", lambda s: None)
+    calls = []
+    def chunk():                                       # bills-house iteration 31: a traceback after 3 setup calls, every time
+        calls.append(1)
+        return {"exit_reason": "exited", "exit_code": 1, "seconds": 5.0, "tool_calls_seen": 3}
+    monkeypatch.setattr(r, "run_chunk", chunk, raising=False)
+    assert r.loop() == "crashed" and len(calls) == 3

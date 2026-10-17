@@ -330,6 +330,7 @@ class Run:
     def loop(self) -> str:
         backoff = 5
         fails = 0
+        crashes = 0
         while True:
             reason = self.stop_reason()
             if reason:
@@ -345,6 +346,12 @@ class Run:
                 backoff = min(backoff * 2, 60)
                 continue
             backoff = 5
+            # an agent that dies within seconds every time (a traceback, not a stall) would be relaunched until the time
+            # budget runs out (bills-house iteration 31: 1,411 chunks of 5 s over 2 h); three in a row end the run
+            crashes = crashes + 1 if rec["exit_code"] not in (0, None) and rec["seconds"] < 30 else 0
+            if crashes >= 3:
+                self.log("the agent exited with an error within 30 s three times in a row: stopping (see chunks/*.stderr)")
+                return "crashed"
             if rec["tool_calls_seen"] == 0 and rec["exit_reason"] in ("cli_error", "stall", "resume_failed", "exited"):
                 fails += 1
                 if fails >= 6:
