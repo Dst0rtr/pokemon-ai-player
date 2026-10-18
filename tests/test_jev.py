@@ -1786,8 +1786,40 @@ def test_an_item_ball_out_of_reach_is_sought_from_another_arrival(tmp_path, nav)
     assert agent.nav.route(f5, (27, 1), f5) == []                         # without it: "already there"
     there = dataclasses.replace(o, pos=(9, 16))
     assert agent.spot_cells(there, f5, f5) is None and "21,16" not in agent.s["talk_noroute"]["Silph Co. 5F"]
-    gone = dataclasses.replace(o, balls=[])
+    gone = dataclasses.replace(o, balls=[], grid={(21, 16): ".", (20, 16): "."})   # a view of its cell without it
     assert agent.spot_cells(gone, f5, f5) is None and "spot_goal" not in agent.s
+
+
+def test_a_status_only_reply_keeps_the_item_balls_and_the_spot_goal(tmp_path, nav):
+    """The refusal that makes the Card Key a spot goal carries no map rows, and the next reply may show only the status
+    line: no balls in it is not a taken ball (the goal was dropped right away). Balls are remembered per map like
+    people; only a view that shows the ball's cell without it ends the goal."""
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    agent.nav = nav
+    f5 = map_id("Silph Co. 5F")
+    seen = J.parse("walked\nf1 Silph Co. 5F (27,1) facing up | C L60 200/207 | ¥3000 | 5 badges")
+    seen.npcs, seen.balls, seen.grid = [(28, 4), (8, 16), (21, 16)], [(21, 16)], {(21, 16): ".", (27, 1): "."}
+    agent.remember_people(seen)
+    agent.remember_balls(seen)
+    agent.s["step"] = 10
+    talk = J.Option("talk to the person or object at (21,16) (an item ball: pick it up)", "walk", {"path": "to 20,16"})
+    refusal = J.parse("no walkable route from (27,1) to (20,16) on this map")
+    agent.remember_talk(seen, talk, refusal)
+    status = J.parse("walked\nf1 Silph Co. 5F (27,1) facing up | C L60 200/207 | ¥3000 | 5 badges")
+    agent.remember_people(status)                              # as step() does: the people and the balls seen last
+    agent.remember_balls(status)
+    assert status.balls == [(21, 16)]
+    assert agent.spot_cells(status, f5, f5) and agent.s["spot_goal"][:3] == ["Silph Co. 5F", 21, 16]
+    window = J.parse("walked\nf1 Silph Co. 5F (27,1) facing up | C L60 200/207 | ¥3000 | 5 badges")
+    window.grid = {(27, 1): ".", (26, 1): "."}                 # a view that does not cover the ball: still there
+    agent.remember_balls(window)
+    assert window.balls == [(21, 16)]
+    taken = J.parse("walked\nf1 Silph Co. 5F (27,1) facing up | C L60 200/207 | ¥3000 | 5 badges")
+    taken.grid = {(21, 16): ".", (27, 1): "."}
+    agent.remember_balls(taken)
+    assert taken.balls == [] and agent.spot_cells(taken, f5, f5) is None and "spot_goal" not in agent.s
 
 
 def test_a_warp_the_walk_could_not_get_closer_to_leaves_the_frontier(tmp_path):
@@ -1809,3 +1841,56 @@ def test_a_warp_the_walk_could_not_get_closer_to_leaves_the_frontier(tmp_path):
     agent.nav_feedback(o, opt, after, "")
     agent.learn_noroute(after)
     assert agent.nav.frontier(f1, (3, 3), set()) == [] and agent.nav.frontier(f1, (1, 1), set()) == []
+
+
+def test_a_person_in_the_way_of_a_warp_walk_does_not_block_the_warp(tmp_path):
+    """"could not get closer" because someone stood in the corridor is not a wall: nothing is learned while the view
+    shows a person on the way, and the warp stays on the frontier; with nobody there it is learned as unreachable."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f1 = map_id("Silph Co. 1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(f1, _view("Silph Co. 1F", ["#######", "#P...D#", "#######"]),
+                      _warps_hex([(5, 1, 6, map_id("Silph Co. 3F"))]), [])
+    o = J.parse("walked\nf1 Silph Co. 1F (1,1) facing right | C L60 200/207 | ¥3000 | 5 badges")
+    opt = J.Option("explore the frontier: walk to the untaken warp at (5,1) → Silph Co. 3F", "walk", {"path": "to 5,1"})
+    after = J.parse("went toward (5,1): right 2/4 — could not get closer\n"
+                    "f1 Silph Co. 1F (3,1) facing right | C L60 200/207 | ¥3000 | 5 badges")
+    agent.nav_feedback(o, opt, after, "")
+    after.npcs = [(4, 1)]                                   # a Rocket walking the corridor
+    agent.learn_noroute(after)
+    assert [(h.x, h.y) for h in agent.nav.frontier(f1, (3, 1), set())] == [(5, 1)]
+    assert [(h.x, h.y) for h in agent.nav.frontier(f1, (1, 1), set())] == [(5, 1)]
+    agent.nav_feedback(o, opt, after, "")
+    after.npcs = []                                         # gone, and the walk still stops short: a wall
+    agent.learn_noroute(after)
+    assert agent.nav.frontier(f1, (3, 1), set()) == [] and agent.nav.frontier(f1, (1, 1), set()) == []
+
+
+def test_an_opened_card_key_door_is_read_again_and_routed_through(tmp_path):
+    """Opening a Card Key door changes the floor without a map change: the atlas kept the L as a wall (and the refusal
+    learned while it was shut) until the player left and came back. After "CARD KEY opened" the map is read again
+    on the next step and the refusals on that floor are forgotten."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f8, f9 = map_id("Silph Co. 8F"), map_id("Silph Co. 9F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    warps = _warps_hex([(5, 1, 0, f9)])
+    agent.nav.observe(f8, _view("Silph Co. 8F", ["#######", "#P.L.D#", "#######"]), warps, [])
+    agent.nav.record_warp(f8, 5, 1, f9, 1, 1)
+    agent.nav.observe(f9, _view("Silph Co. 9F", ["####", "#P.#", "####"]), _warps_hex([]), [])
+    o = J.parse("walked\nf1 Silph Co. 8F (2,1) facing right | C L60 200/207 | ¥3000 | 5 badges")
+    agent.s["atlas_map"] = "Silph Co. 8F"
+    agent.nav.record_noroute(f8, (2, 1), (5, 1))
+    agent.s["nav_noroute"][f"{f8}:5,1"] = agent.s["step"]
+    assert agent.nav.route(f8, (2, 1), f9) is None and not agent.atlas_due(o)
+    door = J.Option("open the locked door at (3,1) with the Card Key", "walk", {"path": "right 1"})
+    agent.remember_door(o, door, "Bingo! The CARD KEY opened the door!")
+    assert agent.atlas_due(o) and f"{f8}:5,1" not in agent.s["nav_noroute"]
+    agent.nav.observe(f8, _view("Silph Co. 8F", ["#######", "#P...D#", "#######"]), warps, [])   # what step() reads
+    hops = agent.nav.route(f8, (2, 1), f9)
+    assert hops and hops[-1].dest == f9

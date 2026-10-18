@@ -147,12 +147,19 @@ class Agent:
             m = parse(await self.tool("state", section="map"))
             maps[o.map] = [m.exits, m.connections]
             o.grid.update(m.grid)
-            o.npcs = o.npcs or m.npcs
+            if not o.npcs:
+                o.npcs, o.balls = m.npcs, m.balls
         if o.grid:                                     # keep the terrain (NPC cells are refreshed by every view)
             g = {f"{x},{y}": c for (x, y), c in o.grid.items()}
             grids.setdefault(o.map, {}).update(g)
         ex, cn = maps.get(o.map, [[], []])
         return list(ex), [tuple(c) for c in cn]
+
+    def atlas_due(self, o: Obs) -> bool:
+        """Learned atlas: read the map view on entering a map, on a map it has no grid for, and after a door opened."""
+        return isinstance(self.nav, LearnedAtlas) and o.mode == "overworld" and bool(o.map) and \
+            map_id(o.map) is not None and (not self.nav.known(map_id(o.map)) or o.map != self.s.get("atlas_map")
+                                           or self.s.get("reobserve") == o.map)
 
     def free_neighbour(self, o: Obs) -> bool:
         g = self.grid(o.map)
@@ -286,20 +293,27 @@ class Agent:
             if self.remember_people(o):
                 pass
             elif o.map not in known:
-                o.npcs = parse(await self.tool("state", section="map")).npcs
+                m = parse(await self.tool("state", section="map"))
+                o.npcs, o.balls = m.npcs, m.balls
                 known[o.map] = [list(n) for n in o.npcs]
+            self.remember_balls(o)
             # hidden objects keep their sprite slot: a spot that answered "nothing to talk to here" is nobody
             said = self.s["said"].get(o.map, {})
             o.npcs = [n for n in o.npcs if not said.get(f"{n[0]},{n[1]}", "").startswith("nothing to talk to")]
-        if isinstance(self.nav, LearnedAtlas) and o.mode == "overworld" and o.map and map_id(o.map) is not None \
-                and (not self.nav.known(map_id(o.map)) or o.map != self.s.get("atlas_map")):
-            # learned atlas: record what the player can see on entering a map (full map view + wWarpEntries in WRAM)
+        again = o.mode == "overworld" and bool(o.map) and self.s.get("reobserve") == o.map
+        if self.atlas_due(o):
+            # learned atlas: record what the player can see on entering a map (full map view + wWarpEntries in WRAM),
+            # and again after a door opened on it
             view = await self.tool("state", section="map")
+            if again:
+                self.s["grids"].setdefault(o.map, {}).update({f"{x},{y}": c for (x, y), c in parse(view).grid.items()})
             warps = await self.tool("memory", address="D3AE", length=129)
             last = await self.tool("memory", address="D365", length=1)        # wLastMap: where "outside" warps lead
             self.nav.observe(map_id(o.map), view, warps, cn, last_map_text=last)
         if o.mode == "overworld" and o.map:
             self.s["atlas_map"] = o.map
+            if again:
+                self.s.pop("reobserve", None)
 
         kind = o.mode
         battle = kind in ("battle", "faint_switch")
@@ -337,7 +351,8 @@ class Agent:
         if self.director and kind == "overworld":
             opts = self.director.extra_options(o, facts, self.party, ex, cn, why) + opts
             if self.nav and not o.npcs and any(self.s["step"] - v <= 3 for v in self.s["nav_noroute"].values()):
-                o.npcs = parse(await self.tool("state", section="map")).npcs   # who stands in the way (no view in a refusal)
+                m = parse(await self.tool("state", section="map"))   # who stands in the way (no view in a refusal)
+                o.npcs, o.balls = m.npcs, m.balls
             self.learn_walked(o)
             self.learn_noroute(o)
             nav_opts, route_key = self.nav_options(o, targets, facts, why)
@@ -585,6 +600,15 @@ class Agent:
         known[o.map] = [list(n) for n in o.npcs]
         return True
 
+    def remember_balls(self, o: Obs) -> None:
+        """Keep the item balls seen on this map like the people: a refusal or a status-only reply shows none, and that
+        is not a taken ball (the Card Key's spot goal was dropped on the next step). A view covering a ball's cell
+        without it means it was taken."""
+        known = self.s.setdefault("balls", {})
+        balls = [tuple(b) for b in known.get(o.map, []) if tuple(b) not in o.grid] + list(o.balls)
+        o.balls = list(dict.fromkeys(balls))
+        known[o.map] = [list(b) for b in o.balls]
+
     def card_door_options(self, o: Obs) -> list[Option]:
         """With the Card Key: each locked door (L in the map view, two cells wide) this part of the map reaches, as
         'stand next to it, face it, talk'. A door that did not open is left alone for a while (full run 61 reached
@@ -630,6 +654,17 @@ class Agent:
         m = re.match(r"open the locked door at \((\d+),(\d+)\)", opt.label)
         if m and o.map and "CARD KEY opened" not in reply:
             self.s.setdefault("card_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}"] = self.s["step"]
+        elif o.map and "CARD KEY opened" in reply:
+            # the floor changed without a map change: read it again next step (the atlas kept the door as a wall until
+            # the player left and came back) and forget the ways that were refused while it was shut
+            self.s["reobserve"] = o.map
+            cur = map_id(o.map)
+            for k in ("nav_noroute", "nav_blocked"):
+                for key in [key for key in self.s[k] if key.startswith(f"{cur}:")]:
+                    del self.s[k][key]
+            self.s.get("talk_noroute", {}).pop(o.map, None)
+            if isinstance(self.nav, LearnedAtlas) and cur is not None:
+                self.nav.forget_noroute(cur)
 
     def remember_tree(self, o: Obs, after: Obs, reply: str) -> None:
         """A walk refused by a small tree makes cutting it an option; once a tree is cut, the people this map had no way
@@ -679,8 +714,8 @@ class Agent:
         if not sg or sg[0] != o.map or cur is None or cur != goal or self.s["step"] - sg[3] > SPOT_STEPS:
             return None
         ball = (sg[1], sg[2])
-        if ball not in o.balls:
-            self.s.pop("spot_goal", None)                 # taken (or gone): nothing to reach
+        if ball not in o.balls and ball in o.grid:
+            self.s.pop("spot_goal", None)                 # the view shows its cell without it: taken
             return None
         try:
             dist, _ = self.nav.reach(cur, ball, avoid=frozenset(n for n in o.npcs if n != ball))
@@ -976,18 +1011,21 @@ class Agent:
         """Learned atlas: a refusal with nobody on the path is a wall the map view does not show (cave elevation);
         with someone or something on it, it is a blocker to clear, not a wall."""
         pend = self.s.pop("pending_noroute", None)
-        if not pend or not isinstance(self.nav, LearnedAtlas) or map_id(o.map) != pend[0]:
+        if not pend or not isinstance(self.nav, LearnedAtlas):
             return
-        cur, frm, to = pend[0], (pend[1], pend[2]), (pend[3], pend[4])
-        try:
-            on_path = set(self.nav.path_cells(cur, frm, to)) & set(o.npcs)
-        except KeyError:
-            on_path = set()
-        cells = self.nav.map(cur)["cells"]
-        tree = any(0 <= y < len(cells) and 0 <= x < len(cells[y]) and cells[y][x] == "T"
-                   for x, y in self.nav.path_cells(cur, frm, to, cut=True))
-        if not on_path and not tree:                     # a small tree on the way is Cut's job, not a wall (full run 41)
-            self.nav.record_noroute(cur, frm, to)
+        for p in pend if isinstance(pend[0], list) else [pend]:
+            if map_id(o.map) != p[0]:
+                continue
+            cur, frm, to = p[0], (p[1], p[2]), (p[3], p[4])
+            try:
+                on_path = set(self.nav.path_cells(cur, frm, to)) & set(o.npcs)
+                cells = self.nav.map(cur)["cells"]
+                tree = any(0 <= y < len(cells) and 0 <= x < len(cells[y]) and cells[y][x] == "T"
+                           for x, y in self.nav.path_cells(cur, frm, to, cut=True))
+            except KeyError:
+                on_path, tree = set(), False
+            if not on_path and not tree:                 # a small tree on the way is Cut's job, not a wall (full run 41)
+                self.nav.record_noroute(cur, frm, to)
 
     def clear_option(self, cur: int, o: Obs, h, prefix: str, desc: str, surf: bool, cut: bool) -> Optional[Option]:
         """After the server found no way to this hop although the map data has one: if a person or object (an item
@@ -1068,15 +1106,14 @@ class Agent:
         nr = re.match(r"no walkable route from \((\d+),(\d+)\) to \((\d+),(\d+)\)", after.head)
         if nr and isinstance(self.nav, LearnedAtlas) and cur is not None:
             # decided next step, once the map view (with the people in it) has been read: see learn_noroute()
-            self.s["pending_noroute"] = [cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4])]
+            self.s["pending_noroute"] = [[cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4])]]
         elif m and "could not get closer" in after.head and after.map == o.map and after.pos and \
                 isinstance(self.nav, LearnedAtlas) and cur is not None:
             # the walk went as near as it could and stopped: a warp behind a counter (Silph Co. 1F's (16,10) to 3F; full
             # run 64 explored towards it ~1,800 steps) is learned like a "no walkable route" from where it stopped
-            # (from where it stopped right away: it walked there; from the start once the view shows nobody on the way)
-            self.nav.record_noroute(cur, tuple(after.pos), (int(m[1]), int(m[2])))
-            if o.pos:
-                self.s["pending_noroute"] = [cur, o.pos[0], o.pos[1], int(m[1]), int(m[2])]
+            # (from both, once the map view shows nobody on the way: a person who stood in the way moves on)
+            to = [int(m[1]), int(m[2])]
+            self.s["pending_noroute"] = [[cur, *after.pos, *to]] + ([[cur, *o.pos, *to]] if o.pos else [])
         if after.map and after.map != o.map:
             pass
         elif "no walkable route" in after.head or (after.mode == "overworld" and after.map == o.map and after.pos == o.pos

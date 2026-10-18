@@ -1103,15 +1103,30 @@ class PokemonGen1Profile(GameProfile):
 
     def _bag_seek(self, emu, bag: list[tuple[str, int]], hit: int) -> bool:
         """Move the bag cursor onto entry `hit`. The bag remembers its cursor and scroll between visits, so read where
-        it is and go up or down (full run 63: left on CANCEL, DOWN-only never reached an item and every toss failed)."""
-        keys = [self._norm(n)[:6] for n, _ in bag]
+        it is and go up or down (full run 63: left on CANCEL, DOWN-only never reached an item and every toss failed).
+        Entries are told apart by their whole name (six letters made SUPER REPEL and SUPER ROD the same entry)."""
+        keys = [self._norm(n) for n, _ in bag]
+
+        def at(line: str) -> Optional[int]:
+            if line.startswith(self._norm("CANCEL")):
+                return len(bag)
+            k = max((k for k, key in enumerate(keys) if key and line.startswith(key)), key=lambda k: len(keys[k]),
+                    default=None)
+            if k is None:                                     # the screen spells it differently: a unique prefix
+                hits = {key for key in keys if key[:6] and line.startswith(key[:6])}
+                k = next((k for k, key in enumerate(keys) if key in hits), None) if len(hits) == 1 else None
+            return k
+
+        names, pos = keys + [self._norm("CANCEL")], None
         for _ in range(2 * len(bag) + 4):
-            line = self._norm(self._cursor_line())
-            if line.startswith(keys[hit]):
+            cur = at(self._norm(self._cursor_line()))
+            if cur is not None and pos is not None and 0 <= pos < len(names) and names[pos] == names[cur]:
+                cur = pos                                     # an item listed twice: where the moves so far put it
+            if cur is not None and cur < len(bag) and keys[cur] == keys[hit]:      # (a twin entry is the same item)
                 return True
-            cur = len(bag) if line.startswith(self._norm("CANCEL")) else next(
-                (k for k, key in enumerate(keys) if line.startswith(key)), None)
-            emu.press("UP" if cur is None or cur > hit else "DOWN", settle=1)
+            up = cur is None or cur > hit
+            emu.press("UP" if up else "DOWN", settle=1)
+            pos = None if cur is None else cur - 1 if up else cur + 1
         return False
 
     def _toss_item(self, emu, target: str) -> str:
@@ -1128,7 +1143,9 @@ class PokemonGen1Profile(GameProfile):
         if not self._menu_select(emu, "ITEM"):
             emu.press("B", settle=1)
             return "no ITEM entry in the menu"
-        self._bag_seek(emu, bag, hit)
+        if not self._bag_seek(emu, bag, hit):
+            emu.press("B*4", settle=1)
+            return f"could not find {item_name} in the bag menu"
         emu.press("A", settle=1)                              # USE / TOSS
         if not self._menu_select(emu, "TOSS", 2):
             emu.press("B*3", settle=1)
@@ -1168,7 +1185,9 @@ class PokemonGen1Profile(GameProfile):
         if not self._menu_select(emu, "ITEM"):
             emu.press("B", settle=1)
             return "no ITEM entry in the menu"
-        self._bag_seek(emu, bag, hit)
+        if not self._bag_seek(emu, bag, hit):
+            emu.press("B*4", settle=1)
+            return f"could not find {item_name} in the bag menu"
         emu.press("A", settle=1)                              # USE / TOSS
         if not self._menu_select(emu, "USE", 2):
             emu.press("B*3", settle=1)

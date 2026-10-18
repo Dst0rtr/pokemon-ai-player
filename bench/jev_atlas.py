@@ -160,6 +160,13 @@ class LearnedAtlas(WorldNav):
             self._maps.pop(mid, None)
             self.dirty = True
 
+    def forget_noroute(self, mid: int) -> None:
+        """The map changed under the player (a Card Key door opened): its walls learned from refusals may be gone."""
+        m = self.data["maps"].get(str(mid))
+        if m and m.pop("noroute", None):
+            self._maps.pop(mid, None)
+            self.dirty = True
+
     def record_nocross(self, mid: int, x: int, y: int, side: str) -> None:
         """Walking across the `side` edge from (x,y) was blocked: the cell across is solid. Twice (a person may have
         stood there once) and the cell is no longer a crossing (Lavender Town's west edge crosses to Route 8 only on

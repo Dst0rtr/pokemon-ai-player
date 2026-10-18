@@ -944,6 +944,31 @@ def test_toss_finds_the_item_wherever_the_bag_cursor_was_left(emu):
     assert r.startswith("threw away Antidote×1"), r
 
 
+
+def test_bag_seek_tells_super_rod_from_super_repel(emu):
+    """Six letters made SUPER REPEL and SUPER ROD the same entry: from CANCEL the seek stopped on SUPER REPEL (below the
+    rod) and the toss of the (key item) SUPER ROD threw the repels away. An item listed twice must not make the seek
+    go back and forth between its two entries. Needs the local full-bag.state (SUPER ROD 15th, cursor on CANCEL)."""
+    import pytest
+    from games import gen1_data as D
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "full-bag.state"
+    if not state.exists():
+        pytest.skip("no local full-bag.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    p = emu.profile
+    ids = {v: k for k, v in D.ITEMS.items()}
+    assert p.items()[14] == ("Super Rod", 1) and p.items()[0] != ("Super Rod", 1)
+    emu.pyboy.memory[D.BAG_ITEMS + 2 * 15], emu.pyboy.memory[D.BAG_ITEMS + 2 * 15 + 1] = ids["Super Repel"], 5
+    emu.pyboy.memory[D.BAG_ITEMS], emu.pyboy.memory[D.BAG_ITEMS + 1] = ids["Super Rod"], 1     # listed twice
+    r = p.manage(emu, "toss", "Super Rod")
+    assert "too important" in r and ("Super Repel", 5) in p.items(), r
+    r = p.manage(emu, "toss", "Super Repel")
+    assert r.startswith("threw away Super Repel×5") and ("Super Rod", 1) in p.items(), r
+
 def test_taken_item_balls_are_not_drawn(emu):
     """A taken ball keeps its sprite slot and position; its missable flag says it is gone (full run 63 walked to taken
     balls: "nothing to talk to here"). Needs the local silph-5f.state (its Card Key is missable object 157)."""
