@@ -61,6 +61,7 @@ class Facts:
     explored: int = 0                    # learned atlas: warps and edges taken so far (exploring counts as progress)
     came_from: str = ""                  # the map before the current one
     elevator: str = ""                   # the floor last chosen on an elevator panel (until the elevator is left)
+    events: set = field(default_factory=set)   # story events code saw happen (e.g. "fuji": warped home from Tower 7F)
 
     def has(self, item: str) -> bool:
         """Ever held (key items can be handed over later: Tea, Gold Teeth, the parcel)."""
@@ -137,7 +138,9 @@ GRAPH: list[Node] = [
                   ("Rocket Hideout B4F", "Rocket Hideout Elevator")),)),            # the route ends at the elevator
     Node("flute", "Climb Pokémon Tower in Lavender with the Silph Scope, rescue Mr. Fuji and get the Poké Flute.",
          ("Lavender Town",) + tuple(f"Pokémon Tower {n}F" for n in range(1, 8)), lambda f: f.has("Poké Flute"),
-         stages=((lambda f, o: o.map == "Mr. Fuji's House", ("Mr. Fuji's House",)),)),   # he takes you home after the rescue
+         # he takes you home after the rescue; the flute is given there (full run 57 walked out and climbed the Tower
+         # again for ~6,500 steps)
+         stages=((lambda f, o: o.map == "Mr. Fuji's House" or "fuji" in f.events, ("Lavender Town", "Mr. Fuji's House")),)),
     Node("fuchsia", "Wake the sleeping Snorlax with the Poké Flute and travel south to Fuchsia City.",
          ("Route 12", "Route 13", "Fuchsia City"), lambda f: f.reached("Fuchsia City")),
     Node("koga", "Beat Koga in the Fuchsia Gym.", ("Fuchsia Gym",), _badge(5)),
@@ -207,7 +210,7 @@ class SoloDirector:
                      moves=moves, visited=set(self.s["visited"]), milestones=list(self.s["milestones"]),
                      levels=[p["level"] for p in party], hp_ratio=(hp[0] / hp[1]) if hp[1] else 1.0,
                      manual_done=set(self.s["manual_done"]), came_from=self.s.get("came_from", ""),
-                     elevator=self.s.get("elevator", ""))
+                     elevator=self.s.get("elevator", ""), events=set(self.s.get("events", [])))
 
     # ------------------------------------------------------------- objective
     def objective(self, f: Facts, o: Obs) -> tuple[str, list[str], str]:
@@ -283,6 +286,9 @@ class SoloDirector:
             self.s["came_from"] = self.s.get("prev_map", "")
             if not o.map.endswith("Elevator"):
                 self.s["elevator"] = ""                  # the chosen floor counts until the elevator is left
+            if o.map == "Mr. Fuji's House" and self.s["came_from"] == "Pokémon Tower 7F":
+                self.s["events"] = sorted(set(self.s.get("events", [])) | {"fuji"})   # rescued: the warp home
+                f.events.add("fuji")
         if o.map:
             self.s["prev_map"] = o.map
         if o.map.endswith("Gym"):

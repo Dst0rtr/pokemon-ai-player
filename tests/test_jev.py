@@ -1639,7 +1639,7 @@ def test_node_targets_reach_the_room_that_matters():
     assert nodes["cut"].targets[-1] == "S.S. Anne Captain's Room"
     assert nodes["scope"].targets[-1] == "Rocket Hideout B4F" and nodes["silph"].targets[-1] == "Silph Co. 11F"
     assert nodes["champion"].targets[-1] == "Champion's Room" and "tea" not in nodes   # Red/Blue: any drink, no Tea
-    d = SOLO.SoloDirector({})
+    d = SOLO.SoloDirector({"visited": ["Lavender Town"], "milestones": []})
     f = SOLO.Facts(badges=4, levels=[60], visited={"Lavender Town"}, ever_items={"Silph Scope"})
     tower = J.parse("walked\nf1 Pokémon Tower 7F (10,4) facing up | C L60 100/100 | ¥3000 | 4 badges")
     home = J.parse("walked\nf1 Mr. Fuji's House (3,5) facing up | C L60 100/100 | ¥3000 | 4 badges")
@@ -1647,4 +1647,18 @@ def test_node_targets_reach_the_room_that_matters():
     f.manual_done = set(order[:order.index("flute")])
     assert SOLO.current_node(f).id == "flute"
     assert d.objective(f, tower)[1][-1] == "Pokémon Tower 7F"
-    assert d.objective(f, home)[1] == ["Mr. Fuji's House"]        # he takes you home after the rescue
+    assert d.objective(f, home)[1][-1] == "Mr. Fuji's House"      # he takes you home after the rescue
+    # full run 57: out of the house again, the objective sent Jev back up the Tower for ~6,500 steps
+    lavender = J.parse("walked\nf1 Lavender Town (7,10) facing down | C L60 100/100 | ¥3000 | 4 badges")
+    d.s["prev_map"] = "Pokémon Tower 7F"
+    d.track(1, home, f)                                            # arrived from 7F: the rescue warp
+    d.track(2, lavender, f)
+    f2 = d.facts(lavender, [], [("Silph Scope", 1)])
+    f2.manual_done = f.manual_done
+    assert d.objective(f2, lavender)[1][-1] == "Mr. Fuji's House"
+    d2 = SOLO.SoloDirector({"visited": ["Lavender Town", "Mr. Fuji's House"], "milestones": []})
+    d2.s["prev_map"] = "Lavender Town"
+    d2.track(1, home, f)                                            # walking in from town before the rescue: no event
+    f3 = d2.facts(lavender, [], [("Silph Scope", 1)])
+    f3.manual_done = f.manual_done
+    assert d2.objective(f3, tower)[1][-1] == "Pokémon Tower 7F"
