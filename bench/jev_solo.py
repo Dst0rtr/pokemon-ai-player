@@ -128,7 +128,8 @@ GRAPH: list[Node] = [
          lambda f: f.has("Silph Scope"),
          # full run 49: the Lift Key in hand on the stairs side of B4F, the objective's last map, and nothing to route to
          stages=((lambda f, o: f.has("Lift Key") and f.elevator != "B4F" and not (
-             o.map == "Rocket Hideout B4F" and f.came_from == "Rocket Hideout Elevator"), ("Rocket Hideout Elevator",)),)),
+             o.map == "Rocket Hideout B4F" and f.came_from == "Rocket Hideout Elevator"),
+                  ("Rocket Hideout B4F", "Rocket Hideout Elevator")),)),            # the route ends at the elevator
     Node("flute", "Climb Pokémon Tower in Lavender with the Silph Scope, rescue Mr. Fuji and get the Poké Flute.",
          ("Lavender Town",) + tuple(f"Pokémon Tower {n}F" for n in range(1, 8)), lambda f: f.has("Poké Flute"),
          stages=((lambda f, o: o.map == "Mr. Fuji's House", ("Mr. Fuji's House",)),)),   # he takes you home after the rescue

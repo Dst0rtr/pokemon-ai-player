@@ -206,7 +206,7 @@ class Agent:
         if o.mode in ("intro", "unknown"):
             return press_options(intro=True)
         if o.mode == "prompt":
-            return J.choice_options(o) + press_options()
+            return self.floor_choice(o, J.choice_options(o), targets) + press_options()
         if o.mode == "battle_start":
             return [Option("press A", "press", {"buttons": "A"})]
         if o.mode == "dialogue":
@@ -348,7 +348,9 @@ class Agent:
                 # in the gym the objective names: the trainers and the leader are the options (blind walks only pace)
                 opts = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))
                         and x.label != "talk to what you are facing"]
-            if targets and o.map == targets[-1] and why not in ("heal", "train"):
+            if o.map.endswith(" Elevator") and not self.s.get("elevator"):
+                opts = self.panel_first(o, opts)
+            elif targets and o.map == targets[-1] and why not in ("heal", "train"):
                 if any(x.label.startswith("talk to the person") and "not talked to yet" in (x.desc or "") for x in opts):
                     # on the objective's own map: talk to everyone there before leaving it again
                     opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
@@ -527,6 +529,30 @@ class Agent:
             return True
         return (o.mode != "overworld" and after.mode == "overworld" and bool(after.map) and bool(prev[0])
                 and after.map != prev[0] and prev[1] > 0 and after.money < prev[1] and after.money * 2 <= prev[1] + 1)
+
+    def panel_first(self, o: Obs, opts: list[Option]) -> list[Option]:
+        """In an elevator with no floor chosen since stepping in, the doors lead back where it came from: the panel
+        first, the doors left out (after the Silph Scope the elevator is the only way off Giovanni's side of B4F, and
+        full run 54 rode it ~1,900 times without examining the panel)."""
+        objects = self.object_options(o)
+        if not objects:
+            return opts
+        return objects + [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
+
+    def floor_choice(self, o: Obs, choices: list[Option], targets: list[str]) -> list[Option]:
+        """An elevator's floor list: the floor of the building the objective names (latest target first); with none
+        named, the way out (1F, or the top entry: the Rocket Hideout's B1F). Full run 54 took the Silph Scope on B4F
+        and rode the elevator ~1,900 times without ever choosing a floor."""
+        elev = o.map or self.s.get("prev_map", "")
+        floors = {x.label[len("choose "):]: x for x in choices if x.label.startswith("choose ")}
+        if not elev.endswith(" Elevator") or not floors:
+            return choices
+        building = elev[:-len(" Elevator")]
+        want = next((t[len(building) + 1:] for t in reversed(targets)
+                     if t.startswith(building + " ") and t[len(building) + 1:] in floors), None)
+        if want is None:
+            want = "1F" if "1F" in floors else next((f for f in floors if f != "CANCEL"), None)
+        return [floors[want]] if want else choices
 
     def remember_choice(self, o: Obs, opt: Option) -> None:
         """The floor chosen on an elevator panel (a prompt carries no status line: the map is the last one seen)."""

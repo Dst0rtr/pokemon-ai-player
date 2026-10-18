@@ -1528,7 +1528,7 @@ def test_with_the_lift_key_the_objective_is_the_elevator(tmp_path):
     b4f = at("Rocket Hideout B4F")
     assert d.objective(f, b4f)[1][-1] == "Rocket Hideout B4F"            # no key yet: the Rocket on B4F drops it
     f.ever_items = {"Lift Key"}
-    assert d.objective(f, b4f)[1] == ["Rocket Hideout Elevator"]
+    assert d.objective(f, b4f)[1] == ["Rocket Hideout B4F", "Rocket Hideout Elevator"]
     f.elevator = "B4F"                                                     # chosen on the panel: walk out
     assert d.objective(f, at("Rocket Hideout Elevator"))[1][-1] == "Rocket Hideout B4F"
     f.elevator, f.came_from = "", "Rocket Hideout Elevator"                 # arrived on Giovanni's side
@@ -1544,10 +1544,14 @@ def test_with_the_lift_key_the_objective_is_the_elevator(tmp_path):
     agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
     agent.s["prev_map"] = "Rocket Hideout Elevator"
     menu = J.parse("choice:\n    ▶B1F\n     B2F\n     B4F\n     CANCEL\nWhich floor do\nyou want?")
-    labels = [x.label for x in agent.options(menu, [], [], [])]
-    assert labels[:4] == ["choose B1F", "choose B2F", "choose B4F", "choose CANCEL"]
-    agent.remember_choice(menu, next(x for x in agent.options(menu, [], [], []) if x.label == "choose B4F"))
+    assert [x.label for x in J.choice_options(menu)] == ["choose B1F", "choose B2F", "choose B4F", "choose CANCEL"]
+    stage = ["Rocket Hideout B4F", "Rocket Hideout Elevator"]
+    assert [x.label for x in agent.options(menu, [], [], stage) if x.label.startswith("choose")] == ["choose B4F"]
+    agent.remember_choice(menu, next(x for x in agent.options(menu, [], [], stage) if x.label == "choose B4F"))
     assert agent.s["elevator"] == "B4F"
+    # full run 54: Silph Scope taken, the objective is the Pokémon Tower: the way out of the building is the top entry
+    tower = ["Lavender Town", "Pokémon Tower 1F", "Pokémon Tower 7F"]
+    assert [x.label for x in agent.options(menu, [], [], tower) if x.label.startswith("choose")] == ["choose B1F"]
 
 
 def test_the_elevator_panel_is_offered(tmp_path):
@@ -1568,6 +1572,10 @@ def test_the_elevator_panel_is_offered(tmp_path):
     assert not any(re.search(r"\((0|5),\d\)|,7\)", x) for x in labels)          # borders are not objects
     first = next(x for x in agent.object_options(o) if x.label == "examine the object at (1,1) from below")
     assert first.args["path"] == "to 1,2" and first.then == [("walk", {"path": "up 1", "on_battle": "stop"}), ("talk", {})]
+    # full run 54: whatever the objective, a floor must be chosen first; the doors only lead back where it came from
+    door = J.Option("walk to the warp at (2,1) → Rocket Hideout B4F", "walk", {"path": "to 2,1"})
+    labels = [x.label for x in agent.panel_first(o, [door, J.Option("save the game", "manage", {"action": "save"})])]
+    assert labels[0] == "examine the object at (1,1) from below" and door.label not in labels and "save the game" in labels
 
 
 def test_a_black_out_is_seen_without_the_words(tmp_path):
