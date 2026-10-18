@@ -40,6 +40,16 @@ POKE_CENTERS = {"Viridian City": "Viridian Poké Center", "Pewter City": "Pewter
 TRASH_CANS = [(x, y) for y in (7, 9, 11) for x in (1, 3, 5, 7, 9)]
 # the bag holds 20 kinds; a full bag picks nothing up, not even the Lift Key (full run 55 lost ~2,100 steps to it).
 # Tossed first: TMs (solo never teaches them), then items it never uses.
+# moves that do no damage: their PP does not count as fighting strength (full run 58 blacked out on Route 10 with
+# only Leer left: Struggle against a Pidgey)
+STATUS_MOVES = {"Growl", "Leer", "Tail Whip", "Sand-Attack", "SmokeScreen", "String Shot", "Harden", "Defense Curl",
+                "Withdraw", "Sing", "Supersonic", "PoisonPowder", "Sleep Powder", "Stun Spore", "Thunder Wave",
+                "Hypnosis", "Confuse Ray", "Disable", "Agility", "Focus Energy", "Screech", "Growth", "Swords Dance",
+                "Rest", "Reflect", "Light Screen", "Recover", "Softboiled", "Teleport", "Whirlwind", "Roar",
+                "Leech Seed", "Toxic", "Double Team", "Minimize", "Barrier", "Amnesia", "Haze", "Mist", "Substitute",
+                "Transform", "Splash", "Kinesis", "Flash", "Glare", "Lovely Kiss", "Spore", "Poison Gas", "Meditate",
+                "Sharpen", "Acid Armor", "Conversion", "Mimic", "Metronome", "Mirror Move"}
+LOW_PP = 10
 BAG_SLOTS = 20
 JUNK = ("Moon Stone", "Fire Stone", "Water Stone", "Thunder Stone", "Leaf Stone", "Dome Fossil", "Helix Fossil",
         "Old Amber", "Nugget", "Poké Doll", "Antidote", "Burn Heal", "Ice Heal", "Awakening", "Paralyze Heal")
@@ -57,6 +67,7 @@ class Facts:
     milestones: list = field(default_factory=list)
     levels: list = field(default_factory=list)
     hp_ratio: float = 1.0
+    attack_pp: Optional[int] = None      # PP left on damaging moves of the Pokémon that can still fight (None: unknown)
     manual_done: set = field(default_factory=set)
     explored: int = 0                    # learned atlas: warps and edges taken so far (exploring counts as progress)
     came_from: str = ""                  # the map before the current one
@@ -191,6 +202,14 @@ def current_node(f: Facts) -> Node:
 STUCK_Q = "Do `recent_actions` show the player repeating actions that fail or change nothing, without progress toward `objective`?"
 
 
+def attack_pp(party: list[dict]) -> Optional[int]:
+    """PP left on damaging moves of the party Pokémon that are not fainted; None when no moves are known."""
+    moves = [m for p in party if p.get("hp", 0) > 0 for m in p.get("moves", [])]
+    if not any(p.get("moves") for p in party):
+        return None
+    return sum(m.get("pp", 0) for m in moves if m["name"] not in STATUS_MOVES)
+
+
 class SoloDirector:
     """Objective, extra candidates and Jev check questions for jev-solo. Pure code + Jev answers."""
 
@@ -209,6 +228,7 @@ class SoloDirector:
         return Facts(badges=o.badges if o.map else self.s.get("badges", 0), items=names, ever_items=set(self.s["ever_items"]),
                      moves=moves, visited=set(self.s["visited"]), milestones=list(self.s["milestones"]),
                      levels=[p["level"] for p in party], hp_ratio=(hp[0] / hp[1]) if hp[1] else 1.0,
+                     attack_pp=attack_pp(party),
                      manual_done=set(self.s["manual_done"]), came_from=self.s.get("came_from", ""),
                      elevator=self.s.get("elevator", ""), events=set(self.s.get("events", [])))
 
@@ -216,12 +236,14 @@ class SoloDirector:
     def objective(self, f: Facts, o: Obs) -> tuple[str, list[str], str]:
         """(objective text, walk targets, why) after the code rules that override the graph."""
         node = current_node(f)
-        if f.levels and (f.hp_ratio < 0.35 or self.s.get("healing") and f.hp_ratio < 0.9):   # hysteresis: heal fully
+        no_pp = f.attack_pp is not None and f.attack_pp < LOW_PP
+        if f.levels and (f.hp_ratio < 0.35 or no_pp or self.s.get("healing") and f.hp_ratio < 0.9):   # hysteresis: heal fully
             self.s["healing"] = True
             here = [POKE_CENTERS[o.map]] if o.map in POKE_CENTERS else []
             pcs = here + [POKE_CENTERS[m] for m in reversed(self.s["visited"]) if m in POKE_CENTERS and m != o.map]
             if pcs:
-                return (f"Your team is weak ({round(100 * f.hp_ratio)}% HP): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
+                weak = f"{round(100 * f.hp_ratio)}% HP" + (f", {f.attack_pp} PP left on attacking moves" if no_pp else "")
+                return (f"Your team is weak ({weak}): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
                         pcs[:2], "heal")
         self.s["healing"] = False
         town = o.map.endswith(("City", "Town", "Island"))  # route Poké Centers (Mt. Moon's, Rock Tunnel's) are not homes

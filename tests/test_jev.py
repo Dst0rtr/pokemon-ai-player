@@ -1094,6 +1094,24 @@ def test_a_full_bag_is_made_room_in_by_code(tmp_path):
     assert d.bag_option(keep) is None                                      # nothing it may throw away
 
 
+def test_a_team_out_of_attack_pp_goes_to_heal():
+    """Full run 58: Charizard left Rock Tunnel at full-ish HP with only Leer, Struggled against a Pidgey, blacked out."""
+    from games import gen1_data as D
+    assert SOLO.STATUS_MOVES <= set(D.MOVES.values())
+    d = SOLO.SoloDirector({"visited": ["Route 10", "Lavender Town"], "milestones": [], "healed_at": ["Lavender Poké Center"]})
+    route = J.parse("walked\nf1 Route 10 (8,54) facing down | C L52 120/157 | ¥3000 | 3 badges")
+    tired = [{"species": "Charizard", "level": 52, "hp": 120, "max_hp": 157,
+              "moves": [{"name": "Slash", "pp": 0}, {"name": "Leer", "pp": 30}, {"name": "Ember", "pp": 3}]}]
+    f = d.facts(route, tired, [])
+    assert f.attack_pp == 3
+    text, targets, why = d.objective(f, route)
+    assert why == "heal" and targets[0] == "Rock Tunnel Poké Center" and "PP" in text, text
+    rested = [dict(tired[0], moves=[{"name": "Slash", "pp": 20}, {"name": "Leer", "pp": 30}, {"name": "Ember", "pp": 25}])]
+    rested[0]["hp"] = 157
+    assert d.objective(d.facts(route, rested, []), route)[2] != "heal"
+    assert SOLO.attack_pp([dict(tired[0], hp=0)]) == 0 and SOLO.attack_pp([{"hp": 5}]) is None
+
+
 def test_the_poke_flute_is_played_at_a_sleeping_snorlax(tmp_path):
     """Full run 56: ~700 talks to the Route 12 Snorlax with the Poké Flute in the bag."""
     (tmp_path / "data").mkdir()
