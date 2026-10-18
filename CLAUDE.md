@@ -129,7 +129,9 @@ after a walk), `hint:` (from `profile.hint()`), then an image only if the screen
   elevator, 245/246/247 Lorelei/Bruno/Agatha, 113 Lance, 120 Champion, 118 Hall of Fame.
 * `0xD700` = walk/bike/surf state (2 = surfing). Water tile `$14` (surfable in pokered's water
   tilesets), cut trees `$3D` (overworld) / `$50` (gym); `wTileInFrontOfPlayer` 0xCFC6. Silph Co.'s locked doors (bottom-left tile
-  `$18`/`$24`/`$5E`, the card-key routine's check) are drawn `L`; facing one with the Card Key and talking opens it. Cave/forest
+  `$18`/`$24`/`$5E`, the card-key routine's check) are drawn `L`; facing one with the Card Key and talking opens it. Item balls (sprite picture `$3D`) are drawn `o`; a taken
+  one keeps its sprite slot, and its bit in `wMissableObjectFlags` (0xD5A6, slots from the list at 0xD5CE) hides it. The bag
+  menu remembers its cursor between visits: `_bag_seek` reads where it is and moves up or down. Cave/forest
   elevation steps are pokered's `TilePairCollisionsLand/Water` (tileset 17 and 3), applied by the pathfinder.
 * Disable: `0xD06D` high nibble = the player's disabled move slot (1-4); `battle()` reports it and
   `fight`/`auto` skip it. Rage locks the user for the whole battle, so `auto` treats it as a status move.

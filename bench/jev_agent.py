@@ -43,6 +43,7 @@ from bench import jev as J  # noqa: E402
 AGENT_VERSION = "2"
 NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
+SPOT_STEPS = 1500                               # an item ball with no way to it from here is sought this long
 SCREEN_LOOP = 3                                 # a non-map screen seen this often without progress is a loop
 IDLE_RELOAD = 500                               # steps without progress before the checkpoint is reloaded
 FROZEN_RE = re.compile(r"no walkable route from|^walked \w+ 0/\d+ — stopped: blocked")
@@ -517,7 +518,12 @@ class Agent:
         """'X is not compatible with CUT': this Pokémon cannot learn that HM, teach another one. Only that line counts:
         "can't learn more than 4 moves!" is the forget-a-move prompt (full run 45 marked Charizard refused on it)."""
         if opt.tool == "manage" and opt.args.get("action") == "toss" and "threw away" not in reply:
-            self.s.setdefault("no_toss", []).append(opt.args["target"])
+            # only "too important to toss" is for good; a menu that did not work out is tried again later (full run 63:
+            # seven "could not select TOSS" in a row marked every spare item, and the bag stayed full for good)
+            if "too important" in reply:
+                self.s.setdefault("no_toss", []).append(opt.args["target"])
+            else:
+                self.s["toss_failed_step"] = self.s["step"]
         if opt.tool == "manage" and opt.args.get("action") == "use" and "not compatible" in reply:
             refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
             self.s.setdefault("hm_no", []).append(refused)
@@ -651,6 +657,10 @@ class Agent:
             # "no walkable route" to Lt. Surge behind his locked door did the same after the door opened (run 46)
             if after.head.startswith("no walkable route"):
                 self.s.setdefault("talk_noroute", {}).setdefault(o.map, {})[key] = self.s["step"]
+                if "item ball" in opt.label:
+                    # an item no way leads to from here: another arrival on this floor may reach it (Silph Co. 5F's
+                    # Card Key: beaten Rockets stand in both ends of its corridor, the way in is 9F's warp pad)
+                    self.s["spot_goal"] = [o.map, int(m[1]), int(m[2]), self.s["step"]]
             return
         if "No more room for items" in after.head:
             return                                   # the item is still there once the bag has room (run 59: Gold Teeth)
@@ -660,6 +670,27 @@ class Agent:
             for k in [k for k, v in said.items() if v.startswith("nothing to talk to") and re.fullmatch(r"\d+,\d+", k)]:
                 del said[k]                          # people only: objects do not move
         said[key] = after.head[:80]
+
+    def spot_cells(self, o: Obs, cur: Optional[int], goal: Optional[int]) -> Optional[frozenset]:
+        """The cells an item ball the server found no way to can be reached from (people in the way count as walls), while
+        the player is on that map, it is still there, and the player is not among those cells: the route then looks for
+        an arrival among them, or explores. Reaching them gives the ball back to the talk options."""
+        sg = self.s.get("spot_goal")
+        if not sg or sg[0] != o.map or cur is None or cur != goal or self.s["step"] - sg[3] > SPOT_STEPS:
+            return None
+        ball = (sg[1], sg[2])
+        if ball not in o.balls:
+            self.s.pop("spot_goal", None)                 # taken (or gone): nothing to reach
+            return None
+        try:
+            dist, _ = self.nav.reach(cur, ball, avoid=frozenset(n for n in o.npcs if n != ball))
+        except (KeyError, IndexError, ValueError):
+            return None
+        cells = frozenset(dist)
+        if any((o.pos[0] + dx, o.pos[1] + dy) in cells for dx, dy in ((0, 0), *MOVES.values())):
+            self.s.get("talk_noroute", {}).get(o.map, {}).pop(f"{ball[0]},{ball[1]}", None)
+            return None
+        return cells
 
     def nav_options(self, o: Obs, targets: list[str], facts, why: str = "") -> tuple[list[Option], str]:
         """The next hop of the shortest route to the objective's last target map, plus one option per warp on this
@@ -698,6 +729,9 @@ class Agent:
         if goal == cur and goal in entry and self.s.get("came_from") == D.map_name(entry[goal]):
             entry = {}
         self.entry_pending = goal in entry
+        cells = self.spot_cells(o, cur, goal)
+        if cells is not None:
+            self.entry_pending = True
         moves = set(facts.moves) if facts else set()
         surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
         cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
@@ -715,7 +749,7 @@ class Agent:
         if goal is not None and (goal != cur or self.entry_pending):
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
             route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked,
-                                   entry=entry)
+                                   entry=entry, goal_cells=cells)
             if route:
                 h = route[0]
                 args, then = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "") or \

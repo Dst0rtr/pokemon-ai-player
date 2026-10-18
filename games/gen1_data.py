@@ -330,6 +330,8 @@ CUT_TREE_TILES = {0: 0x3D, 7: 0x50}
 # Silph Co.'s locked doors: the card-key routine (bank 3) opens the door in front of the player when its bottom-left
 # tile is one of these (pokered CardKeyTable1-3 by door tile); checked only on Silph Co. floors
 CARD_KEY_DOOR_TILES = (0x18, 0x24, 0x5E)
+MISSABLE_LIST = 0xD5CE      # wMissableObjectList: (sprite slot, global missable index) pairs, 0xFF-terminated
+MISSABLE_FLAGS = 0xD5A6     # wMissableObjectFlags: bit set = object hidden (a taken item ball, a person gone)
 SPRITE_POKE_BALL = 0x3D     # picture id of an item ball lying on the map (wSpriteStateData1 +0)
 # pokered TilePairCollisionsLand / Water: in these tilesets you cannot step between the two tiles of a pair
 # (either direction). They model elevation changes in caves and the forest edges.

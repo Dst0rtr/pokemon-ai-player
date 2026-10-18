@@ -1100,6 +1100,12 @@ def test_a_full_bag_is_made_room_in_by_code(tmp_path):
     assert d.bag_option(bag).args["target"] == "Moon Stone"                # (a real toss leaves the bag at 19)
     keep = [("S.S. Ticket", 1), ("HM01", 1), ("Potion", 3)] + [(f"Item{i}", 1) for i in range(16)]
     assert d.bag_option(keep) is None                                      # nothing it may throw away
+    # full run 63: "could not select TOSS" (the bag menu's cursor) is not a refusal: retried after a pause
+    agent.s["step"] = 100
+    agent.remember_refusal(d.bag_option(bag), "could not select TOSS")
+    assert d.bag_option(bag) is None
+    agent.s["step"] = 100 + SOLO.TOSS_RETRY_STEPS
+    assert d.bag_option(bag).args["target"] == "Moon Stone"
 
 
 def test_a_team_out_of_attack_pp_goes_to_heal():
@@ -1756,3 +1762,29 @@ def test_locked_doors_and_item_balls_keep_every_map_row(tmp_path):
            "Silph Co. 5F (5,5) facing up, window x1..10 y1..9\n" + "\n".join(["..L.o.N...", "#" * 10] + ["." * 10] * 7))
     o = J.parse(win)
     assert o.balls == [(5, 1)] and (7, 1) in o.npcs and o.grid[(3, 1)] == "L"
+
+
+def test_an_item_ball_out_of_reach_is_sought_from_another_arrival(tmp_path, nav):
+    """Full run 63's map: Silph Co. 5F's Card Key lies in a corridor whose two ends are held by beaten Rockets who never
+    move; the server finds no way. The ball becomes a spot goal: the route looks for an arrival on 5F from which it can
+    be reached with people as walls (9F's warp pad), and once the player stands there the ball is offered again."""
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    agent.nav = nav
+    f5, f9 = map_id("Silph Co. 5F"), map_id("Silph Co. 9F")
+    o = J.parse("walked\nf1 Silph Co. 5F (27,1) facing up | C L60 200/207 | ¥3000 | 5 badges")
+    o.npcs, o.balls = [(28, 4), (8, 16), (21, 16)], [(21, 16)]
+    agent.s["step"] = 10
+    talk = J.Option("talk to the person or object at (21,16) (an item ball: pick it up)", "walk", {"path": "to 20,16"})
+    agent.remember_talk(o, talk, J.parse("no walkable route from (27,1) to (20,16) on this map"))
+    assert agent.s["spot_goal"] == ["Silph Co. 5F", 21, 16, 10]
+    cells = agent.spot_cells(o, f5, f5)
+    assert (21, 16) in cells and (9, 16) in cells and (27, 1) not in cells and (28, 5) in cells
+    hops = agent.nav.route(f5, (27, 1), f5, goal_cells=cells)
+    assert hops and hops[-1].dest == f5 and any(h.dest == f9 for h in hops), hops
+    assert agent.nav.route(f5, (27, 1), f5) == []                         # without it: "already there"
+    there = dataclasses.replace(o, pos=(9, 16))
+    assert agent.spot_cells(there, f5, f5) is None and "21,16" not in agent.s["talk_noroute"]["Silph Co. 5F"]
+    gone = dataclasses.replace(o, balls=[])
+    assert agent.spot_cells(gone, f5, f5) is None and "spot_goal" not in agent.s

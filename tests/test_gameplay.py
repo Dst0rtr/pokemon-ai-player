@@ -921,3 +921,43 @@ def test_item_balls_are_drawn_apart_from_people(emu):
     assert "o=item ball" in full and rows[16][21] == "o" and rows[13][2] == "o" and rows[16][8] == "N"
     assert rows[4][7] == "L" and len(rows) == 18                            # every row, the locked-door ones too
     assert (21, 16) in emu.profile.npcs(balls=True) and (21, 16) not in emu.profile.npcs(balls=False)
+
+
+def test_toss_finds_the_item_wherever_the_bag_cursor_was_left(emu):
+    """The bag remembers its cursor: full run 63 had it on CANCEL (20 kinds), the toss only pressed DOWN, and every
+    toss failed ("could not select TOSS"), so no drink fitted for the Saffron guards. Needs a local
+    saves/<rom>/full-bag.state (Celadon Mart roof, 20 kinds, cursor left on CANCEL)."""
+    import pytest
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "full-bag.state"
+    if not state.exists():
+        pytest.skip("no local full-bag.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    p = emu.profile
+    assert len(p.items()) == 20
+    r = p.manage(emu, "toss", "TM06")
+    assert r.startswith("threw away TM06×1") and len(p.items()) == 19, r
+    r = p.manage(emu, "toss", "Antidote")                                  # cursor now mid-list: back up to the top
+    assert r.startswith("threw away Antidote×1"), r
+
+
+def test_taken_item_balls_are_not_drawn(emu):
+    """A taken ball keeps its sprite slot and position; its missable flag says it is gone (full run 63 walked to taken
+    balls: "nothing to talk to here"). Needs the local silph-5f.state (its Card Key is missable object 157)."""
+    import pytest
+    from games import gen1_data as D
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "silph-5f.state"
+    if not state.exists():
+        pytest.skip("no local silph-5f.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    assert (21, 16) in emu.profile.npcs(balls=True) and emu.profile.hidden_slots() == set()
+    emu.pyboy.memory[D.MISSABLE_FLAGS + 157 // 8] |= 1 << (157 % 8)
+    assert emu.profile.hidden_slots() == {8} and (21, 16) not in emu.profile.npcs(balls=True)
+    assert "o=item ball" in emu.profile.full_map_text()                    # the two other balls are still there

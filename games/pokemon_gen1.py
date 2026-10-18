@@ -265,12 +265,25 @@ class PokemonGen1Profile(GameProfile):
         return out
 
     def npcs(self, balls: Optional[bool] = None) -> list[tuple[int, int]]:
-        """Map cells of the sprites; balls=True only item balls, balls=False only the others (people, boulders)."""
-        out = []
+        """Map cells of the sprites; balls=True only item balls still lying there, balls=False only the others (people,
+        boulders; hidden ones included, as for walking)."""
+        out, hidden = [], self.hidden_slots() if balls else set()     # walking keeps every slot (+40 per sprite)
         for i in range(1, 16):
             pic = self._u8(D.SPRITE_STATE_1 + 16 * i)
-            if pic and (balls is None or (pic == D.SPRITE_POKE_BALL) == balls):
+            if pic and i not in hidden and (balls is None or (pic == D.SPRITE_POKE_BALL) == balls):
                 out.append((self._u8(D.SPRITE_STATE_2 + 16 * i + 5) - 4, self._u8(D.SPRITE_STATE_2 + 16 * i + 4) - 4))
+        return out
+
+    def hidden_slots(self) -> set[int]:
+        """Sprite slots of this map's missable objects that are hidden: they keep their slot (and position) after a
+        ball is taken or a person leaves (full run 63 walked to taken balls: "nothing to talk to here")."""
+        out = set()
+        for k in range(16):
+            slot, idx = self._u8(D.MISSABLE_LIST + 2 * k), self._u8(D.MISSABLE_LIST + 2 * k + 1)
+            if slot == 0xFF:
+                break
+            if self._u8(D.MISSABLE_FLAGS + idx // 8) >> (idx % 8) & 1:
+                out.add(slot)
         return out
 
     def _draw_sprites(self, cells: list[list[str]]) -> None:
@@ -1088,6 +1101,19 @@ class PokemonGen1Profile(GameProfile):
     def _bag_text(self) -> str:
         return "bag: " + (", ".join(f"{n}×{q}" for n, q in self.items()) or "empty")
 
+    def _bag_seek(self, emu, bag: list[tuple[str, int]], hit: int) -> bool:
+        """Move the bag cursor onto entry `hit`. The bag remembers its cursor and scroll between visits, so read where
+        it is and go up or down (full run 63: left on CANCEL, DOWN-only never reached an item and every toss failed)."""
+        keys = [self._norm(n)[:6] for n, _ in bag]
+        for _ in range(2 * len(bag) + 4):
+            line = self._norm(self._cursor_line())
+            if line.startswith(keys[hit]):
+                return True
+            cur = len(bag) if line.startswith(self._norm("CANCEL")) else next(
+                (k for k, key in enumerate(keys) if line.startswith(key)), None)
+            emu.press("UP" if cur is None or cur > hit else "DOWN", settle=1)
+        return False
+
     def _toss_item(self, emu, target: str) -> str:
         """START → ITEM → item → TOSS, the whole stack (DOWN from ×1 wraps to the most), YES. A full bag (20 kinds)
         cannot pick anything up, not even a key item ("No more room for items!")."""
@@ -1102,10 +1128,7 @@ class PokemonGen1Profile(GameProfile):
         if not self._menu_select(emu, "ITEM"):
             emu.press("B", settle=1)
             return "no ITEM entry in the menu"
-        for _ in range(len(bag) + 2):
-            if self._norm(self._cursor_line()).startswith(self._norm(item_name)[:6]):
-                break
-            emu.press("DOWN", settle=1)
+        self._bag_seek(emu, bag, hit)
         emu.press("A", settle=1)                              # USE / TOSS
         if not self._menu_select(emu, "TOSS", 2):
             emu.press("B*3", settle=1)
@@ -1145,10 +1168,7 @@ class PokemonGen1Profile(GameProfile):
         if not self._menu_select(emu, "ITEM"):
             emu.press("B", settle=1)
             return "no ITEM entry in the menu"
-        for _ in range(len(bag) + 2):                          # the bag list scrolls: move until the item is under the cursor
-            if self._norm(self._cursor_line()).startswith(self._norm(item_name)[:6]):
-                break
-            emu.press("DOWN", settle=1)
+        self._bag_seek(emu, bag, hit)
         emu.press("A", settle=1)                              # USE / TOSS
         if not self._menu_select(emu, "USE", 2):
             emu.press("B*3", settle=1)

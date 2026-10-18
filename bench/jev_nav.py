@@ -198,12 +198,15 @@ class WorldNav:
     # ---------------------------------------------------------------- route
     def route(self, mid: int, pos: tuple[int, int], goal: int, surf: bool = False, cut: bool = False,
               taken: Optional[dict] = None, blocked: frozenset = frozenset(), max_nodes: int = 4000,
-              arrival: bool = False, entry: Optional[dict] = None):
+              arrival: bool = False, entry: Optional[dict] = None, goal_cells: Optional[frozenset] = None):
         """Cheapest hop list from (mid, pos) to any cell of map `goal`; [] when already there, None if no route.
         With arrival=True: (hops, (map, x, y) where the last hop lands), or None. `entry` = {map: the only map it may
-        be entered from}: standing on such a goal does not count (it was entered some other way)."""
+        be entered from}: standing on such a goal does not count (it was entered some other way). `goal_cells`: only
+        arrivals on or next to these cells of the goal map count (the part of a floor an item can be reached from)."""
         entry = entry or {}
-        if mid == goal and goal not in entry:
+        def inside(x: int, y: int) -> bool:
+            return goal_cells is None or any((x + dx, y + dy) in goal_cells for dx, dy in ((0, 0), *MOVES.values()))
+        if mid == goal and goal not in entry and inside(*pos):
             return ([], (mid, pos[0], pos[1])) if arrival else []
         taken = taken or {}
         start = (mid, pos[0], pos[1])
@@ -216,7 +219,7 @@ class WorldNav:
             if cost > best.get(node, 1 << 30):
                 continue
             n += 1
-            if node[0] == goal and node != start:
+            if node[0] == goal and node != start and inside(node[1], node[2]):
                 end, hops = node, []
                 while node in prev:
                     node, hop = prev[node]

@@ -53,6 +53,7 @@ LOW_PP = 10
 BAG_SLOTS = 20
 JUNK = ("Moon Stone", "Fire Stone", "Water Stone", "Thunder Stone", "Leaf Stone", "Dome Fossil", "Helix Fossil",
         "Old Amber", "Nugget", "Poké Doll", "Antidote", "Burn Heal", "Ice Heal", "Awakening", "Paralyze Heal")
+TOSS_RETRY_STEPS = 50                                # a toss whose menu failed waits this long
 NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
 GYM_NODES = ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni")
 
@@ -349,7 +350,7 @@ class SoloDirector:
         """With 19 of the 20 bag slots taken, code tosses a stack it has no use for, so the next pickup always fits (full
         run 59 tossed only at 20: the slot it freed was refilled before Jev came back to the Gold Teeth). A toss the
         game refuses is not retried."""
-        if len(items) < BAG_SLOTS - 1:
+        if len(items) < BAG_SLOTS - 1 or self.s.get("step", 0) - self.s.get("toss_failed_step", -10**9) < TOSS_RETRY_STEPS:
             return None
         refused = set(self.s.get("no_toss", []))
         names = [n for n, _ in items if n not in refused]
