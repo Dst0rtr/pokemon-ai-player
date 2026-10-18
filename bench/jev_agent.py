@@ -455,11 +455,7 @@ class Agent:
         if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk" or any(t == "talk" for t, _ in opt.then)):
             self.s.setdefault("npcs", {}).pop(o.map, None)   # people move after talking (Bill into his machine)
         self.remember_talk(o, opt, after)
-        tr = re.match(r"no walkable route from \(\d+,\d+\) to \((\d+),(\d+)\).*small tree", after.head)
-        if tr and map_id(o.map) is not None:
-            self.s["tree_target"] = [map_id(o.map), int(tr[1]), int(tr[2]), self.s["step"]]
-        elif "hacked away with CUT" in reply:
-            self.s.pop("tree_target", None)
+        self.remember_tree(o, after, reply)
         if self.director:
             self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
         self.remember_refusal(opt, reply)
@@ -576,6 +572,17 @@ class Agent:
             return False
         known[o.map] = [list(n) for n in o.npcs]
         return True
+
+    def remember_tree(self, o: Obs, after: Obs, reply: str) -> None:
+        """A walk refused by a small tree makes cutting it an option; once a tree is cut, the people this map had no way
+        to are offered again (full run 60: Celadon's trees grow back on every visit, so "no way to Erika" was stamped
+        each time and still hid her right after the cut; ~2,300 steps in and out of the gym)."""
+        tr = re.match(r"no walkable route from \(\d+,\d+\) to \((\d+),(\d+)\).*small tree", after.head)
+        if tr and map_id(o.map) is not None:
+            self.s["tree_target"] = [map_id(o.map), int(tr[1]), int(tr[2]), self.s["step"]]
+        elif "hacked away with CUT" in reply:
+            self.s.pop("tree_target", None)
+            self.s.get("talk_noroute", {}).pop(o.map, None)
 
     def remember_talk(self, o: Obs, opt: Option, after: Obs) -> None:
         """What a person or object answered, per map (shown in the next talk options; empty spots are dropped)."""

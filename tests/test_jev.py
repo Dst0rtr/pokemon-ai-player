@@ -1062,6 +1062,13 @@ def test_talk_refused_by_a_tree_offers_cut(tmp_path):
     opts, _ = agent.nav_options(o, ["Celadon Gym"], SOLO.Facts(badges=3, moves={"Cut"}))
     cut = next(x for x in opts if "first cut the tree at (2,3)" in x.label)
     assert cut.args["path"] == "to 2,4" and cut.then[0] == ("walk", {"path": "up 1", "on_battle": "stop"})
+    # full run 60: the "no way there" stamp from before the cut hid Erika right after it
+    agent.remember_talk(o, talk, after)
+    agent.remember_tree(o, after, after.head)
+    assert agent.s["tree_target"][1:3] == [3, 2] and "3,1" in agent.s["talk_noroute"]["Celadon Gym"]
+    agent.remember_tree(o, J.parse("walked\nf1 Celadon Gym (2,4) facing up | C L49 138/168 | ¥2543 | 3 badges"),
+                        "AAAAAAAAAA hacked away with CUT!")
+    assert "tree_target" not in agent.s and not agent.s["talk_noroute"].get("Celadon Gym")
 
 
 def test_four_moves_prompt_is_not_an_hm_refusal(tmp_path):
