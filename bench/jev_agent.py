@@ -377,7 +377,7 @@ class Agent:
             opts = uniq
         forced = self.director.forced_recovery(self.s["step"]) if self.director and kind == "overworld" else None
         if not forced and self.director and kind == "overworld":
-            forced = self.director.bag_option(self.items)
+            forced = self.director.bag_option(self.items) or self.director.flute_option(self.items)
         if self.director and kind == "overworld" and self.director.want_checkpoint(self.s["step"]):
             await self.tool("save_state", slot="jev-progress")
         if forced:

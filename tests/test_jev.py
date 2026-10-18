@@ -1094,6 +1094,19 @@ def test_a_full_bag_is_made_room_in_by_code(tmp_path):
     assert d.bag_option(keep) is None                                      # nothing it may throw away
 
 
+def test_the_poke_flute_is_played_at_a_sleeping_snorlax(tmp_path):
+    """Full run 56: ~700 talks to the Route 12 Snorlax with the Poké Flute in the bag."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    d, bag = agent.director, [("Poké Flute", 1), ("HM01", 1)]
+    agent.s["history"] = ["talk to what you are facing -> dialogue ended: A sleeping POKéMON blocks the way!"]
+    flute = d.flute_option(bag)
+    assert flute.tool == "manage" and flute.args == {"action": "use", "target": "Poké Flute"}
+    assert d.flute_option([("HM01", 1)]) is None                           # no flute yet: nothing to play
+    agent.s["history"].append("play the Poké Flute to wake the sleeping Pokémon -> BATTLE (wild) starting")
+    assert d.flute_option(bag) is None
+
+
 def test_vermilion_gym_trash_cans_are_searched_in_order():
     """Full run 42: in the Vermilion Gym with every person talked to, Jev walked out and back in ~600 times."""
     d = SOLO.SoloDirector({"visited": ["Vermilion Gym"], "milestones": []})

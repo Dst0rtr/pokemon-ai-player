@@ -319,6 +319,15 @@ class SoloDirector:
         return Option(f"toss {junk[0]} (the bag is full)", "manage", {"action": "toss", "target": junk[0]},
                       "a full bag cannot pick up anything, not even key items")
 
+    def flute_option(self, items: list[tuple[str, int]]) -> Optional[Option]:
+        """Facing a sleeping Snorlax (the last reply said so) with the Poké Flute: code plays it (full run 56 talked to
+        the Route 12 Snorlax ~700 times; talking never wakes it)."""
+        last = (self.s.get("history") or [""])[-1]
+        if "sleeping POKéMON" in last and any(n == "Poké Flute" for n, _ in items):
+            return Option("play the Poké Flute to wake the sleeping Pokémon", "manage",
+                          {"action": "use", "target": "Poké Flute"}, "only the Poké Flute wakes Snorlax")
+        return None
+
     def forced_recovery(self, step: int) -> Optional[Option]:
         """Code-only recovery when the player has not moved for a long time (no Jev question)."""
         r = self.s["pos_repeat"]
