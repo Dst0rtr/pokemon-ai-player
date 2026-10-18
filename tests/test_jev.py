@@ -1856,17 +1856,17 @@ def test_a_person_in_the_way_of_a_warp_walk_does_not_block_the_warp(tmp_path):
                       _warps_hex([(5, 1, 6, map_id("Silph Co. 3F"))]), [])
     o = J.parse("walked\nf1 Silph Co. 1F (1,1) facing right | C L60 200/207 | ¥3000 | 5 badges")
     opt = J.Option("explore the frontier: walk to the untaken warp at (5,1) → Silph Co. 3F", "walk", {"path": "to 5,1"})
-    after = J.parse("went toward (5,1): right 2/4 — could not get closer\n"
-                    "f1 Silph Co. 1F (3,1) facing right | C L60 200/207 | ¥3000 | 5 badges")
+    after = J.parse("went toward (5,1): right 3/4 — could not get closer\n"
+                    "f1 Silph Co. 1F (4,1) facing right | C L60 200/207 | ¥3000 | 5 badges")
     agent.nav_feedback(o, opt, after, "")
-    after.npcs = [(4, 1)]                                   # a Rocket walking the corridor
+    after.npcs = [(5, 1)]                                   # a Rocket standing on the stairs
     agent.learn_noroute(after)
-    assert [(h.x, h.y) for h in agent.nav.frontier(f1, (3, 1), set())] == [(5, 1)]
+    assert [(h.x, h.y) for h in agent.nav.frontier(f1, (4, 1), set())] == [(5, 1)]
     assert [(h.x, h.y) for h in agent.nav.frontier(f1, (1, 1), set())] == [(5, 1)]
     agent.nav_feedback(o, opt, after, "")
     after.npcs = []                                         # gone, and the walk still stops short: a wall
     agent.learn_noroute(after)
-    assert agent.nav.frontier(f1, (3, 1), set()) == [] and agent.nav.frontier(f1, (1, 1), set()) == []
+    assert agent.nav.frontier(f1, (4, 1), set()) == [] and agent.nav.frontier(f1, (1, 1), set()) == []
 
 
 def test_an_opened_card_key_door_is_read_again_and_routed_through(tmp_path):
@@ -1922,3 +1922,25 @@ def test_a_guarded_poster_is_examined_from_where_the_guard_stood(tmp_path):
     assert agent.clue_options(at)[0].args == {"path": "up 1", "on_battle": "stop"} and agent.clue_options(at)[0].then == [("talk", {})]
     agent.remember_door(at, opts[0], "dialogue ended: Hey! | A switch behind the poster!?")
     assert "clues" in agent.s and agent.clue_options(at) == [] and agent.atlas_due(at) and not agent.nav.unreachable(gc, (12, 2), (17, 1))
+
+
+def test_a_walk_that_ends_far_from_a_warp_or_slides_does_not_learn_it_unreachable(tmp_path):
+    """Full run 66: across the Rocket Hideout's spinners "could not get closer" ended far from the stairs (or after a
+    slide); those stairs were learned as unreachable and the frontier left the hideout for Celadon. Only a walk that
+    stopped right next to the warp (Silph Co. 1F's dead warp) counts."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b2 = map_id("Rocket Hideout B2F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(b2, _view("Rocket Hideout B2F", ["########", "#P.....#", "#......#", "#.....D#", "########"]),
+                      _warps_hex([(6, 3, 0, map_id("Rocket Hideout B3F"))]), [])
+    o = J.parse("walked\nf1 Rocket Hideout B2F (1,1) facing up | C L40 120/130 | ¥3000 | 4 badges")
+    opt = J.Option("explore the frontier: walk to the untaken warp at (6,3) → Rocket Hideout B3F", "walk", {"path": "to 6,3"})
+    for head in ("went toward (6,3): right 2/2 — could not get closer\nf1 Rocket Hideout B2F (3,1) facing right | C L40 120/130 | ¥3000 | 4 badges",
+                 "went toward (6,3): right 4/5, slid to (5,3) — could not get closer\nf1 Rocket Hideout B2F (5,3) facing right | C L40 120/130 | ¥3000 | 4 badges"):
+        after = J.parse(head)
+        agent.nav_feedback(o, opt, after, "")
+        agent.learn_noroute(after)
+        assert [(h.x, h.y) for h in agent.nav.frontier(b2, (1, 1), set())] == [(6, 3)], head

@@ -1146,8 +1146,11 @@ class Agent:
         if nr and isinstance(self.nav, LearnedAtlas) and cur is not None:
             # decided next step, once the map view (with the people in it) has been read: see learn_noroute()
             self.s["pending_noroute"] = [[cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4])]]
-        elif m and "could not get closer" in after.head and after.map == o.map and after.pos and \
+        elif m and "could not get closer" in after.head and "slid" not in after.head and after.map == o.map and \
+                after.pos and abs(after.pos[0] - int(m[1])) + abs(after.pos[1] - int(m[2])) <= 1 and \
                 isinstance(self.nav, LearnedAtlas) and cur is not None:
+            # only when it stopped right next to the warp: across the Rocket Hideout's spinners a walk ends far away
+            # and the stairs are still there (full run 66 learned B2F/B3F's stairs as unreachable and left the hideout)
             # the walk went as near as it could and stopped: a warp behind a counter (Silph Co. 1F's (16,10) to 3F; full
             # run 64 explored towards it ~1,800 steps) is learned like a "no walkable route" from where it stopped
             # (from both, once the map view shows nobody on the way: a person who stood in the way moves on)
