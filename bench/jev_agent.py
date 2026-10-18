@@ -42,6 +42,7 @@ from bench import jev as J  # noqa: E402
 
 AGENT_VERSION = "2"
 NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
+SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster", re.I)   # the floor changed in place
 CLUE_RE = re.compile(r"\bposter\b", re.I)                    # a person guarding something on the wall
@@ -382,6 +383,13 @@ class Agent:
             if doors:                                     # Silph Co.: a locked door is the way on until it is open
                 opts = doors + opts
             opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
+            sealed = self.sealed_talks(o, opts)
+            if sealed:
+                # a warp the map shows a way to did not open: something on this map opens it, so the people here come
+                # before leaving (full run 67 hit the Game Corner's shut stairs before talking to the poster guard,
+                # learned them unreachable, left, and paced Celadon ~3,800 steps)
+                opts = sealed + [x for x in opts if x not in sealed and not (
+                    x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
             if any(x.label.startswith("search the trash can") for x in opts):
                 # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
                 opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
@@ -612,6 +620,20 @@ class Agent:
         o.balls = list(dict.fromkeys(balls))
         known[o.map] = [list(b) for b in o.balls]
 
+    def sealed_talks(self, o: Obs, opts: list[Option]) -> list[Option]:
+        """After a warp on this map could not be reached (no one in the way): the talk options to people here not
+        talked to yet (and not known to be out of reach), for a while."""
+        sealed = self.s.get("sealed", {}).get(o.map)
+        if not sealed or self.s["step"] - sealed[2] > SEALED_STEPS:
+            return []
+        said, nr = self.s["said"].get(o.map, {}), self.s.get("talk_noroute", {}).get(o.map, {})
+        out = []
+        for x in opts:
+            m = re.match(r"talk to the person or object at \((\d+),(\d+)\)", x.label)
+            if m and f"{m[1]},{m[2]}" not in said and f"{m[1]},{m[2]}" not in nr:
+                out.append(x)
+        return out
+
     def clue_options(self, o: Obs) -> list[Option]:
         """Someone said they guard a poster: the walls next to where they stood, examined from that cell (facing each
         one), until one answers. Sides already tried are not offered again."""
@@ -692,6 +714,7 @@ class Agent:
             # stairs open with the switch behind the poster: full run 65 had learned them as unreachable)
             self.s["reobserve"] = o.map
             self.s.get("clues", {}).pop(o.map, None)
+            self.s.get("sealed", {}).pop(o.map, None)
             cur = map_id(o.map)
             for k in ("nav_noroute", "nav_blocked"):
                 for key in [key for key in self.s[k] if key.startswith(f"{cur}:")]:
@@ -1155,6 +1178,7 @@ class Agent:
             # run 64 explored towards it ~1,800 steps) is learned like a "no walkable route" from where it stopped
             # (from both, once the map view shows nobody on the way: a person who stood in the way moves on)
             to = [int(m[1]), int(m[2])]
+            self.s.setdefault("sealed", {})[o.map] = to + [self.s["step"]]
             self.s["pending_noroute"] = [[cur, *after.pos, *to]] + ([[cur, *o.pos, *to]] if o.pos else [])
         if after.map and after.map != o.map:
             pass

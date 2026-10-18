@@ -1944,3 +1944,30 @@ def test_a_walk_that_ends_far_from_a_warp_or_slides_does_not_learn_it_unreachabl
         agent.nav_feedback(o, opt, after, "")
         agent.learn_noroute(after)
         assert [(h.x, h.y) for h in agent.nav.frontier(b2, (1, 1), set())] == [(6, 3)], head
+
+
+def test_a_warp_that_did_not_open_puts_the_people_on_its_map_first(tmp_path):
+    """Full run 67 reached the Game Corner's shut stairs before talking to the poster guard, learned them as
+    unreachable, left and never came back. A warp the map shows a way to that does not open means something on this
+    map opens it: the people not talked to yet come first (and leaving waits) for a while."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    gc, b1 = map_id("Game Corner"), map_id("Rocket Hideout B1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    rows = ["####################", "#################.##", "########............", "............########"]
+    agent.nav.observe(gc, _view("Game Corner", rows), _warps_hex([(17, 1, 0, b1)]), [])
+    o = J.parse("walked\nf1 Game Corner (12,3) facing up | C L40 120/130 | ¥3000 | 4 badges")
+    guard = J.Option("talk to the person or object at (9,2)", "walk", {"path": "to 10,2"})
+    gambler = J.Option("talk to the person or object at (3,3)", "walk", {"path": "to 4,3"})
+    leave = J.Option("explore the frontier: go to Celadon City (unexplored exits): walk to the warp at (0,3) → Celadon City",
+                     "walk", {"path": "to 0,3"})
+    agent.s["said"]["Game Corner"] = {"3,3": "dialogue ended: Games are scary!"}
+    assert agent.sealed_talks(o, [guard, gambler, leave]) == []
+    stairs = J.Option("explore the frontier: walk to the untaken warp at (17,1) → Rocket Hideout B1F", "walk", {"path": "to 17,1"})
+    agent.nav_feedback(o, stairs, J.parse("went toward (17,1): right 5/5, up 0/1 — could not get closer\n"
+                                          "f1 Game Corner (17,2) facing up | C L40 120/130 | ¥3000 | 4 badges"), "")
+    assert agent.sealed_talks(o, [guard, gambler, leave]) == [guard]
+    agent.s["step"] += 601
+    assert agent.sealed_talks(o, [guard, gambler, leave]) == []
