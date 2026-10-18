@@ -1143,6 +1143,25 @@ def test_resume_rejects_another_hybrid_planner(tmp_path, monkeypatch):
     run.Run(run.parse_args(resume + ["--model", "claude-haiku-4-5-20251001"]))
     with pytest.raises(SystemExit, match="planner_model"):
         run.Run(run.parse_args(resume + ["--model", "claude-sonnet-4-5"]))
+    # Codex review (21:00): a config written before planner_model existed resumes with the planner it recorded
+    pre = dict(r.state, config={k: v for k, v in r.state["config"].items() if k != "planner_model"})
+    r.state_path.write_text(json.dumps(pre))
+    run.Run(run.parse_args(resume + ["--model", "claude-haiku-4-5-20251001"]))      # from the display model
+    with pytest.raises(SystemExit, match="planner_model"):
+        run.Run(run.parse_args(resume + ["--model", "claude-sonnet-4-5"]))
+    (r.dir / "chunks").mkdir()
+    r.provider.prepare(r.dir, ["python", "server.py"])
+    (r.dir / "chunks" / "001.cmd").write_text(" ".join(r.provider.command(r.dir, None, r.run_id, True)) + "\n")
+    r.state_path.write_text(json.dumps(dict(pre, display_model="")))
+    run.Run(run.parse_args(resume + ["--model", "claude-haiku-4-5-20251001"]))      # from the agent command
+    (r.dir / "chunks" / "001.cmd").unlink()
+    with pytest.raises(SystemExit, match="cannot be established"):
+        run.Run(run.parse_args(resume + ["--model", "claude-haiku-4-5-20251001"]))
+    solo = run.Run(run.parse_args(["--mode", "jev-solo", "--mock"]))
+    solo.dir.mkdir(parents=True)
+    solo.state_path.write_text(json.dumps(dict(solo.state, config={k: v for k, v in solo.state["config"].items()
+                                                                   if k != "planner_model"})))
+    run.Run(run.parse_args(["--mode", "jev-solo", "--mock", "--smoke", "--resume-run", str(solo.dir)]))
 
 
 def test_resume_checks_a_checkpoint_without_config(tmp_path, monkeypatch):
@@ -1417,6 +1436,9 @@ def test_the_tower_top_is_not_explored_without_the_silph_scope(tmp_path):
     o = J.parse("walked\nf1 Pokémon Tower 6F (3,1) facing left | C L48 99/99 | ¥3000 | 4 badges")
     opts, _ = agent.nav_options(o, ["Celadon City"], SOLO.Facts(badges=4))
     assert not any("7F" in x.label for x in opts) and any("5F" in x.label for x in opts)
+    agent.s["nav_noroute"][f"{t6}:5,1"] = agent.s["step"]   # a recently refused 7F hop is not "pending" either (Codex)
+    opts, _ = agent.nav_options(o, ["Celadon City"], SOLO.Facts(badges=4))
+    assert not any("7F" in x.label for x in opts)
     opts, _ = agent.nav_options(o, ["Celadon City"], SOLO.Facts(badges=4, items={"Silph Scope"}))
     assert any("7F" in x.label for x in opts)
 

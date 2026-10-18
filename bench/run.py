@@ -19,6 +19,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -140,6 +141,8 @@ class Run:
                   # jev-hybrid: --model is the Claude planner, not self.model (Codex review)
                   "planner_model": getattr(self.provider, "planner_model", None) if a.variant == "hybrid" else None}
         old = self.state.get("config")
+        if old is not None and "planner_model" not in old:
+            old = dict(old, planner_model=self._recorded_planner(a))   # config from before the field (Codex review)
         if old is not None:
             diff = ", ".join(f"{k}: {old.get(k)!r} -> {config.get(k)!r}" for k in sorted(set(old) | set(config))
                              if old.get(k) != config.get(k))
@@ -172,6 +175,19 @@ class Run:
         self.max_seconds = a.budget_hours * 3600
         self.stop_requested = False
         self.proc: subprocess.Popen | None = None
+
+    def _recorded_planner(self, a: argparse.Namespace) -> str | None:
+        """The hybrid planner model of a checkpoint whose config predates `planner_model`: from the first chunk's agent
+        command (--planner-model), else from the recorded display model ("<jev> + <planner> planner"). Not hybrid: None.
+        A hybrid run with neither gets a marker that matches no model, so the resume is refused."""
+        if (self.state.get("config") or {}).get("variant", a.variant) != "hybrid":
+            return None
+        cmd = self.dir / "chunks" / "001.cmd"
+        words = cmd.read_text().split() if cmd.exists() else []
+        if "--planner-model" in words[:-1]:
+            return words[words.index("--planner-model") + 1]
+        m = re.fullmatch(r".+ \+ (\S+) planner", self.state.get("display_model") or "")
+        return m[1] if m else "<not recorded: compatibility cannot be established>"
 
     def _legacy_mismatch(self, a: argparse.Namespace, agent_args: list[str]) -> str:
         """A checkpoint without `config`: compare what it did record (metadata, and the first chunk's agent command

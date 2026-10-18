@@ -635,11 +635,10 @@ class Agent:
         if isinstance(self.nav, LearnedAtlas) and not route_key and goal != cur:   # on the objective's map: nothing to explore
             # the objective's map is not in the atlas (or not reachable through it yet): explore frontier-first
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
-            front = self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut, blocked=blocked,
-                                      prefer=tuple(targets))
+            front = [h for h in self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut,
+                                                  blocked=blocked, prefer=tuple(targets)) if h.dest_name not in closed]
             pending = [h for h in front if self.s["step"] - self.s["nav_noroute"].get(f"{h.map}:{h.x},{h.y}", -10**9)
                        <= NAV_BLOCK_STEPS]          # a hop waiting for its way to be cleared goes first
-            front = [h for h in front if h.dest_name not in closed]
             for h in (pending[:1] + [x for x in front if x not in pending[:1]])[:3]:
                 walk = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "")
                 if not walk:
