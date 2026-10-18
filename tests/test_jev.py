@@ -1894,3 +1894,31 @@ def test_an_opened_card_key_door_is_read_again_and_routed_through(tmp_path):
     agent.nav.observe(f8, _view("Silph Co. 8F", ["#######", "#P...D#", "#######"]), warps, [])   # what step() reads
     hops = agent.nav.route(f8, (2, 1), f9)
     assert hops and hops[-1].dest == f9
+
+
+def test_a_guarded_poster_is_examined_from_where_the_guard_stood(tmp_path):
+    """The Game Corner's stairs stay shut until the switch behind the poster is pressed. Full run 64 found it only by a
+    lucky talk from the guard's spot; run 65 never did and, once the stairs were learned as unreachable, never came
+    back. The guard's words name the poster: the walls beside his spot are offered, and the switch re-reads the floor
+    and forgets its refusals."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    gc, b1 = map_id("Game Corner"), map_id("Rocket Hideout B1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    rows = ["####################", "#################.##", "########............", "............########"]
+    agent.nav.observe(gc, _view("Game Corner", rows), _warps_hex([(17, 1, 0, b1)]), [])
+    o = J.parse("walked\nf1 Game Corner (12,2) facing left | C L40 120/130 | ¥3000 | 4 badges")
+    assert agent.clue_options(o) == []
+    talk = J.Option("talk to the person or object at (9,2)", "walk", {"path": "to 10,2"})
+    agent.remember_talk(o, talk, J.parse("dialogue ended: I'm guarding this poster! | Go away, or else!\n"
+                                         "f1 Game Corner (10,2) facing left | C L40 120/130 | ¥3000 | 4 badges"))
+    agent.nav.record_noroute(gc, (12, 2), (17, 1))
+    opts = agent.clue_options(o)
+    assert [x.label.split(" (beside")[0] for x in opts] == ["examine the object at (9,1) from below"]
+    assert opts[0].args["path"] == "to 9,2" and opts[0].then == [("walk", {"path": "up 1", "on_battle": "stop"}), ("talk", {})]
+    at = J.parse("walked\nf1 Game Corner (9,2) facing up | C L40 120/130 | ¥3000 | 4 badges")
+    assert agent.clue_options(at)[0].args == {"path": "up 1", "on_battle": "stop"} and agent.clue_options(at)[0].then == [("talk", {})]
+    agent.remember_door(at, opts[0], "dialogue ended: Hey! | A switch behind the poster!?")
+    assert "clues" in agent.s and agent.clue_options(at) == [] and agent.atlas_due(at) and not agent.nav.unreachable(gc, (12, 2), (17, 1))

@@ -43,6 +43,8 @@ from bench import jev as J  # noqa: E402
 AGENT_VERSION = "2"
 NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
+MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster", re.I)   # the floor changed in place
+CLUE_RE = re.compile(r"\bposter\b", re.I)                    # a person guarding something on the wall
 SPOT_STEPS = 1500                               # an item ball with no way to it from here is sought this long
 SCREEN_LOOP = 3                                 # a non-map screen seen this often without progress is a loop
 IDLE_RELOAD = 500                               # steps without progress before the checkpoint is reloaded
@@ -379,6 +381,7 @@ class Agent:
             doors = self.card_door_options(o)
             if doors:                                     # Silph Co.: a locked door is the way on until it is open
                 opts = doors + opts
+            opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
             if any(x.label.startswith("search the trash can") for x in opts):
                 # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
                 opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
@@ -609,6 +612,35 @@ class Agent:
         o.balls = list(dict.fromkeys(balls))
         known[o.map] = [list(b) for b in o.balls]
 
+    def clue_options(self, o: Obs) -> list[Option]:
+        """Someone said they guard a poster: the walls next to where they stood, examined from that cell (facing each
+        one), until one answers. Sides already tried are not offered again."""
+        clue = self.s.get("clues", {}).get(o.map)
+        cur = map_id(o.map) if o.map else None
+        if not clue or cur is None or not o.pos or self.nav is None:
+            return []
+        try:
+            cells = self.nav.map(cur)["cells"]
+        except (KeyError, IndexError):
+            return []
+        x, y = clue
+        said = self.s["said"].get(o.map, {})
+        out = []
+        for side, (dx, dy), face in (("below", (0, -1), "up"), ("right", (-1, 0), "left"), ("left", (1, 0), "right"),
+                                     ("above", (0, 1), "down")):
+            wx, wy = x + dx, y + dy
+            if not (0 <= wy < len(cells) and 0 <= wx < len(cells[wy])) or cells[wy][wx] != "#":
+                continue
+            label = f"examine the object at ({wx},{wy}) from {side} (beside where someone guarded a poster)"
+            if f"{wx},{wy} " + label.rsplit(" from ", 1)[-1] in said:
+                continue
+            at = tuple(o.pos) == (x, y)
+            first = {"path": f"{face} 1", "on_battle": "stop"} if at else {"path": f"to {x},{y}", "on_battle": "stop"}
+            then = ([] if at else [("walk", {"path": f"{face} 1", "on_battle": "stop"})]) + [("talk", {})]
+            out.append(Option(label, "walk", first, "a guard stood here watching a poster on the wall: face the wall and "
+                              "press A (not tried yet)", then=then))
+        return out
+
     def card_door_options(self, o: Obs) -> list[Option]:
         """With the Card Key: each locked door (L in the map view, two cells wide) this part of the map reaches, as
         'stand next to it, face it, talk'. A door that did not open is left alone for a while (full run 61 reached
@@ -652,12 +684,14 @@ class Agent:
     def remember_door(self, o: Obs, opt: Option, reply: str) -> None:
         """A door that did not open (blocked on the way, wrong side) is not offered again for a while."""
         m = re.match(r"open the locked door at \((\d+),(\d+)\)", opt.label)
-        if m and o.map and "CARD KEY opened" not in reply:
+        if m and o.map and not MAP_CHANGE_RE.search(reply):
             self.s.setdefault("card_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}"] = self.s["step"]
-        elif o.map and "CARD KEY opened" in reply:
+        elif o.map and MAP_CHANGE_RE.search(reply):
             # the floor changed without a map change: read it again next step (the atlas kept the door as a wall until
-            # the player left and came back) and forget the ways that were refused while it was shut
+            # the player left and came back) and forget the ways that were refused while it was shut (the Game Corner's
+            # stairs open with the switch behind the poster: full run 65 had learned them as unreachable)
             self.s["reobserve"] = o.map
+            self.s.get("clues", {}).pop(o.map, None)
             cur = map_id(o.map)
             for k in ("nav_noroute", "nav_blocked"):
                 for key in [key for key in self.s[k] if key.startswith(f"{cur}:")]:
@@ -697,6 +731,11 @@ class Agent:
                     # Card Key: beaten Rockets stand in both ends of its corridor, the way in is 9F's warp pad)
                     self.s["spot_goal"] = [o.map, int(m[1]), int(m[2]), self.s["step"]]
             return
+        if m and opt.label.startswith("talk to the person") and CLUE_RE.search(after.text) and \
+                not MAP_CHANGE_RE.search(after.text):
+            # "I'm guarding this poster!": the walls beside where they stand hide something (full run 64 found the
+            # Game Corner's switch only by a lucky talk from the guard's spot; run 65 never did)
+            self.s.setdefault("clues", {})[o.map] = [int(m[1]), int(m[2])]
         if "No more room for items" in after.head:
             return                                   # the item is still there once the bag has room (run 59: Gold Teeth)
         said = self.s["said"].setdefault(o.map, {})
