@@ -336,8 +336,10 @@ class SoloDirector:
         self.s["recovery"] = max(level, 0)
 
     def bag_option(self, items: list[tuple[str, int]]) -> Optional[Option]:
-        """With every bag slot taken, code tosses a stack it has no use for (a toss the game refuses is not retried)."""
-        if len(items) < BAG_SLOTS:
+        """With 19 of the 20 bag slots taken, code tosses a stack it has no use for, so the next pickup always fits (full
+        run 59 tossed only at 20: the slot it freed was refilled before Jev came back to the Gold Teeth). A toss the
+        game refuses is not retried."""
+        if len(items) < BAG_SLOTS - 1:
             return None
         refused = set(self.s.get("no_toss", []))
         names = [n for n, _ in items if n not in refused]

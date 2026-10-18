@@ -1083,14 +1083,15 @@ def test_a_full_bag_is_made_room_in_by_code(tmp_path):
     bag = [("Antidote", 1), ("S.S. Ticket", 1), ("HM01", 1), ("Moon Stone", 1), ("Potion", 3), ("TM34", 1)]
     bag += [(f"Item{i}", 1) for i in range(20 - len(bag))]
     d = agent.director
-    assert d.bag_option(bag[:19]) is None                                 # a free slot: nothing to do
+    assert d.bag_option(bag[:18]) is None                                 # two free slots: nothing to do
+    assert d.bag_option(bag[:19]).args["target"] == "TM34"                 # one: keep it free for the next pickup
     toss = d.bag_option(bag)
     assert toss.tool == "manage" and toss.args == {"action": "toss", "target": "TM34"}, toss
     agent.remember_refusal(toss, "TM34 is too important to toss; bag: ...")
     assert d.bag_option(bag).args["target"] == "Moon Stone"                # a refused toss is not offered again
     agent.remember_refusal(d.bag_option(bag), "threw away Moon Stone×1; bag: ...")
     assert d.bag_option(bag).args["target"] == "Moon Stone"                # (a real toss leaves the bag at 19)
-    keep = [("S.S. Ticket", 1), ("HM01", 1), ("Potion", 3)] + [(f"Item{i}", 1) for i in range(17)]
+    keep = [("S.S. Ticket", 1), ("HM01", 1), ("Potion", 3)] + [(f"Item{i}", 1) for i in range(16)]
     assert d.bag_option(keep) is None                                      # nothing it may throw away
 
 
@@ -1511,6 +1512,7 @@ def test_a_walk_that_failed_is_not_what_the_person_said(tmp_path):
     for head, kept in (("went toward (4,3): left 0/1, left 0/1 — could not get closer", False),
                        ("went toward (4,3): up 1/3 — stopped: dialogue appeared", False),
                        ("no walkable route from (5,3) to (4,3) on this map", False),
+                       ("dialogue ended: No more room for items!", False),     # run 59: the Gold Teeth, bag full
                        ("dialogue ended: Hi, you're a new face!", True)):
         said.clear()
         agent.remember_talk(o, opt, J.parse(head + "\nf1 Cerulean Gym (5,3) facing left | C L27 70/80 | ¥3000 | 1 badges"))

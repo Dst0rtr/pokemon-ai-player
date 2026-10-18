@@ -593,6 +593,8 @@ class Agent:
             if after.head.startswith("no walkable route"):
                 self.s.setdefault("talk_noroute", {}).setdefault(o.map, {})[key] = self.s["step"]
             return
+        if "No more room for items" in after.head:
+            return                                   # the item is still there once the bag has room (run 59: Gold Teeth)
         said = self.s["said"].setdefault(o.map, {})
         if not after.head.startswith("nothing to talk to"):
             # a real conversation: the room may have changed (Bill came out), retry the empty spots
