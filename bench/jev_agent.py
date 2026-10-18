@@ -1069,6 +1069,14 @@ class Agent:
         if nr and isinstance(self.nav, LearnedAtlas) and cur is not None:
             # decided next step, once the map view (with the people in it) has been read: see learn_noroute()
             self.s["pending_noroute"] = [cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4])]
+        elif m and "could not get closer" in after.head and after.map == o.map and after.pos and \
+                isinstance(self.nav, LearnedAtlas) and cur is not None:
+            # the walk went as near as it could and stopped: a warp behind a counter (Silph Co. 1F's (16,10) to 3F; full
+            # run 64 explored towards it ~1,800 steps) is learned like a "no walkable route" from where it stopped
+            # (from where it stopped right away: it walked there; from the start once the view shows nobody on the way)
+            self.nav.record_noroute(cur, tuple(after.pos), (int(m[1]), int(m[2])))
+            if o.pos:
+                self.s["pending_noroute"] = [cur, o.pos[0], o.pos[1], int(m[1]), int(m[2])]
         if after.map and after.map != o.map:
             pass
         elif "no walkable route" in after.head or (after.mode == "overworld" and after.map == o.map and after.pos == o.pos

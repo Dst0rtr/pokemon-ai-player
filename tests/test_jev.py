@@ -1788,3 +1788,24 @@ def test_an_item_ball_out_of_reach_is_sought_from_another_arrival(tmp_path, nav)
     assert agent.spot_cells(there, f5, f5) is None and "21,16" not in agent.s["talk_noroute"]["Silph Co. 5F"]
     gone = dataclasses.replace(o, balls=[])
     assert agent.spot_cells(gone, f5, f5) is None and "spot_goal" not in agent.s
+
+
+def test_a_warp_the_walk_could_not_get_closer_to_leaves_the_frontier(tmp_path):
+    """Silph Co. 1F lists a warp at (16,10) to 3F that the player walks over without warping; full run 64 explored
+    towards it ~1,800 steps ("could not get closer", the player a step away each time, so nothing was blocked)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f1 = map_id("Silph Co. 1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(f1, _view("Silph Co. 1F", ["#######", "#P....#", "#..D..#", "#.....#", "#######"]),
+                      _warps_hex([(3, 2, 6, map_id("Silph Co. 3F"))]), [])
+    o = J.parse("walked\nf1 Silph Co. 1F (1,1) facing up | C L60 200/207 | ¥3000 | 5 badges")
+    assert [(h.x, h.y) for h in agent.nav.frontier(f1, (1, 1), set())] == [(3, 2)]
+    opt = J.Option("explore the frontier: walk to the untaken warp at (3,2) → Silph Co. 3F", "walk", {"path": "to 3,2"})
+    after = J.parse("went toward (3,2): right 2/2, down 2/2 — could not get closer\n"
+                    "f1 Silph Co. 1F (3,3) facing down | C L60 200/207 | ¥3000 | 5 badges")
+    agent.nav_feedback(o, opt, after, "")
+    agent.learn_noroute(after)
+    assert agent.nav.frontier(f1, (3, 3), set()) == [] and agent.nav.frontier(f1, (1, 1), set()) == []
