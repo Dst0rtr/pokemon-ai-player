@@ -264,12 +264,22 @@ class PokemonGen1Profile(GameProfile):
             out.append((x, y, dest))
         return out
 
-    def npcs(self) -> list[tuple[int, int]]:
+    def npcs(self, balls: Optional[bool] = None) -> list[tuple[int, int]]:
+        """Map cells of the sprites; balls=True only item balls, balls=False only the others (people, boulders)."""
         out = []
         for i in range(1, 16):
-            if self._u8(D.SPRITE_STATE_1 + 16 * i):
+            pic = self._u8(D.SPRITE_STATE_1 + 16 * i)
+            if pic and (balls is None or (pic == D.SPRITE_POKE_BALL) == balls):
                 out.append((self._u8(D.SPRITE_STATE_2 + 16 * i + 5) - 4, self._u8(D.SPRITE_STATE_2 + 16 * i + 4) - 4))
         return out
+
+    def _draw_sprites(self, cells: list[list[str]]) -> None:
+        """People as N, item balls as o (both are on screen; the ball's picture is the Poké Ball sprite)."""
+        h, w = len(cells), len(cells[0]) if cells else 0
+        for mark, balls in (("N", False), ("o", True)):
+            for nx, ny in self.npcs(balls):
+                if 0 <= nx < w and 0 <= ny < h:
+                    cells[ny][nx] = mark
 
     def facing(self) -> str:
         return D.FACING.get(self._u8(D.SPRITE_STATE_1 + 9), "?")
@@ -412,9 +422,7 @@ class PokemonGen1Profile(GameProfile):
         for wx, wy, _ in self.warps():
             if 0 <= wx < w and 0 <= wy < h:
                 cells[wy][wx] = "D"
-        for nx, ny in self.npcs():
-            if 0 <= nx < w and 0 <= ny < h:
-                cells[ny][nx] = "N"
+        self._draw_sprites(cells)
         rows = []
         for r in range(9):
             y = py + r - 4
@@ -1645,14 +1653,13 @@ class PokemonGen1Profile(GameProfile):
         for wx, wy, _ in self.warps():
             if 0 <= wx < w and 0 <= wy < h:
                 cells[wy][wx] = "D"
-        for nx, ny in self.npcs():
-            if 0 <= nx < w and 0 <= ny < h:
-                cells[ny][nx] = "N"
+        self._draw_sprites(cells)
         if 0 <= px < w and 0 <= py < h:
             cells[py][px] = "P"
         head = (f"{D.map_name(m)} {w}x{h}, you at ({px},{py}) facing {self.facing()}. "
                 "x→ right, y↓ down. P=you N=npc D=door/warp #=blocked .=walkable ,=tall grass v<>=one-way ledge "
-                "~=water (Surf) T=small tree (Cut)" + (" L=locked door (Card Key)" if any("L" in r for r in cells) else ""))
+                "~=water (Surf) T=small tree (Cut)" + (" L=locked door (Card Key)" if any("L" in r for r in cells) else "")
+                + (" o=item ball" if any("o" in r for r in cells) else ""))
         ruler = "   " + "".join(str(x % 10) for x in range(w))
         body = "\n".join(f"{y:2d} " + "".join(row) for y, row in enumerate(cells))
         exits = ", ".join(f"({wx},{wy})→{self.map_label(d)}" for wx, wy, d in self.warps()[:12])

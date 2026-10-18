@@ -1704,10 +1704,6 @@ def test_silph_11f_is_entered_only_from_the_7f_warp_pad(nav):
     assert _route(nav, "Silph Co. 11F", (9, 1), "Silph Co. 11F", entry=rule)[-1] == ("warp", 5, 7, "Silph Co. 11F")
 
 
-def nav_id(name):
-    from bench.jev_nav import map_id
-    return map_id(name)
-
 
 def test_silph_card_key_first_then_doors_and_the_pad_route(tmp_path):
     d = SOLO.SoloDirector({"visited": [], "milestones": []})
@@ -1739,3 +1735,24 @@ def test_silph_card_key_first_then_doors_and_the_pad_route(tmp_path):
     panel = J.parse("choice:\n    ▶1F\n     5F\n     10F\n     11F\n     CANCEL\nWhich floor do\nyou want?")
     agent.s["prev_map"] = "Silph Co. Elevator"
     assert [x.label for x in agent.floor_choice(panel, J.choice_options(panel), d.objective(f, o)[1])] == ["choose 10F"]
+
+
+def test_locked_doors_and_item_balls_keep_every_map_row(tmp_path):
+    """3d45c25 drew Silph's card-key doors 'L', but the map-row patterns did not know the letter: the learned atlas
+    stopped at the first row with a door (Silph Co. 5F kept rows 0-3) and the agent's grid lost those rows (full run
+    62). Item balls are drawn 'o': a talk target like a person, offered first and named as an item."""
+    from bench.jev_atlas import parse_view
+    rows = ["#########", "#P..N..o#", "#..L....#", "#..L..o.#", "#########"]
+    assert len(parse_view(_view("Silph Co. 5F", rows))) == 5
+    assert parse_view(_view("Silph Co. 5F", rows))[2][3] == "L" and parse_view(_view("Silph Co. 5F", rows))[1][7] == "."
+    o = J.parse("walked up 1/1\nf1 Silph Co. 5F (1,1) facing up | X L5 20/20 | ¥0 | 5 badges\n"
+                + _view("Silph Co. 5F", rows))
+    assert (3, 3) in o.grid and o.grid[(3, 3)] == "L"
+    assert set(o.balls) == {(7, 1), (6, 3)} and {(4, 1), (7, 1), (6, 3)} <= set(o.npcs)
+    opts = J.talk_to_options(o, o.grid)
+    assert opts[0].label == "talk to the person or object at (7,1) (an item ball: pick it up)" and "(6,3) (an item" in opts[1].label
+    assert "not taken yet" in opts[0].desc and opts[2].label == "talk to the person or object at (4,1)"
+    win = ("walked up 1/1\nf1 Silph Co. 5F (5,5) facing up | X L5 20/20 | ¥0 | 5 badges\n"
+           "Silph Co. 5F (5,5) facing up, window x1..10 y1..9\n" + "\n".join(["..L.o.N...", "#" * 10] + ["." * 10] * 7))
+    o = J.parse(win)
+    assert o.balls == [(5, 1)] and (7, 1) in o.npcs and o.grid[(3, 1)] == "L"

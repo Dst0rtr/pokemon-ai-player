@@ -191,7 +191,7 @@ MON_RE = re.compile(r"^(?P<name>.+?) L(?P<level>\d+) (?P<hp>\d+)/(?P<max_hp>\d+)
 PARTY_RE = re.compile(r"^(?P<n>\d+)\. (?P<mon>.+?\d+/\d+[^\[\n]*(?:\[[^\]]*\])?)", re.M)
 MOVE_RE = re.compile(r"^(?P<name>.+?) (?P<pp>\d+)pp(?P<dis> DISABLED)?$")
 EXIT_RE = re.compile(r"\(\d+,\d+\)→([^,\n]+)")
-MAP_ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^]+)$")
+MAP_ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^Lo]+)$")
 WINDOW_RE = re.compile(r"window x(-?\d+)\.\.-?\d+ y(-?\d+)\.\.-?\d+")
 CONN_RE = re.compile(r"(north|south|east|west) edge→([^,\n]+)")
 HEAL_ITEMS = ("Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore", "Fresh Water", "Soda Pop", "Lemonade")
@@ -257,6 +257,7 @@ class Obs:
     exits: list[str] = field(default_factory=list)
     connections: list[tuple[str, str]] = field(default_factory=list)
     npcs: list[tuple[int, int]] = field(default_factory=list)
+    balls: list[tuple[int, int]] = field(default_factory=list)    # item balls (also in npcs: talked to the same way)
     grid: dict = field(default_factory=dict)     # (x, y) -> map cell char, from a full map or a window view
 
     def key(self) -> tuple:
@@ -284,7 +285,8 @@ def parse(text: str) -> Obs:
     for i, ln in enumerate(lines):
         m = MAP_ROW_RE.match(ln)
         if m:
-            o.npcs += [(x, int(m[1])) for x, c in enumerate(m[2]) if c == "N"]
+            o.npcs += [(x, int(m[1])) for x, c in enumerate(m[2]) if c in "No"]
+            o.balls += [(x, int(m[1])) for x, c in enumerate(m[2]) if c == "o"]
             o.grid.update({(x, int(m[1])): c for x, c in enumerate(m[2])})
         w = WINDOW_RE.search(ln)
         if w:
@@ -292,9 +294,10 @@ def parse(text: str) -> Obs:
     if win and not o.npcs:
         x0, y0, i0 = win
         for r, ln in enumerate(lines[i0 + 1:i0 + 10]):
-            if not re.fullmatch(r"[#.,NPDvT<>~^]{10}", ln):
+            if not re.fullmatch(r"[#.,NPDvT<>~^Lo]{10}", ln):
                 break
-            o.npcs += [(x0 + x, y0 + r) for x, c in enumerate(ln) if c == "N"]
+            o.npcs += [(x0 + x, y0 + r) for x, c in enumerate(ln) if c in "No"]
+            o.balls += [(x0 + x, y0 + r) for x, c in enumerate(ln) if c == "o"]
             o.grid.update({(x0 + x, y0 + r): c for x, c in enumerate(ln)})
     if "screen:\n" in text:
         tail = text.split("screen:\n", 1)[1]
@@ -464,7 +467,11 @@ def talk_to_options(o: Obs, grid: dict, limit: int = 10, said: Optional[dict] = 
     out = []
     px, py = o.pos
     said = said or {}
-    for nx, ny in sorted(set(o.npcs), key=lambda n: (f"{n[0]},{n[1]}" in said, abs(n[0] - px) + abs(n[1] - py)))[:limit]:
+    # untaken item balls first: a key item lies in one (Silph Co. 5F's Card Key, full run 62: offered as a plain
+    # "person or object" among ten, Jev took the 4-tile walks ~1,400 times instead)
+    balls = set(o.balls)
+    for nx, ny in sorted(set(o.npcs), key=lambda n: (f"{n[0]},{n[1]}" in said, n not in balls,
+                                                     abs(n[0] - px) + abs(n[1] - py)))[:limit]:
         # not a cell another person stands on (Cerulean Gym, iteration 37: a beaten trainer stood right below Misty)
         stands = [((nx + dx, ny + dy), face) for (dx, dy), face in STEP_TOWARD.items()
                   if (grid.get((nx + dx, ny + dy)) in WALKABLE and (nx + dx, ny + dy) not in o.npcs)
@@ -476,8 +483,11 @@ def talk_to_options(o: Obs, grid: dict, limit: int = 10, said: Optional[dict] = 
                  else Option("", "walk", {"path": f"to {sx},{sy}", "on_battle": "stop"}))
         then = [("walk", {"path": f"{face} 1", "on_battle": "stop"})] if (sx, sy) != (px, py) else []
         before = said.get(f"{nx},{ny}")
-        out.append(Option(f"talk to the person or object at ({nx},{ny})", first.tool, first.args,
+        ball = (nx, ny) in balls
+        out.append(Option(f"talk to the person or object at ({nx},{ny})" + (" (an item ball: pick it up)" if ball else ""),
+                          first.tool, first.args,
                           f"{abs(nx - px) + abs(ny - py)} tiles away; " + (f"already talked to it, it said: {before}" if before
+                                                                            else "an item lying here, not taken yet" if ball
                                                                             else "not talked to yet"),
                           then=then + [("talk", {})]))
     return out

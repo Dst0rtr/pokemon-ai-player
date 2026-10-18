@@ -1,6 +1,7 @@
 """Integration tests driving a real Pokémon Red ROM headlessly."""
 
 import io
+import re
 import json
 import time
 
@@ -900,3 +901,23 @@ def test_silph_card_key_doors_are_shown_and_open_with_the_card_key(emu):
     assert "CARD KEY opened the door" in emu.talk()
     assert emu.profile.full_map_cells()[8][10:12] == [".", "."]
     assert emu.walk("down 1").startswith("walked down 1/1")
+
+
+def test_item_balls_are_drawn_apart_from_people(emu):
+    """Full run 62 reached Silph Co. 5F for the Card Key, but its item ball was an 'N' like every scientist, and Jev
+    walked the floor ~1,400 times instead of taking it. Item balls (the Poké Ball sprite) are drawn 'o'. Needs a local
+    saves/<rom>/silph-5f.state (5F at (27,1), Card Key not taken)."""
+    import pytest
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "silph-5f.state"
+    if not state.exists():
+        pytest.skip("no local silph-5f.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    full = emu.profile.full_map_text()
+    rows = {int(ln[:2]): ln[3:] for ln in full.splitlines() if re.match(r"^[ \d]\d [#.,NPDvT<>~^Lo]+$", ln)}
+    assert "o=item ball" in full and rows[16][21] == "o" and rows[13][2] == "o" and rows[16][8] == "N"
+    assert rows[4][7] == "L" and len(rows) == 18                            # every row, the locked-door ones too
+    assert (21, 16) in emu.profile.npcs(balls=True) and (21, 16) not in emu.profile.npcs(balls=False)

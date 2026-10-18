@@ -33,19 +33,20 @@ from games import gen1_data as D
 UNKNOWN = (-1, -1)                    # arrival point not known yet: "somewhere on that map"
 UNKNOWN_COST = 30                     # steps assumed from an unknown arrival point to any warp/edge of that map
 NOROUTE_NEAR = 6                      # a "no walkable route" learned from a cell applies to starts this close to it
-ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^]+)$")
+ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^Lo]+)$")
 HEX_RE = re.compile(r"^([0-9A-F]{4}): ((?:[0-9A-F]{2} ?)+)$", re.M)
 SIDES = ("north", "south", "west", "east")
 OPPOSITE = {"north": "south", "south": "north", "west": "east", "east": "west"}
 
 
 def parse_view(text: str) -> list[list[str]]:
-    """Map rows of the server's full map view; P (you) and N (people) stand on walkable cells, D marks a warp."""
+    """Map rows of the server's full map view; P (you), N (people) and o (item balls) stand on walkable cells, D marks a
+    warp, L a card-key door (solid until opened)."""
     rows = []
     for ln in text.splitlines():
         m = ROW_RE.match(ln)
         if m and int(m[1]) == len(rows):
-            rows.append([("." if c in "PN" else c) for c in m[2]])
+            rows.append([("." if c in "PNo" else c) for c in m[2]])
     return rows
 
 
