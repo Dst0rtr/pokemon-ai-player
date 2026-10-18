@@ -62,7 +62,7 @@ exists, but keep the project ROM free of a `.ram` file for reproducible runs.
 
 ## Tool set (keep it small)
 
-`press`, `walk`, `battle` (incl. `auto`, `bait`, `rock`), `talk`, `shop`, `manage` (`lead`, `swap`, `use`,
+`press`, `walk`, `battle` (incl. `auto`, `bait`, `rock`), `talk`, `shop`, `manage` (`lead`, `swap`, `use`, `toss`,
 `field`, `save`), `wait`, `screen`, `state`, `save_state`, `load_state`, `reset_game`, `memory`, `metrics`
 (incl. `note`). Tool schema JSON stays under 10 KB (enforced by a
 test, currently ~6.5 KB) and the agent guide under 1.5 KB. If you add a tool, ask whether it could

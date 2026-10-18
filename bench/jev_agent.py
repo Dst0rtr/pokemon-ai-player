@@ -376,6 +376,8 @@ class Agent:
                     uniq.append(x)
             opts = uniq
         forced = self.director.forced_recovery(self.s["step"]) if self.director and kind == "overworld" else None
+        if not forced and self.director and kind == "overworld":
+            forced = self.director.bag_option(self.items)
         if self.director and kind == "overworld" and self.director.want_checkpoint(self.s["step"]):
             await self.tool("save_state", slot="jev-progress")
         if forced:
@@ -513,6 +515,8 @@ class Agent:
     def remember_refusal(self, opt: Option, reply: str) -> None:
         """'X is not compatible with CUT': this Pokémon cannot learn that HM, teach another one. Only that line counts:
         "can't learn more than 4 moves!" is the forget-a-move prompt (full run 45 marked Charizard refused on it)."""
+        if opt.tool == "manage" and opt.args.get("action") == "toss" and "threw away" not in reply:
+            self.s.setdefault("no_toss", []).append(opt.args["target"])
         if opt.tool == "manage" and opt.args.get("action") == "use" and "not compatible" in reply:
             refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
             self.s.setdefault("hm_no", []).append(refused)

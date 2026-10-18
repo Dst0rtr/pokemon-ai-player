@@ -1076,6 +1076,24 @@ def test_four_moves_prompt_is_not_an_hm_refusal(tmp_path):
     assert agent.s["hm_no"] == ["HM01:Magikarp"]
 
 
+def test_a_full_bag_is_made_room_in_by_code(tmp_path):
+    """Full run 55: 20 kinds in the bag, "No more room for items!" for the Lift Key, ~2,100 steps on B4F."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    bag = [("Antidote", 1), ("S.S. Ticket", 1), ("HM01", 1), ("Moon Stone", 1), ("Potion", 3), ("TM34", 1)]
+    bag += [(f"Item{i}", 1) for i in range(20 - len(bag))]
+    d = agent.director
+    assert d.bag_option(bag[:19]) is None                                 # a free slot: nothing to do
+    toss = d.bag_option(bag)
+    assert toss.tool == "manage" and toss.args == {"action": "toss", "target": "TM34"}, toss
+    agent.remember_refusal(toss, "TM34 is too important to toss; bag: ...")
+    assert d.bag_option(bag).args["target"] == "Moon Stone"                # a refused toss is not offered again
+    agent.remember_refusal(d.bag_option(bag), "threw away Moon Stone×1; bag: ...")
+    assert d.bag_option(bag).args["target"] == "Moon Stone"                # (a real toss leaves the bag at 19)
+    keep = [("S.S. Ticket", 1), ("HM01", 1), ("Potion", 3)] + [(f"Item{i}", 1) for i in range(17)]
+    assert d.bag_option(keep) is None                                      # nothing it may throw away
+
+
 def test_vermilion_gym_trash_cans_are_searched_in_order():
     """Full run 42: in the Vermilion Gym with every person talked to, Jev walked out and back in ~600 times."""
     d = SOLO.SoloDirector({"visited": ["Vermilion Gym"], "milestones": []})

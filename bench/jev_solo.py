@@ -38,6 +38,11 @@ POKE_CENTERS = {"Viridian City": "Viridian Poké Center", "Pewter City": "Pewter
 # Lt. Surge's door: two switches hidden in the 5x3 grid of trash cans; the second is next to the first (pokered
 # GymTrashScript). A wrong second can resets both locks (and moves the first switch).
 TRASH_CANS = [(x, y) for y in (7, 9, 11) for x in (1, 3, 5, 7, 9)]
+# the bag holds 20 kinds; a full bag picks nothing up, not even the Lift Key (full run 55 lost ~2,100 steps to it).
+# Tossed first: TMs (solo never teaches them), then items it never uses.
+BAG_SLOTS = 20
+JUNK = ("Moon Stone", "Fire Stone", "Water Stone", "Thunder Stone", "Leaf Stone", "Dome Fossil", "Helix Fossil",
+        "Old Amber", "Nugget", "Poké Doll", "Antidote", "Burn Heal", "Ice Heal", "Awakening", "Paralyze Heal")
 NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
 GYM_NODES = ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni")
 
@@ -301,6 +306,18 @@ class SoloDirector:
         if idle >= 300:
             level = 3
         self.s["recovery"] = max(level, 0)
+
+    def bag_option(self, items: list[tuple[str, int]]) -> Optional[Option]:
+        """With every bag slot taken, code tosses a stack it has no use for (a toss the game refuses is not retried)."""
+        if len(items) < BAG_SLOTS:
+            return None
+        refused = set(self.s.get("no_toss", []))
+        names = [n for n, _ in items if n not in refused]
+        junk = [n for n in names if n.startswith("TM")] + [n for j in JUNK for n in names if n == j]
+        if not junk:
+            return None
+        return Option(f"toss {junk[0]} (the bag is full)", "manage", {"action": "toss", "target": junk[0]},
+                      "a full bag cannot pick up anything, not even key items")
 
     def forced_recovery(self, step: int) -> Optional[Option]:
         """Code-only recovery when the player has not moved for a long time (no Jev question)."""

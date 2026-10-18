@@ -1021,6 +1021,8 @@ class PokemonGen1Profile(GameProfile):
             return "party: " + ", ".join(f"{k + 1}={p['species']} L{p['level']}" for k, p in enumerate(new))
         if action == "use":
             return self._use_item(emu, target, target2)
+        if action == "toss":
+            return self._toss_item(emu, target)
         if action == "field":
             return self._field_move(emu, target, target2)
         if action == "save":
@@ -1041,7 +1043,7 @@ class PokemonGen1Profile(GameProfile):
                     return "game saved (battery save; survives restarts)"
                 emu.tick(30)
             return "save may not have completed: " + self.dialog_text()
-        return "unknown action; use lead, swap, use, field or save"
+        return "unknown action; use lead, swap, use, toss, field or save"
 
     def _party_cursor_index(self, txt: str) -> Optional[int]:
         """Party slot under the ▶ cursor. The cursor sits on an entry's name row, or (TM/HM lists) on its
@@ -1077,6 +1079,47 @@ class PokemonGen1Profile(GameProfile):
 
     def _bag_text(self) -> str:
         return "bag: " + (", ".join(f"{n}×{q}" for n, q in self.items()) or "empty")
+
+    def _toss_item(self, emu, target: str) -> str:
+        """START → ITEM → item → TOSS, the whole stack (DOWN from ×1 wraps to the most), YES. A full bag (20 kinds)
+        cannot pick anything up, not even a key item ("No more room for items!")."""
+        bag = self.items()
+        want = self._norm(target)
+        hit = next((k for k, (n, _) in enumerate(bag) if want and want in self._norm(n)), None)
+        if hit is None:
+            return f"no '{target}' in the bag: " + (", ".join(f"{n}×{q}" for n, q in bag) or "empty")
+        item_name, qty = bag[hit]
+        if not self._open_start_menu(emu):
+            return "cannot open the START menu now (close any text first)"
+        if not self._menu_select(emu, "ITEM"):
+            emu.press("B", settle=1)
+            return "no ITEM entry in the menu"
+        for _ in range(len(bag) + 2):
+            if self._norm(self._cursor_line()).startswith(self._norm(item_name)[:6]):
+                break
+            emu.press("DOWN", settle=1)
+        emu.press("A", settle=1)                              # USE / TOSS
+        if not self._menu_select(emu, "TOSS", 2):
+            emu.press("B*3", settle=1)
+            return "could not select TOSS"
+        if qty > 1:
+            emu.press("DOWN", settle=1)                       # quantity box: ×1 wraps to the whole stack
+        said = ""
+        for _ in range(8):
+            txt = self.screen_text() or ""
+            d = self.dialog_text()
+            if "too impor" in d.replace("\n", "").replace("-", ""):
+                said = f"{item_name} is too important to toss"
+                break
+            if "▶YES" in txt:                                 # "Is it OK to toss X?"
+                emu.press("A", settle=1)
+                continue
+            if "Threw away" in d or "threw away" in d:
+                said = f"threw away {item_name}×{qty}"
+                break
+            emu.press("A", settle=1)
+        emu.press("B*4", settle=1)
+        return (said or "toss may not have completed") + "; " + self._bag_text()
 
     def _use_item(self, emu, target: str, target2: str) -> str:
         """START → ITEM → item → USE, answering the prompts: a Pokémon to use it on (target2), and for

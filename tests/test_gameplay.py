@@ -590,6 +590,21 @@ def test_manage_use_potion_on_named_pokemon(emu):
     assert "Potion×1" in r, r
 
 
+def test_manage_toss_throws_away_a_whole_stack_but_not_a_key_item(emu):
+    from games import gen1_data as D
+    _give_item(emu, 0x14, 7)                                               # Potion x7
+    _give_item(emu, 0x3F)                                                  # S.S. Ticket (a key item)
+    _give_item(emu, 0x0A)                                                  # Moon Stone
+    r = emu.manage("toss", "Potion")                                       # full run 55: a full bag missed the Lift Key
+    assert r.startswith("threw away Potion×7") and "Potion" not in emu.profile._bag_text(), r
+    assert not (emu.screen_text() or "").strip()                          # menus closed again
+    r = emu.manage("toss", "S.S. Ticket")
+    assert "too important" in r and "S.S. Ticket" in emu.profile._bag_text(), r
+    assert emu.manage("toss", "Moon Stone").startswith("threw away Moon Stone×1")
+    assert [n for n, _ in emu.profile.items()] == ["S.S. Ticket"]
+    assert D.item_name(0x3F) == "S.S. Ticket"
+
+
 def test_battle_reports_disabled_move(emu):
     from games import gen1_data as D
     mem = emu.pyboy.memory
