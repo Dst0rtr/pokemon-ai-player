@@ -327,6 +327,9 @@ FIELD_MOVES = ("Cut", "Fly", "Surf", "Strength", "Flash", "Dig", "Teleport", "So
 WATER_TILE = 0x14
 WATER_TILESETS = {0, 3, 5, 7, 13, 14, 17, 22, 23}      # pokered WaterTilesets: where tile $14 is surfable water
 CUT_TREE_TILES = {0: 0x3D, 7: 0x50}
+# Silph Co.'s locked doors: the card-key routine (bank 3) opens the door in front of the player when its bottom-left
+# tile is one of these (pokered CardKeyTable1-3 by door tile); checked only on Silph Co. floors
+CARD_KEY_DOOR_TILES = (0x18, 0x24, 0x5E)
 # pokered TilePairCollisionsLand / Water: in these tilesets you cannot step between the two tiles of a pair
 # (either direction). They model elevation changes in caves and the forest edges.
 TILE_PAIR_COLLISIONS_LAND = {

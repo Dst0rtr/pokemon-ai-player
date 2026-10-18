@@ -861,3 +861,42 @@ def test_walk_into_a_small_tree_then_cut_it(emu):
     assert "CUT" in emu.manage("field", "Cut")
     assert emu.profile.full_map_cells()[28][19] == "."
     assert emu.walk("down 1").startswith("walked down 1/1")
+
+
+def test_silph_card_key_doors_are_shown_and_open_with_the_card_key(emu):
+    """Silph Co.'s locked doors were plain walls in the map view; full run 61 reached 11F's corridor without the Card
+    Key and paced it ~2,800 steps. They are drawn 'L' (the door tiles the game's card-key routine checks), and facing
+    one with the Card Key and talking opens it. Needs a local saves/<rom>/silph-11f.state (11F at (15,8), no Card Key)."""
+    import pytest
+    from games import gen1_data as D
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "silph-11f.state"
+    if not state.exists():
+        pytest.skip("no local silph-11f.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    assert emu.profile.full_map_cells()[13][6:8] == ["L", "L"]               # 11F: Giovanni's room / the west wing
+    mem = emu.pyboy.memory
+    n = mem[D.BAG_COUNT]
+    card = next(k for k, v in D.ITEMS.items() if v == "Card Key")
+    mem[D.BAG_ITEMS + 2 * n], mem[D.BAG_ITEMS + 2 * n + 1], mem[D.BAG_ITEMS + 2 * n + 2] = card, 1, 0xFF
+    mem[D.BAG_COUNT] = n + 1
+    emu.walk("to 9,1")
+    emu.walk("up 1")
+    assert emu.profile.position()[1:] == (10, 1) and "Silph Co. 10F" in emu.status()
+    view = emu.map_view()
+    assert "L=locked door" in view and emu.profile.full_map_cells()[8][10:12] == ["L", "L"]
+    for _ in range(4):                                                       # a scientist steps in on the way
+        r = emu.walk("to 10,7")
+        if "arrived" in r or emu.profile.position()[1:] == (10, 7):
+            break
+        emu.talk()
+        emu.battle("auto")
+        emu.press("A A A")
+    assert emu.profile.position()[1:] == (10, 7), r
+    assert "blocked" in emu.walk("down 1")                                   # walking into it does nothing
+    assert "CARD KEY opened the door" in emu.talk()
+    assert emu.profile.full_map_cells()[8][10:12] == [".", "."]
+    assert emu.walk("down 1").startswith("walked down 1/1")

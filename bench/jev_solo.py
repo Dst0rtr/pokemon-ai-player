@@ -165,8 +165,12 @@ GRAPH: list[Node] = [
                   "then walk into a Saffron gate: the thirsty guard takes it and lets you through.",
          ("Celadon City", "Celadon Mart 1F", "Celadon Mart Roof"),
          lambda f: any(f.has(d) for d in ("Fresh Water", "Soda Pop", "Lemonade")) or f.reached("Saffron City")),
-    Node("silph", "Enter Saffron City and clear Silph Co. (find the Card Key, beat Giovanni).",
-         ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 12)), None, "Has the player beaten Giovanni in Silph Co. (the Silph Co. president thanked the player)?"),
+    # the Card Key (5F) opens the locked doors (L); Giovanni's room on 11F is reached only by the warp pads (3F -> 7F
+    # -> 11F), the stairs and the elevator open onto a corridor walled off from it (SoloDirector.entry_rule)
+    Node("silph", "Enter Saffron City and clear Silph Co.: find the Card Key on 5F, open the locked doors with it "
+                  "(face one and talk), and beat Giovanni on 11F (his room is reached by the warp pads, not the stairs).",
+         ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 12)), None, "Has the player beaten Giovanni in Silph Co. (the Silph Co. president thanked the player)?",
+         stages=((lambda f, o: not f.has("Card Key"), ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 6))),)),
     Node("sabrina", "Beat Sabrina in the Saffron Gym.", ("Saffron Gym",), _badge(6)),
     Node("cinnabar", "Surf south from Pallet Town (or through the Seafoam Islands) to Cinnabar Island.",
          ("Route 21", "Cinnabar Island"), lambda f: f.reached("Cinnabar Island")),
@@ -334,6 +338,12 @@ class SoloDirector:
         if idle >= 300:
             level = 3
         self.s["recovery"] = max(level, 0)
+
+    def entry_rule(self, f: Facts) -> dict[str, str]:
+        """Maps the route may enter only from one other map: Giovanni's room on Silph Co. 11F is reached by the warp
+        pad from 7F; the stairs and the elevator open onto a corridor walled off from it (full run 61 paced that
+        corridor ~2,800 steps)."""
+        return {"Silph Co. 11F": "Silph Co. 7F"} if current_node(f).id == "silph" and f.has("Card Key") else {}
 
     def bag_option(self, items: list[tuple[str, int]]) -> Optional[Option]:
         """With 19 of the 20 bag slots taken, code tosses a stack it has no use for, so the next pickup always fits (full

@@ -128,7 +128,8 @@ after a walk), `hint:` (from `profile.hint()`), then an image only if the screen
   82 Rock Tunnel 1F, 83 Power Plant, 92 Vermilion Gym, 232 Rock Tunnel B1F, 233-236 Silph 9F-11F +
   elevator, 245/246/247 Lorelei/Bruno/Agatha, 113 Lance, 120 Champion, 118 Hall of Fame.
 * `0xD700` = walk/bike/surf state (2 = surfing). Water tile `$14` (surfable in pokered's water
-  tilesets), cut trees `$3D` (overworld) / `$50` (gym); `wTileInFrontOfPlayer` 0xCFC6. Cave/forest
+  tilesets), cut trees `$3D` (overworld) / `$50` (gym); `wTileInFrontOfPlayer` 0xCFC6. Silph Co.'s locked doors (bottom-left tile
+  `$18`/`$24`/`$5E`, the card-key routine's check) are drawn `L`; facing one with the Card Key and talking opens it. Cave/forest
   elevation steps are pokered's `TilePairCollisionsLand/Water` (tileset 17 and 3), applied by the pathfinder.
 * Disable: `0xD06D` high nibble = the player's disabled move slot (1-4); `battle()` reports it and
   `fight`/`auto` skip it. Rage locks the user for the whole battle, so `auto` treats it as a status move.

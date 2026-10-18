@@ -198,10 +198,12 @@ class WorldNav:
     # ---------------------------------------------------------------- route
     def route(self, mid: int, pos: tuple[int, int], goal: int, surf: bool = False, cut: bool = False,
               taken: Optional[dict] = None, blocked: frozenset = frozenset(), max_nodes: int = 4000,
-              arrival: bool = False):
+              arrival: bool = False, entry: Optional[dict] = None):
         """Cheapest hop list from (mid, pos) to any cell of map `goal`; [] when already there, None if no route.
-        With arrival=True: (hops, (map, x, y) where the last hop lands), or None."""
-        if mid == goal:
+        With arrival=True: (hops, (map, x, y) where the last hop lands), or None. `entry` = {map: the only map it may
+        be entered from}: standing on such a goal does not count (it was entered some other way)."""
+        entry = entry or {}
+        if mid == goal and goal not in entry:
             return ([], (mid, pos[0], pos[1])) if arrival else []
         taken = taken or {}
         start = (mid, pos[0], pos[1])
@@ -214,7 +216,7 @@ class WorldNav:
             if cost > best.get(node, 1 << 30):
                 continue
             n += 1
-            if node[0] == goal:
+            if node[0] == goal and node != start:
                 end, hops = node, []
                 while node in prev:
                     node, hop = prev[node]
@@ -226,7 +228,7 @@ class WorldNav:
                 continue
             for steps, hop, arr in trans:
                 key = f"{hop.map}:{hop.x},{hop.y}"
-                if key in blocked:
+                if key in blocked or arr[0] in entry and hop.map != entry[arr[0]]:
                     continue
                 c = cost + steps + HOP_COST + TAKEN_COST * taken.get(key, 0)
                 if c < best.get(arr, 1 << 30):

@@ -98,6 +98,7 @@ class Agent:
         self.route_hint = ""
         self.why = ""                                  # the director's reason for the objective (heal, train, node id)
         self.exploring = False
+        self.entry_pending = False                      # on the objective's map, but not entered the way that counts
         self.clear_for: dict = {}                       # clear-the-way option label -> the hop it unblocks
         self.edge_hop: Optional[tuple] = None           # (side, x, y) of the chosen edge-crossing option (learned atlas)
         self.edge_opts: dict = {}
@@ -350,7 +351,7 @@ class Agent:
                         and x.label != "talk to what you are facing"]
             if o.map.endswith(" Elevator") and not self.s.get("elevator"):
                 opts = self.panel_first(o, opts)
-            elif targets and o.map == targets[-1] and why not in ("heal", "train"):
+            elif targets and o.map == targets[-1] and why not in ("heal", "train") and not self.entry_pending:
                 if any(x.label.startswith("talk to the person") and "not talked to yet" in (x.desc or "") for x in opts):
                     # on the objective's own map: talk to everyone there before leaving it again
                     opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
@@ -359,6 +360,9 @@ class Agent:
                     if any("not tried yet" in (x.desc or "") for x in objects):
                         opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
                     opts = objects + opts
+            doors = self.card_door_options(o)
+            if doors:                                     # Silph Co.: a locked door is the way on until it is open
+                opts = doors + opts
             if any(x.label.startswith("search the trash can") for x in opts):
                 # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
                 opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
@@ -456,6 +460,7 @@ class Agent:
             self.s.setdefault("npcs", {}).pop(o.map, None)   # people move after talking (Bill into his machine)
         self.remember_talk(o, opt, after)
         self.remember_tree(o, after, reply)
+        self.remember_door(o, opt, reply)
         if self.director:
             self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
         self.remember_refusal(opt, reply)
@@ -548,8 +553,9 @@ class Agent:
         if not elev.endswith(" Elevator") or not floors:
             return choices
         building = elev[:-len(" Elevator")]
-        want = next((t[len(building) + 1:] for t in reversed(targets)
-                     if t.startswith(building + " ") and t[len(building) + 1:] in floors), None)
+        rule = self.s.get("entry_rule", {})
+        want = next((t[len(building) + 1:] for t in reversed(targets)    # not a floor the elevator cannot really reach
+                     if t.startswith(building + " ") and t[len(building) + 1:] in floors and t not in rule), None)
         if want is None:
             want = "1F" if "1F" in floors else next((f for f in floors if f != "CANCEL"), None)
         return [floors[want]] if want else choices
@@ -572,6 +578,52 @@ class Agent:
             return False
         known[o.map] = [list(n) for n in o.npcs]
         return True
+
+    def card_door_options(self, o: Obs) -> list[Option]:
+        """With the Card Key: each locked door (L in the map view, two cells wide) this part of the map reaches, as
+        'stand next to it, face it, talk'. A door that did not open is left alone for a while (full run 61 reached
+        Silph Co. 11F with no Card Key and no idea of the doors)."""
+        if not any(n == "Card Key" for n, _ in self.items) or not o.pos:
+            return []
+        grid = self.grid(o.map)
+        locked = {c for c, ch in grid.items() if ch == "L"}
+        if not locked:
+            return []
+        reach = None
+        if self.nav is not None and map_id(o.map) is not None:
+            try:
+                reach, _ = self.nav.reach(map_id(o.map), tuple(o.pos))
+            except (KeyError, IndexError, ValueError):
+                reach = None
+        tried = self.s.get("card_tried", {}).get(o.map, {})
+        out, done = [], set()
+        px, py = o.pos
+        for door in sorted(locked, key=lambda c: abs(c[0] - px) + abs(c[1] - py)):
+            if door in done:
+                continue
+            pair = {door} | {(door[0] + dx, door[1] + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                             if (door[0] + dx, door[1] + dy) in locked}
+            done |= pair
+            if any(self.s["step"] - tried.get(f"{x},{y}", -10**9) <= NAV_BLOCK_STEPS for x, y in pair):
+                continue
+            stands = [((x + dx, y + dy), face, (x, y)) for x, y in pair for (dx, dy), face in J.STEP_TOWARD.items()
+                      if grid.get((x + dx, y + dy)) in (".", ",") and (x + dx, y + dy) not in o.npcs
+                      and (reach is None or (x + dx, y + dy) in reach or (x + dx, y + dy) == (px, py))]
+            if not stands:
+                continue
+            (sx, sy), face, (dx_, dy_) = min(stands, key=lambda t: abs(t[0][0] - px) + abs(t[0][1] - py))
+            first = {"path": f"{face} 1" if (sx, sy) == (px, py) else f"to {sx},{sy}", "on_battle": "stop"}
+            then = ([("walk", {"path": f"{face} 1", "on_battle": "stop"})] if (sx, sy) != (px, py) else []) + [("talk", {})]
+            out.append(Option(f"open the locked door at ({dx_},{dy_}) with the Card Key", "walk", first,
+                              "a locked door (L): face it and talk with the Card Key in the bag; beyond it is part of "
+                              "the floor this side cannot reach", then=then))
+        return out[:3]
+
+    def remember_door(self, o: Obs, opt: Option, reply: str) -> None:
+        """A door that did not open (blocked on the way, wrong side) is not offered again for a while."""
+        m = re.match(r"open the locked door at \((\d+),(\d+)\)", opt.label)
+        if m and o.map and "CARD KEY opened" not in reply:
+            self.s.setdefault("card_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}"] = self.s["step"]
 
     def remember_tree(self, o: Obs, after: Obs, reply: str) -> None:
         """A walk refused by a small tree makes cutting it an option; once a tree is cut, the people this map had no way
@@ -638,6 +690,14 @@ class Agent:
                 self.nav.route(cur, tuple(o.pos), goal) is None and "once" in (self.s.get("last_objective") or ""):
             # the one-off "use this town's Poké Center" visit has no known way there (Route 4's is behind a ledge)
             self.s.setdefault("pc_unreachable", []).append(targets[0])
+        # a map that counts only when entered from one other map (Silph Co. 11F from 7F's warp pad): standing on it
+        # after arriving some other way is not being there
+        rule = self.director.entry_rule(facts) if self.director and facts else {}
+        self.s["entry_rule"] = rule                      # the elevator panel reads it (no facts on a prompt)
+        entry = {map_id(m): map_id(src) for m, src in rule.items() if map_id(m) is not None and map_id(src) is not None}
+        if goal == cur and goal in entry and self.s.get("came_from") == D.map_name(entry[goal]):
+            entry = {}
+        self.entry_pending = goal in entry
         moves = set(facts.moves) if facts else set()
         surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
         cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
@@ -652,9 +712,10 @@ class Agent:
                                 "the server found no way there", surf)
             if c:
                 opts.append(c)
-        if goal is not None and goal != cur:
+        if goal is not None and (goal != cur or self.entry_pending):
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
-            route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked)
+            route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked,
+                                   entry=entry)
             if route:
                 h = route[0]
                 args, then = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "") or \
@@ -671,7 +732,8 @@ class Agent:
                     opts.insert(0, Option(f"follow the map route to {D.map_name(goal)}: {h.label()}", "walk", args, desc, then=then))
                 if h.kind == "edge" and skip is None:
                     self.edge_opts[opts[0].label] = (h.side, h.x, h.y)
-        if isinstance(self.nav, LearnedAtlas) and not route_key and goal != cur:   # on the objective's map: nothing to explore
+        if isinstance(self.nav, LearnedAtlas) and not route_key and (goal != cur or self.entry_pending):
+            # (on the objective's map, entered the right way: nothing to explore)
             # the objective's map is not in the atlas (or not reachable through it yet): explore frontier-first
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
             front = [h for h in self.nav.frontier(cur, tuple(o.pos), set(self.s["visited"]), surf=surf, cut=cut,

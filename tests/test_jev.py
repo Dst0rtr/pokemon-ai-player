@@ -1689,3 +1689,53 @@ def test_node_targets_reach_the_room_that_matters():
     f3 = d2.facts(lavender, [], [("Silph Scope", 1)])
     f3.manual_done = f.manual_done
     assert d2.objective(f3, tower)[1][-1] == "Pokémon Tower 7F"
+
+
+@requires_rom
+def test_silph_11f_is_entered_only_from_the_7f_warp_pad(nav):
+    """Full run 61: Silph Co.'s stairs reach 11F's corridor, walled off from Giovanni's room; Jev paced it ~2,800
+    steps. With the entry rule the route goes through the warp pads (3F -> 7F -> 11F), also from that corridor."""
+    rule = {nav_id("Silph Co. 11F"): nav_id("Silph Co. 7F")}
+    plain = _route(nav, "Silph Co. 10F", (10, 1), "Silph Co. 11F")
+    assert plain == [("warp", 10, 0, "Silph Co. 11F")]
+    ruled = _route(nav, "Silph Co. 10F", (10, 1), "Silph Co. 11F", entry=rule)
+    assert ruled[-2:] == [("warp", 11, 11, "Silph Co. 7F"), ("warp", 5, 7, "Silph Co. 11F")], ruled
+    assert _route(nav, "Silph Co. 11F", (9, 1), "Silph Co. 11F") == []
+    assert _route(nav, "Silph Co. 11F", (9, 1), "Silph Co. 11F", entry=rule)[-1] == ("warp", 5, 7, "Silph Co. 11F")
+
+
+def nav_id(name):
+    from bench.jev_nav import map_id
+    return map_id(name)
+
+
+def test_silph_card_key_first_then_doors_and_the_pad_route(tmp_path):
+    d = SOLO.SoloDirector({"visited": [], "milestones": []})
+    order = [n.id for n in SOLO.GRAPH]
+    f = SOLO.Facts(badges=5, levels=[60], visited={"Saffron City"}, manual_done=set(order[:order.index("silph")]))
+    o = J.parse("walked\nf1 Silph Co. 1F (10,17) facing up | C L60 200/207 | ¥3000 | 5 badges")
+    text, targets, why = d.objective(f, o)
+    assert why == "silph" and targets[-1] == "Silph Co. 5F" and d.entry_rule(f) == {}   # no Card Key: 5F
+    f.ever_items = {"Card Key"}
+    assert d.objective(f, o)[1][-1] == "Silph Co. 11F" and d.entry_rule(f) == {"Silph Co. 11F": "Silph Co. 7F"}
+    # the doors: L cells in the map view, offered only with the Card Key, left alone after a try that failed
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    rows = ["#######", "#.....#", "###LL##", "#.....#", "#######"]
+    agent.s["grids"]["Silph Co. 10F"] = {f"{x},{y}": c for y, r in enumerate(rows) for x, c in enumerate(r)}
+    here = J.parse("walked\nf1 Silph Co. 10F (1,1) facing up | C L60 200/207 | ¥3000 | 5 badges")
+    agent.items = [("Potion", 1)]
+    assert agent.card_door_options(here) == []
+    agent.items = [("Card Key", 1)]
+    door, = agent.card_door_options(here)
+    assert door.label == "open the locked door at (3,2) with the Card Key", door
+    assert door.args["path"] == "to 3,1" and door.then == [("walk", {"path": "down 1", "on_battle": "stop"}), ("talk", {})]
+    agent.remember_door(here, door, "dialogue ended: Bingo! The CARD KEY | The CARD KEY opened the door!")
+    assert agent.card_door_options(here)                                   # (opened: the next view has no L)
+    agent.remember_door(here, door, "walked down 0/1 — stopped: blocked")
+    assert agent.card_door_options(here) == []
+    # the elevator panel does not pick 11F: it opens onto the corridor
+    agent.s["entry_rule"] = d.entry_rule(f)
+    panel = J.parse("choice:\n    ▶1F\n     5F\n     10F\n     11F\n     CANCEL\nWhich floor do\nyou want?")
+    agent.s["prev_map"] = "Silph Co. Elevator"
+    assert [x.label for x in agent.floor_choice(panel, J.choice_options(panel), d.objective(f, o)[1])] == ["choose 10F"]

@@ -1316,6 +1316,7 @@ class PokemonGen1Profile(GameProfile):
         ledges = D.LEDGE_TILES if tileset == 0 else {}
         water = D.WATER_TILE if tileset in D.WATER_TILESETS else -1
         tree = D.CUT_TREE_TILES.get(tileset, -1)
+        doors = D.CARD_KEY_DOOR_TILES if D.map_name(self._u8(D.CUR_MAP)).startswith("Silph Co.") else ()
         cells = []
         for trow in self.full_map_tiles():
             row = []
@@ -1330,6 +1331,8 @@ class PokemonGen1Profile(GameProfile):
                     row.append("~")
                 elif tile == tree:
                     row.append("T")
+                elif tile in doors:
+                    row.append("L")
                 else:
                     row.append("#")
             cells.append(row)
@@ -1355,7 +1358,7 @@ class PokemonGen1Profile(GameProfile):
             cells[ty][tx] = "."                 # a solid door tile can still be walked into as the destination
         if (tx, ty) == (px, py):
             return []
-        solid = ("#", "T") if self.surfing() else ("#", "T", "~")
+        solid = ("#", "T", "L") if self.surfing() else ("#", "T", "L", "~")
         tileset = self._u8(D.CUR_TILESET)
         pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(tileset, ()))
         if self.surfing():
@@ -1516,6 +1519,8 @@ class PokemonGen1Profile(GameProfile):
             notes.append("a small tree (T) blocks part of this map: use another exit or route around it; Cut removes it later")
         if "~" in flat and not self.surfing():
             notes.append("water (~) needs Surf: face it and manage('field', 'Surf')")
+        if "L" in flat:
+            notes.append("a locked door (L) blocks part of this map: with the Card Key, face it and talk")
         return "; ".join(notes)
 
     def place_names(self) -> list[str]:
@@ -1647,7 +1652,7 @@ class PokemonGen1Profile(GameProfile):
             cells[py][px] = "P"
         head = (f"{D.map_name(m)} {w}x{h}, you at ({px},{py}) facing {self.facing()}. "
                 "x→ right, y↓ down. P=you N=npc D=door/warp #=blocked .=walkable ,=tall grass v<>=one-way ledge "
-                "~=water (Surf) T=small tree (Cut)")
+                "~=water (Surf) T=small tree (Cut)" + (" L=locked door (Card Key)" if any("L" in r for r in cells) else ""))
         ruler = "   " + "".join(str(x % 10) for x in range(w))
         body = "\n".join(f"{y:2d} " + "".join(row) for y, row in enumerate(cells))
         exits = ", ".join(f"({wx},{wy})→{self.map_label(d)}" for wx, wy, d in self.warps()[:12])
