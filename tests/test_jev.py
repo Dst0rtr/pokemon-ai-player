@@ -1685,11 +1685,15 @@ def test_node_targets_reach_the_room_that_matters():
     f.manual_done = set(order[:order.index("flute")])
     assert SOLO.current_node(f).id == "flute"
     assert d.objective(f, tower)[1][-1] == "Pokémon Tower 7F"
-    assert d.objective(f, home)[1][-1] == "Mr. Fuji's House"      # he takes you home after the rescue
+    # full run 74: walking into the empty house before the rescue is not the stage (its people's answers then hid him)
+    assert d.objective(f, home)[1][-1] == "Pokémon Tower 7F"
     # full run 57: out of the house again, the objective sent Jev back up the Tower for ~6,500 steps
     lavender = J.parse("walked\nf1 Lavender Town (7,10) facing down | C L60 100/100 | ¥3000 | 4 badges")
     d.s["prev_map"] = "Pokémon Tower 7F"
+    d.s["said"] = {"Mr. Fuji's House": {"3,3": "dialogue ended: POKéMON Monthly Grand Prize"}}
     d.track(1, home, f)                                            # arrived from 7F: the rescue warp
+    assert "Mr. Fuji's House" not in d.s["said"]                   # he sits at the table now: heard anew
+    assert d.objective(d.facts(home, [], [("Silph Scope", 1)]), home)[1][-1] == "Mr. Fuji's House"
     d.track(2, lavender, f)
     f2 = d.facts(lavender, [], [("Silph Scope", 1)])
     f2.manual_done = f.manual_done
@@ -2034,7 +2038,8 @@ def test_an_item_ball_on_the_objectives_map_comes_before_leaving_it(tmp_path):
     by_name = J.Option("walk to Rocket Hideout Elevator", "walk", {"path": "to Rocket Hideout Elevator"})
     warp = J.Option("walk to the warp at (24,15) → Rocket Hideout Elevator", "walk", {"path": "to 24,15"})
     up = J.Option("walk up 4 tiles", "walk", {"path": "up 4"})
-    assert agent.objective_map_options(o, [ball, giovanni, by_name, warp, up]) == [ball, giovanni, up]
+    # (blind walks too: full run 74 paced Pokémon Tower 7F ~490 steps with the Rockets and Mr. Fuji offered)
+    assert agent.objective_map_options(o, [ball, giovanni, by_name, warp, up]) == [ball, giovanni]
     taken = J.Option(ball.label, "walk", ball.args, "1 tiles away; already talked to it, it said: nothing to talk to")
     assert by_name in agent.objective_map_options(o, [taken, giovanni, by_name, warp, up])
 

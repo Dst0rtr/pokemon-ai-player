@@ -155,7 +155,9 @@ GRAPH: list[Node] = [
          ("Lavender Town",) + tuple(f"Pokémon Tower {n}F" for n in range(1, 8)), lambda f: f.has("Poké Flute"),
          # he takes you home after the rescue; the flute is given there (full run 57 walked out and climbed the Tower
          # again for ~6,500 steps)
-         stages=((lambda f, o: o.map == "Mr. Fuji's House" or "fuji" in f.events, ("Lavender Town", "Mr. Fuji's House")),)),
+         # (only after the rescue: full run 74 walked into the empty house first, staged there, and its people's
+         # answers from then hid Mr. Fuji after the rescue, ~2,000 steps in and out of the house)
+         stages=((lambda f, o: "fuji" in f.events, ("Lavender Town", "Mr. Fuji's House")),)),
     Node("fuchsia", "Wake the sleeping Snorlax with the Poké Flute and travel south to Fuchsia City.",
          ("Route 12", "Route 13", "Fuchsia City"), lambda f: f.reached("Fuchsia City")),
     Node("koga", "Beat Koga in the Fuchsia Gym.", ("Fuchsia Gym",), _badge(5)),
@@ -321,6 +323,8 @@ class SoloDirector:
                 self.s["elevator"] = ""                  # the chosen floor counts until the elevator is left
             if o.map == "Mr. Fuji's House" and self.s["came_from"] == "Pokémon Tower 7F":
                 self.s["events"] = sorted(set(self.s.get("events", [])) | {"fuji"})   # rescued: the warp home
+                for key in ("said", "talk_noroute", "npcs"):
+                    self.s.get(key, {}).pop(o.map, None)   # he sits at the table now: hear the house anew
                 f.events.add("fuji")
             # the facts were read before this step's map change: on the arrival step they still named the map before
             # the last one (full run 68: every arrival on B4F from the elevator read "came from B4F", the stage routed

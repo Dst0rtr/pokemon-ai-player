@@ -595,7 +595,10 @@ class Agent:
                                          or bool(NAME_WALK_RE.match(x.args.get("path", ""))))
         if any(x.label.startswith("talk to the person") and ("not talked to yet" in (x.desc or "") or
                                                              "not taken yet" in (x.desc or "")) for x in opts):
-            return [x for x in opts if not leaving(x)]
+            # blind walks only pace while someone here is still unheard (full run 74: ~490 steps of them on Pokémon
+            # Tower 7F with the Rockets and Mr. Fuji offered)
+            return [x for x in opts if not leaving(x) and not (x.label.startswith("walk ") and x.label.endswith(" tiles"))
+                    and x.label != "talk to what you are facing"]
         objects = self.object_options(o)
         if any("not tried yet" in (x.desc or "") for x in objects):
             opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
