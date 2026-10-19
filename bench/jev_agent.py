@@ -42,6 +42,7 @@ from bench import jev as J  # noqa: E402
 
 AGENT_VERSION = "2"
 NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
+SWITCH_REST_STEPS = 40                          # a Mansion switch just pressed is not offered again this long
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?",
@@ -226,7 +227,12 @@ class Agent:
         if o.mode in ("intro", "unknown"):
             return press_options(intro=True)
         if o.mode == "prompt":
-            return self.floor_choice(o, J.choice_options(o), targets) + press_options()
+            choices = J.choice_options(o)
+            if "secret switch" in o.text.lower() and any(x.label == "choose YES" for x in choices):
+                # the switch was chosen on purpose: answering NO only wastes the walk there (volcano-leg-2: about half
+                # the answers among the cursor presses were NO, "Not quite yet!")
+                return [x for x in choices if x.label == "choose YES"]
+            return self.floor_choice(o, choices, targets) + press_options()
         if o.mode == "battle_start":
             return [Option("press A", "press", {"buttons": "A"})]
         if o.mode == "dialogue":
@@ -743,12 +749,15 @@ class Agent:
             dist, _ = self.nav.reach(cur, tuple(o.pos))
         except (KeyError, IndexError, ValueError):
             return opts
-        out = []
+        out, recent = [], set()
         for y, row in enumerate(cells):
             for x, c in enumerate(row):
                 if c != "S" or (x, y + 1) not in dist:
                     continue
                 pressed = self.s.get("switches", {}).get(f"{o.map}:{x},{y}", [])
+                if pressed and self.s["step"] - pressed[-1] <= SWITCH_REST_STEPS:
+                    recent.add((x, y + 1))                 # just pressed: the changed floor first, not a press back
+                    continue
                 face = ("walk", {"path": "up 1", "on_battle": "stop"})
                 at = tuple(o.pos) == (x, y + 1)
                 first = face[1] if at else {"path": f"to {x},{y + 1}", "on_battle": "stop"}
@@ -756,6 +765,8 @@ class Agent:
                     (f"pressed {len(pressed)} time(s), last at step {pressed[-1]}" if pressed else "not pressed yet")
                 out.append(Option(f"press the secret switch at ({x},{y}) (from below)", "walk", first, desc,
                                   then=([] if at else [face]) + [("talk", {})]))
+        if tuple(o.pos) in recent:                         # "talk to what you are facing" would press it back
+            opts = [x for x in opts if x.label != "talk to what you are facing"]
         if not out:
             return opts
         onward = any(x.label.startswith(("explore the frontier", "follow the map route")) for x in opts)
