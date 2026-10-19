@@ -1230,6 +1230,39 @@ def test_vermilion_gym_trash_cans_are_searched_in_order():
     assert not [x for x in d.extra_options(o, f, [], [], [], "surge") if x.label.startswith("search")]
 
 
+def test_a_checkpoint_follows_progress_made_too_soon_or_off_the_overworld():
+    """Codex review 2: progress one step after a checkpoint was throttled, and at the next allowed step it was no longer
+    'this step', so no checkpoint followed it (and a reload could go back to before an event the agent keeps)."""
+    d = SOLO.SoloDirector({"last_progress_step": 0, "checkpoint_step": None})
+    assert d.want_checkpoint(0)
+    d.s["last_progress_step"] = 3                       # an event right after the checkpoint
+    assert not d.want_checkpoint(3) and not d.want_checkpoint(20)
+    assert d.want_checkpoint(25)                         # still pending: saved at the first allowed step
+    assert not d.want_checkpoint(60)                     # nothing new since
+    d.s["last_progress_step"] = 70                       # progress in a dialogue; the next overworld step is 74
+    assert d.want_checkpoint(74)
+
+
+def test_ordinary_warp_options_skip_a_blocked_warp(tmp_path):
+    """Codex review 2 / volcano experiment: the locked Cinnabar Gym door ("dialogue appeared") was blocked for the
+    route and the frontier, but the plain 'walk to the warp' option offered it ~40 times."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    isl = map_id("Cinnabar Island")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(isl, _view("Cinnabar Island", ["#######", "#D.P.D#", "#######"]),
+                      _warps_hex([(1, 1, 0, map_id("Cinnabar Gym")), (5, 1, 0, map_id("Cinnabar Lab"))]), [])
+    o = J.parse("walked\nf1 Cinnabar Island (3,1) facing up | C L60 200/207 | ¥3000 | 6 badges")
+    opts, _ = agent.nav_options(o, ["Pokémon Mansion 1F"], SOLO.Facts(badges=6))
+    assert any("(1,1)" in x.label for x in opts)
+    agent.s["nav_blocked"][f"{isl}:1,1"] = agent.s["step"] + 300
+    opts, _ = agent.nav_options(o, ["Pokémon Mansion 1F"], SOLO.Facts(badges=6))
+    assert not any("(1,1)" in x.label for x in opts), [x.label for x in opts]   # the frontier dropped it; so does the plain option
+    assert any("(5,1)" in x.label for x in opts)
+
+
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):
     """it75 end-state experiment: with a carried atlas but fresh agent memory, every map looked first reached during
     the objective, so the frontier beat the route to Pallet Town. A blank atlas (goal runs) leaves visited empty."""
@@ -1924,6 +1957,14 @@ def test_a_warp_pad_on_the_same_map_is_recorded_as_taken(tmp_path):
     stuck = J.parse("went toward (2,1): right 0/1 — could not get closer\nf1 Saffron Gym (1,1) facing right | C L50 200/207 | ¥3000 | 6 badges")
     agent.nav_feedback(o, J.Option("walk to the warp at (4,1) → Saffron Gym", "walk", {"path": "to 4,1"}), stuck, "")
     assert "4,1" not in atlas.data["maps"][str(gym)]["arrivals"] or not atlas.data["maps"][str(gym)]["arrivals"]["4,1"]["seen"]
+    # Codex review 2: standing on one pad, a refused walk to another leaves the player where they were (on a pad)
+    on_pad = J.parse("walked\nf1 Saffron Gym (4,1) facing up | C L50 200/207 | ¥3000 | 6 badges")
+    for reply in ("no walkable route from (4,1) to (2,1) on this map",
+                  "went toward (2,1): left 0/1 — could not get closer\nf1 Saffron Gym (4,1) facing left | C L50 200/207 | ¥3000 | 6 badges"):
+        atlas.data["maps"][str(gym)]["arrivals"].pop("2,1", None)
+        agent.nav_feedback(on_pad, J.Option("walk to the warp at (2,1) → Saffron Gym", "walk", {"path": "to 2,1"}),
+                           J.parse(reply), "")
+        assert not atlas.data["maps"][str(gym)]["arrivals"].get("2,1", {}).get("seen"), reply
 
 def test_a_status_only_reply_keeps_the_item_balls_and_the_spot_goal(tmp_path, nav):
     """The refusal that makes the Card Key a spot goal carries no map rows, and the next reply may show only the status

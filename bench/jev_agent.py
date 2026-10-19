@@ -999,8 +999,8 @@ class Agent:
                 opts.append(Option(label, "walk", walk[0], f"leave this map by its {h.side} edge", then=walk[1]))
                 self.edge_opts[label] = (h.side, h.x, h.y)
         for i, (x, y, _, _) in enumerate(self.nav.map(cur)["warps"]):
-            if (x, y) not in near or (x, y) == skip:
-                continue
+            if (x, y) not in near or (x, y) == skip or f"{cur}:{x},{y}" in now_blocked:
+                continue                                  # (a blocked warp too, like the edges: the locked Cinnabar Gym)
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
             if dests & closed:
                 continue
@@ -1214,7 +1214,9 @@ class Agent:
             self.s["nav_taken"][key] = self.s["nav_taken"].get(key, 0) + 1
             if isinstance(self.nav, LearnedAtlas) and after.pos and map_id(after.map) is not None and "edge" not in opt.label:
                 self.nav.record_warp(cur, int(m[1]), int(m[2]), map_id(after.map), *after.pos)
-        if m and isinstance(self.nav, LearnedAtlas) and cur is not None and after.map == o.map and after.pos:
+        if m and isinstance(self.nav, LearnedAtlas) and cur is not None and after.map == o.map and after.pos \
+                and o.pos and tuple(after.pos) != tuple(o.pos) and "no walkable route" not in after.head:
+            # (not when the walk was refused or left the player where they were, on another pad: Codex review 2)
             # a pad on the same map (Saffron Gym): the walk "could not get closer" and the player stands on another
             # pad. Recorded as taken, or the gym stays frontier for good (full run 75: the Cinnabar objective
             # explored Saffron Gym's pads again and again, ~1,400 steps)

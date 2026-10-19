@@ -410,8 +410,12 @@ class SoloDirector:
         return None
 
     def want_checkpoint(self, step: int) -> bool:
-        """Save a named checkpoint after progress (at most every 25 steps)."""
-        if self.s["last_progress_step"] == step and step - (self.s.get("checkpoint_step") or -999) >= 25:
+        """Save a named checkpoint after progress (at most every 25 steps). Progress made too soon after the last one, or
+        off the overworld (in a dialogue), stays pending until the next allowed step (Codex review 2: an event right
+        after a checkpoint never got one, so a reload could go back to before it)."""
+        last = self.s.get("checkpoint_step")
+        last = -999 if last is None else last
+        if self.s["last_progress_step"] > last - (last == step) and step - last >= 25:
             self.s["checkpoint_step"] = step
             return True
         return False
