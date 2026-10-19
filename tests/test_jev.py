@@ -2039,6 +2039,10 @@ def test_an_unknown_last_map_routes_to_the_furthest_known_map_of_the_objective(t
     agent.s["node_mark"]["flute"] = 0
     opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
     assert not key and opts[0].label.startswith("explore the frontier"), opts[0].label
+    # full run 71: a map new to the objective that the objective names (Saffron City after a black-out) still routes on
+    named = ["Celadon City", "Route 7", "Pokémon Tower 7F"]
+    opts, key = agent.nav_options(o, named, SOLO.Facts(badges=4), "flute")
+    assert opts[0].label == "follow the map route to Route 7: walk to Route 7 (east edge)" and key
     agent.s["node_mark"]["flute"] = 2
     # on the furthest known map itself: nothing known lies past it, so explore
     o = J.parse("walked\nf1 Route 7 (2,1) facing down | C L40 120/130 | ¥3000 | 4 badges")

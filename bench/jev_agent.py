@@ -858,14 +858,18 @@ class Agent:
             mark = self.s.setdefault("node_mark", {})
             if why not in ("heal", "train") and why not in mark:
                 mark[why] = len(self.s["visited"])           # the maps visited before this objective began
-            new_here = o.map in self.s["visited"][mark.get(why, len(self.s["visited"])):]
+            # a map first reached during this objective that the objective does not name (Route 14 on the way to
+            # Fuchsia): nothing tells what lies past it, so the frontier works there
+            new_here = o.map in self.s["visited"][mark.get(why, len(self.s["visited"])):] and o.map not in targets
             if not route and isinstance(self.nav, LearnedAtlas) and why not in ("heal", "train") and cells is None \
                     and not new_here:
                 # the last map is not known yet: the route goes to the furthest map of the objective the atlas knows,
                 # past this one, and explores from there (full run 68 blacked out on Pokémon Tower 3F, woke in Celadon,
                 # and explored Celadon's and Route 16's exits for ~8,500 steps with the way to Lavender in the atlas).
-                # Not from a map first reached during this objective: that is the frontier at work (full run 70 was
-                # sent from the new Route 14 back to Route 13)
+                # Not from a map first reached during this objective outside its targets: that is the frontier at
+                # work (full run 70 was sent from the new Route 14 back to Route 13). On one of its targets it is
+                # (full run 71: with the Card Key, 11F needs 7F's warp pad; after a black-out Saffron City and Silph
+                # Co. 1F, both new to the objective, had no route and no exit left, ~2,500 steps in Saffron)
                 here = targets.index(o.map) if o.map in targets else -1
                 for t in reversed(targets[here + 1:]):
                     mid = map_id(t)
