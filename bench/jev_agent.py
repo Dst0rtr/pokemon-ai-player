@@ -769,7 +769,14 @@ class Agent:
             opts = [x for x in opts if x.label != "talk to what you are facing"]
         if not out:
             return opts
+        # an untaken warp of this floor the player's part of it cannot reach (Mansion 1F's stairs to B1F after the first
+        # press shut them off; volcano-leg-3 went up and down the stairs ~300 steps with the switch offered last)
+        m = self.nav.data["maps"].get(str(cur), {})
+        shut = [(wx, wy) for wx, wy, *_ in m.get("warps", []) if not m.get("arrivals", {}).get(f"{wx},{wy}", {}).get("seen")
+                and not any((wx + dx, wy + dy) in dist for dx, dy in ((0, 0), *MOVES.values()))]
         onward = any(x.label.startswith(("explore the frontier", "follow the map route")) for x in opts)
+        if shut:
+            return out + [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))]
         return opts + out if onward else out + opts
 
     def remember_door(self, o: Obs, opt: Option, reply: str) -> None:

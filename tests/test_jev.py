@@ -1273,7 +1273,7 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     (tmp_path / "data").mkdir()
     agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
                   nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
-    agent.nav.observe(f1, _view("Pokémon Mansion 1F", ["######", "#.S..#", "#.P#D#", "######"]), _warps_hex([(4, 2, 0, f2)]), [])
+    agent.nav.observe(f1, _view("Pokémon Mansion 1F", ["#######", "#.S##.#", "#.P.D##", "#######"]), _warps_hex([(4, 2, 0, f2)]), [])
     agent.nav.observe(f2, _view("Pokémon Mansion 2F", ["#####", "#P.D#", "#####"]), _warps_hex([(3, 1, 0, f1)]), [])
     agent.nav.record_noroute(f2, (1, 1), (3, 1))
     agent.nav.record_walk(f2, (1, 1), (2, 1))
@@ -1284,6 +1284,12 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     assert opts[0].args == {"path": "up 1", "on_battle": "stop"} and opts[0].then == [("talk", {})]
     onward = [J.Option("explore the frontier: walk to the untaken warp at (4,2) → Pokémon Mansion 2F", "walk", {"path": "to 4,2"})]
     assert agent.switch_options(o, onward)[-1].label.startswith("press the secret switch")   # last while there is a way on
+    agent.nav.data["maps"][str(f1)]["warps"].append([5, 1, 0, map_id("Pokémon Mansion B1F")])     # stairs behind a wall
+    agent.nav._maps.pop(f1, None)
+    shut = agent.switch_options(o, onward + rest)
+    assert shut[0].label.startswith("press the secret switch") and "walk down 4 tiles" not in [x.label for x in shut]
+    agent.nav.data["maps"][str(f1)]["warps"].pop()
+    agent.nav._maps.pop(f1, None)
     agent.s["nav_noroute"][f"{f2}:3,1"] = agent.s["nav_blocked"][f"{f2}:3,1"] = agent.s["step"]
     agent.remember_door(o, opts[0], "said: A secret switch! | Press it?")
     agent.s["prev_map"] = "Pokémon Mansion 1F"
