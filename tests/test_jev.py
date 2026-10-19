@@ -263,13 +263,20 @@ def test_solo_jev_done_votes_and_stuck_tracking():
     # full run 72 beat Giovanni at step 9,567 and paced 11F for ~2,100 steps: his defeat line marks Silph Co. done
     d.heard("dialogue ended: Blast it all! You ruined our\nplans for SILPH! | But, TEAM ROCKET will never fall!")
     assert SOLO.current_node(SOLO.Facts(**{**f.__dict__, "events": set(s["events"])})).id == "sabrina"
-    s["recovery"] = 3                                                      # stuck: Jev is asked whether it is done
-    assert "objective_done" in d.check_questions(f)
-    for _ in range(2):
-        assert d.absorb(f, {"objective_done": 0.9}) is None
-    assert d.absorb(f, {"objective_done": 0.95}) == "silph"
+    s["recovery"] = 3                     # stuck: a node code checks (the badge here) is not put to Jev's votes
+    f = SOLO.Facts(**{**f.__dict__, "events": set(s["events"])})
+    assert SOLO.current_node(f).id == "sabrina" and "objective_done" not in d.check_questions(f)
+    sabrina = SOLO.current_node(f)
+    try:                                  # a node only Jev can tell: three yes votes mark it done
+        SOLO.GRAPH[SOLO.GRAPH.index(sabrina)] = dataclasses.replace(sabrina, done=None, jev_check="Has Sabrina been beaten?")
+        assert d.check_questions(f)["objective_done"] == "Has Sabrina been beaten?"
+        for _ in range(2):
+            assert d.absorb(f, {"objective_done": 0.9}) is None
+        assert d.absorb(f, {"objective_done": 0.95}) == "sabrina"
+    finally:
+        SOLO.GRAPH[SOLO.GRAPH.index(next(n for n in SOLO.GRAPH if n.id == "sabrina"))] = sabrina
     f.manual_done = set(s["manual_done"])
-    assert SOLO.current_node(f).id == "sabrina"
+    assert SOLO.current_node(f).id == "lapras"                             # HM03 in the bag, nobody can learn it
     o = J.parse(PEWTER)
     for step in range(12):
         d.track(step, o, f)

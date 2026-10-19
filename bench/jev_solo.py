@@ -296,10 +296,10 @@ class SoloDirector:
     def check_questions(self, f: Facts) -> dict[str, str]:
         node = current_node(f)
         qs = {"stuck": STUCK_Q}
+        # only a node code cannot check asks Jev: votes on a badge, an item or a map reached could skip a step the
+        # facts say is missing (Codex review; no run since 60 marked a node this way)
         if node.done is None and node.jev_check:
             qs["objective_done"] = node.jev_check
-        elif self.s["recovery"] >= 3:
-            qs["objective_done"] = f"Is this objective already complete: {node.objective}"
         return qs
 
     def absorb(self, f: Facts, nouls: dict[str, float]) -> Optional[str]:
