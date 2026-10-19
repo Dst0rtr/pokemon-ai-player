@@ -296,7 +296,8 @@ def test_a_team_that_cannot_learn_surf_gets_the_silph_lapras():
     node = SOLO.current_node(f)
     assert node.id == "lapras" and node.targets[-1] == "Silph Co. 7F"
     f.moves.add("Surf")                                                   # Lapras taught
-    assert SOLO.current_node(f).id == "cinnabar"
+    node = SOLO.current_node(f)
+    assert node.id == "cinnabar" and node.targets[0] == "Pallet Town"     # the known map the way to Route 21 starts
 
 # ---------------------------------------------------------------- agent loop
 class FakeServer:

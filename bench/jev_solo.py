@@ -188,8 +188,10 @@ GRAPH: list[Node] = [
                    "worker on 7F who gives away a Lapras (keep a party slot free), then teach it HM03.",
          ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 8)),
          lambda f: "Surf" in f.moves or "HM03" in f.teachable or not f.has("HM03")),
+    # Pallet Town is a target: Route 21 is unknown on a blank atlas, and the furthest known map of the objective is
+    # where the route goes (full run 75: no target known, ~1,500 steps of blind walks in Celadon City)
     Node("cinnabar", "Surf south from Pallet Town (or through the Seafoam Islands) to Cinnabar Island.",
-         ("Route 21", "Cinnabar Island"), lambda f: f.reached("Cinnabar Island")),
+         ("Pallet Town", "Route 21", "Cinnabar Island"), lambda f: f.reached("Cinnabar Island")),
     Node("key", "Explore the Pokémon Mansion on Cinnabar Island to find the Secret Key (in the basement).",
          ("Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"),
          lambda f: f.has("Secret Key")),
