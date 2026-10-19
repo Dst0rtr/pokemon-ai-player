@@ -259,7 +259,12 @@ def test_solo_jev_done_votes_and_stuck_tracking():
               "Celadon City", "Fuchsia City"):
         f.visited.add(m)
     f.items |= {"HM01", "Silph Scope", "Poké Flute"}
-    assert SOLO.current_node(f).id == "silph" and "objective_done" in d.check_questions(f)
+    assert SOLO.current_node(f).id == "silph" and "objective_done" not in d.check_questions(f)
+    # full run 72 beat Giovanni at step 9,567 and paced 11F for ~2,100 steps: his defeat line marks Silph Co. done
+    d.heard("dialogue ended: Blast it all! You ruined our\nplans for SILPH! | But, TEAM ROCKET will never fall!")
+    assert SOLO.current_node(SOLO.Facts(**{**f.__dict__, "events": set(s["events"])})).id == "sabrina"
+    s["recovery"] = 3                                                      # stuck: Jev is asked whether it is done
+    assert "objective_done" in d.check_questions(f)
     for _ in range(2):
         assert d.absorb(f, {"objective_done": 0.9}) is None
     assert d.absorb(f, {"objective_done": 0.95}) == "silph"

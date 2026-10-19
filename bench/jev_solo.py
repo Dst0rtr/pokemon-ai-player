@@ -26,6 +26,9 @@ from typing import Callable, Optional
 
 from bench.jev import HEAL_ITEMS, Obs, Option
 
+# Giovanni's line after losing on Silph Co. 11F (the dialogue box can break it across lines)
+STORY_RE = {"silph": re.compile(r"ruined\s+our\s+plans\s+for\s+SILPH", re.I)}
+
 FIELD_MOVES = {"Cut": "HM01", "Fly": "HM02", "Surf": "HM03", "Strength": "HM04", "Flash": "HM05"}
 # gym/E4 level targets for the best party member (code-side numbers)
 LEVEL_TARGET = {0: 12, 1: 21, 2: 24, 3: 29, 4: 38, 5: 40, 6: 44, 7: 47, 8: 55}
@@ -170,7 +173,10 @@ GRAPH: list[Node] = [
     # -> 11F), the stairs and the elevator open onto a corridor walled off from it (SoloDirector.entry_rule)
     Node("silph", "Enter Saffron City and clear Silph Co.: find the Card Key on 5F, open the locked doors with it "
                   "(face one and talk), and beat Giovanni on 11F (his room is reached by the warp pads, not the stairs).",
-         ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 12)), None, "Has the player beaten Giovanni in Silph Co. (the Silph Co. president thanked the player)?",
+         # Giovanni's defeat line is the event code can see (full run 72 beat him at step 9,567; Jev's answer to the
+         # question never reached three yes votes and the run paced 11F and 7F for ~2,100 steps)
+         ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 12)),
+         lambda f: "silph" in f.events or f.has("Master Ball"), "Has the player beaten Giovanni in Silph Co. (the Silph Co. president thanked the player)?",
          stages=((lambda f, o: not f.has("Card Key"), ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 6))),)),
     Node("sabrina", "Beat Sabrina in the Saffron Gym.", ("Saffron Gym",), _badge(6)),
     Node("cinnabar", "Surf south from Pallet Town (or through the Seafoam Islands) to Cinnabar Island.",
@@ -421,6 +427,12 @@ class SoloDirector:
                                face if here else {"path": f"to {sx},{sy}", "on_battle": "stop"}, why,
                                then=([] if here else [("walk", face)]) + [("talk", {})]))
         return opts
+
+    def heard(self, reply: str) -> None:
+        """Story events the game says in words (no verified RAM flag in this repo)."""
+        for ev, rx in STORY_RE.items():
+            if rx.search(reply):
+                self.s["events"] = sorted(set(self.s.get("events", [])) | {ev})
 
     def trash_result(self, label: str, reply: str, left: bool = False) -> None:
         t = self.s.setdefault("trash", {"first": None, "tried": [], "open": False})

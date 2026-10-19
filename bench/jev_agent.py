@@ -483,6 +483,7 @@ class Agent:
         self.remember_door(o, opt, reply)
         if self.director:
             self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
+            self.director.heard(reply)
         self.remember_refusal(opt, reply)
         self.remember_choice(o, opt)
         if opt.tool == "manage" and opt.args.get("action") == "save":
