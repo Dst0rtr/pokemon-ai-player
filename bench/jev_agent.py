@@ -42,6 +42,7 @@ from bench import jev as J  # noqa: E402
 
 AGENT_VERSION = "2"
 NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
+TROD_RADIUS = 3                                 # floor within this many steps of a cell stood on counts as walked
 SWITCH_REST_STEPS = 40                          # a Mansion switch just pressed is not offered again this long
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
@@ -371,6 +372,7 @@ class Agent:
                 m = parse(await self.tool("state", section="map"))   # who stands in the way (no view in a refusal)
                 o.npcs, o.balls = m.npcs, m.balls
             self.learn_walked(o)
+            self.learn_trod(o)
             self.learn_noroute(o)
             nav_opts, route_key = self.nav_options(o, targets, facts, why)
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
@@ -391,6 +393,8 @@ class Agent:
                 opts = doors + opts
             opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
             opts = self.switch_options(o, opts)           # the Pokémon Mansion: secret switches open and shut doors
+            if o.map in targets and why not in ("heal", "train"):
+                opts = self.floor_options(o, opts, targets)   # floor never walked on (a hole drops to the floor below)
             opts = self.sealed_first(o, opts, why)
             if any(x.label.startswith("search the trash can") for x in opts):
                 # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
@@ -735,6 +739,44 @@ class Agent:
                               "a locked door (L): face it and talk with the Card Key in the bag; beyond it is part of "
                               "the floor this side cannot reach", then=then))
         return out[:3]
+
+    def learn_trod(self, o: Obs) -> None:
+        """Cells the player has stood on, per map (for floor_options)."""
+        if o.mode == "overworld" and o.map and o.pos:
+            t = self.s.setdefault("trod", {}).setdefault(o.map, [])
+            if list(o.pos) not in t and len(t) < 600:
+                t.append(list(o.pos))
+
+    def floor_options(self, o: Obs, opts: list[Option], targets: list[str]) -> list[Option]:
+        """On a map the objective names whose last target is still unknown: the nearest reachable floor far (more than
+        TROD_RADIUS) from every cell stood on. Some ways on are not warps: Pokémon Mansion 3F's collapsed floor has
+        holes that drop to 1F's part with the stairs to B1F, the only way there (pokered PokemonMansion3F.asm); the
+        volcano-leg experiments walked the floors' known parts and the stairs for ~450 steps without falling."""
+        if not o.pos or not isinstance(self.nav, LearnedAtlas) or not targets:
+            return opts
+        last = map_id(targets[-1])
+        if last is None or self.nav.known(last):
+            return opts
+        cur = map_id(o.map)
+        try:
+            cells = self.nav.map(cur)["cells"]
+            dist, _ = self.nav.reach(cur, tuple(o.pos))
+        except (KeyError, IndexError, ValueError):
+            return opts
+        trod = [tuple(t) for t in self.s.get("trod", {}).get(o.map, [])] + [tuple(o.pos)]
+        far = sorted((d, c) for c, d in dist.items() if 0 <= c[1] < len(cells) and 0 <= c[0] < len(cells[c[1]])
+                     and cells[c[1]][c[0]] in (".", ",")
+                     and all(abs(c[0] - t[0]) + abs(c[1] - t[1]) > TROD_RADIUS for t in trod))
+        out: list = []
+        for _, (x, y) in far:
+            if all(abs(x - a) + abs(y - b) > 2 * TROD_RADIUS for a, b in out):
+                out.append((x, y))
+            if len(out) == 2:
+                break
+        new = [Option(f"explore the unvisited floor at ({x},{y})", "walk", {"path": f"to {x},{y}", "on_battle": "stop"},
+                      "part of this floor never walked on: some ways on are not doors (a hole in the floor)") for x, y in out]
+        onward = any(x.label.startswith("explore the frontier") and any(t in x.label for t in targets) for x in opts)
+        return opts + new if onward else new + opts
 
     def switch_options(self, o: Obs, opts: list[Option]) -> list[Option]:
         """The Pokémon Mansion's secret switches (S in the map view) this part of the floor reaches: stand below, face
@@ -1269,6 +1311,8 @@ class Agent:
         """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
         # warp options carry their coordinates in the label (a warp you stand on is taken by stepping off and back)
         m = re.search(r"warp at \((\d+),(\d+)\)", opt.label) or re.fullmatch(r"to (\d+),(\d+)", opt.args.get("path", ""))
+        if opt.label.startswith("explore the unvisited floor"):
+            m = None                                     # a fall on the way is not a warp at the walk's target cell
         cur = map_id(o.map)
         if m and after.map and after.map != o.map and cur is not None:
             key = f"{cur}:{m[1]},{m[2]}"

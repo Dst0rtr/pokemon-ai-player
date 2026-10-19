@@ -1331,6 +1331,33 @@ def test_a_trainer_beaten_in_the_cinnabar_gym_reopens_its_floor(tmp_path):
     assert "reobserve" not in agent.s
 
 
+def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_path):
+    """Volcano-leg experiments: Mansion 3F's holes (plain-looking collapsed floor) are the only way to 1F's stairs to
+    B1F; the run walked the floors' known parts ~450 steps without falling. Reachable floor far from every cell stood
+    on is offered while the objective's last map is unknown; a fall on such a walk is not recorded as a warp."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3 = map_id("Pokémon Mansion 3F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(f3, _view("Pokémon Mansion 3F", ["##############", "#P...........#", "##############"]), _warps_hex([]), [])
+    targets = ["Pokémon Mansion 1F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
+    o = J.parse("walked\nf1 Pokémon Mansion 3F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges")
+    agent.learn_trod(o)
+    opts = agent.floor_options(o, [], targets)
+    assert [x.label for x in opts] == ["explore the unvisited floor at (5,1)", "explore the unvisited floor at (12,1)"]
+    agent.s["trod"]["Pokémon Mansion 3F"] += [[6, 1], [10, 1]]
+    assert [x.label for x in agent.floor_options(o, [], targets)] == []      # all walked (within 3 cells)
+    agent.s["trod"]["Pokémon Mansion 3F"] = [[1, 1]]
+    agent.nav.observe(map_id("Pokémon Mansion B1F"), _view("Pokémon Mansion B1F", ["###", "#P#", "###"]), _warps_hex([]), [])
+    assert agent.floor_options(o, [], targets) == []                         # the last target is known: routes do it
+    fall = J.parse("went toward (12,1): right 6/11 — stopped: entered Pokémon Mansion 1F\n"
+                   "f1 Pokémon Mansion 1F (16,14) facing right | C L60 200/207 | ¥3000 | 6 badges")
+    agent.nav_feedback(o, J.Option("explore the unvisited floor at (12,1)", "walk", {"path": "to 12,1"}), fall, "")
+    assert "12,1" not in agent.nav.data["maps"][str(f3)].get("arrivals", {})
+
+
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):
     """it75 end-state experiment: with a carried atlas but fresh agent memory, every map looked first reached during
     the objective, so the frontier beat the route to Pallet Town. A blank atlas (goal runs) leaves visited empty."""
