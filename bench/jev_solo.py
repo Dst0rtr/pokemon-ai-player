@@ -77,6 +77,7 @@ class Facts:
     came_from: str = ""                  # the map before the current one
     elevator: str = ""                   # the floor last chosen on an elevator panel (until the elevator is left)
     events: set = field(default_factory=set)   # story events code saw happen (e.g. "fuji": warped home from Tower 7F)
+    teachable: set = field(default_factory=set)  # HMs in the bag that a party member has not refused yet
 
     def has(self, item: str) -> bool:
         """Ever held (key items can be handed over later: Tea, Gold Teeth, the parcel)."""
@@ -181,6 +182,12 @@ GRAPH: list[Node] = [
          lambda f: "silph" in f.events or f.has("Master Ball"), "Has the player beaten Giovanni in Silph Co. (the Silph Co. president thanked the player)?",
          stages=((lambda f, o: not f.has("Card Key"), ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 6))),)),
     Node("sabrina", "Beat Sabrina in the Saffron Gym.", ("Saffron Gym",), _badge(6)),
+    # full run 75: none of Charizard, Nidoran♂/♀, Paras and Doduo can learn Surf, and Cinnabar is across the sea;
+    # the Silph Co. 7F worker gives a Lapras (it learns Surf), once the game has refused HM03 to every team member
+    Node("lapras", "Nobody in your team can learn Surf (HM03). Go back to Silph Co. in Saffron City and talk to the Silph "
+                   "worker on 7F who gives away a Lapras (keep a party slot free), then teach it HM03.",
+         ("Saffron City",) + tuple(f"Silph Co. {n}F" for n in range(1, 8)),
+         lambda f: "Surf" in f.moves or "HM03" in f.teachable or not f.has("HM03")),
     Node("cinnabar", "Surf south from Pallet Town (or through the Seafoam Islands) to Cinnabar Island.",
          ("Route 21", "Cinnabar Island"), lambda f: f.reached("Cinnabar Island")),
     Node("key", "Explore the Pokémon Mansion on Cinnabar Island to find the Secret Key (in the basement).",
@@ -243,7 +250,9 @@ class SoloDirector:
                      levels=[p["level"] for p in party], hp_ratio=(hp[0] / hp[1]) if hp[1] else 1.0,
                      attack_pp=attack_pp(party),
                      manual_done=set(self.s["manual_done"]), came_from=self.s.get("came_from", ""),
-                     elevator=self.s.get("elevator", ""), events=set(self.s.get("events", [])))
+                     elevator=self.s.get("elevator", ""), events=set(self.s.get("events", [])),
+                     teachable={hm for hm in FIELD_MOVES.values() if hm in names and any(
+                         f"{hm}:{p['species']}" not in self.s.get("hm_no", []) for p in party)})
 
     # ------------------------------------------------------------- objective
     def objective(self, f: Facts, o: Obs) -> tuple[str, list[str], str]:

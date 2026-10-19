@@ -278,6 +278,26 @@ def test_solo_jev_done_votes_and_stuck_tracking():
     assert d.forced_recovery(100).args["buttons"].startswith("START")
 
 
+
+def test_a_team_that_cannot_learn_surf_gets_the_silph_lapras():
+    # full run 75: HM03 refused by all five (Charizard, Nidoran♂/♀, Paras, Doduo) and the Cinnabar objective needs Surf
+    s = {"visited": [], "milestones": [], "hm_no": ["HM03:Charizard"]}
+    d = SOLO.SoloDirector(s)
+    party = [{"species": "Charizard", "level": 62, "hp": 100, "max_hp": 100, "moves": [{"name": "Strength", "pp": 15}]},
+             {"species": "Doduo", "level": 26, "hp": 60, "max_hp": 60, "moves": [{"name": "Peck", "pp": 35}]}]
+    o = J.parse(PEWTER)
+    f = d.facts(o, party, [("HM03", 1), ("HM04", 1)])
+    assert "HM03" in f.teachable                                          # Doduo has not been tried: teach it first
+    f = SOLO.Facts(**{**f.__dict__, "badges": 6})
+    assert SOLO.current_node(f).id == "cinnabar"
+    s["hm_no"].append("HM03:Doduo")
+    f = SOLO.Facts(**{**d.facts(o, party, [("HM03", 1)]).__dict__, "badges": 6})
+    assert f.teachable == set()
+    node = SOLO.current_node(f)
+    assert node.id == "lapras" and node.targets[-1] == "Silph Co. 7F"
+    f.moves.add("Surf")                                                   # Lapras taught
+    assert SOLO.current_node(f).id == "cinnabar"
+
 # ---------------------------------------------------------------- agent loop
 class FakeServer:
     """Replies like server.py for a tiny scripted world: one map, a talkable NPC, a prompt."""
