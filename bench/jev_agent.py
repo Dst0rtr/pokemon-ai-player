@@ -46,6 +46,7 @@ SEALED_STEPS = 600                              # after a warp did not open, the
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?",
                            re.I)   # the floor changed in place ("Who wouldn't?": a Pokémon Mansion switch was pressed)
+GATE_MAPS = {"Cinnabar Gym"}                    # each trainer beaten there opens a gate in the floor (pokered CinnabarGym.asm)
 CLUE_RE = re.compile(r"\bposter\b", re.I)                    # a person guarding something on the wall
 SPOT_STEPS = 1500                               # an item ball with no way to it from here is sought this long
 SCREEN_LOOP = 3                                 # a non-map screen seen this often without progress is a loop
@@ -765,7 +766,8 @@ class Agent:
         m = re.match(r"open the locked door at \((\d+),(\d+)\)", opt.label)
         if m and o.map and not MAP_CHANGE_RE.search(reply):
             self.s.setdefault("card_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}"] = self.s["step"]
-        elif (o.map or self.s.get("prev_map")) and MAP_CHANGE_RE.search(reply):
+        elif (o.map or self.s.get("prev_map")) and (MAP_CHANGE_RE.search(reply) or (
+                (o.map or self.s.get("prev_map")) in GATE_MAPS and re.search(r"\bdefeated [A-Z]", reply))):
             # the floor changed without a map change: read it again next step (the atlas kept the door as a wall until
             # the player left and came back) and forget the ways that were refused while it was shut (the Game Corner's
             # stairs open with the switch behind the poster: full run 65 had learned them as unreachable)

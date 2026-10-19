@@ -1297,6 +1297,28 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     assert agent.switch_options(J.parse("walked\nf1 Cinnabar Island (2,2) facing up | C L60 200/207 | ¥3000 | 6 badges"), rest) == rest
 
 
+def test_a_trainer_beaten_in_the_cinnabar_gym_reopens_its_floor(tmp_path):
+    """Codex review 2: in Blaine's gym each trainer beaten opens a gate; the floor is read again and the ways refused
+    while it was shut are forgotten. Elsewhere a win changes nothing."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    gym = map_id("Cinnabar Gym")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.s["prev_map"] = "Cinnabar Gym"
+    agent.s["nav_noroute"][f"{gym}:5,5"] = agent.s["step"]
+    win = "Enemy PONYTA fainted! | AAAAAAA defeated SUPER NERD! | SUPER NERD: Ahh! | AAAAAAA got ¥1000 for winning!"
+    agent.remember_door(J.parse("BATTLE (trainer): enemy PONYTA L36 0/90 | you CHARIZARD L62 150/205 | FIGHT"),
+                        J.Option("auto-battle", "battle", {"action": "auto"}), win)
+    assert agent.s["reobserve"] == "Cinnabar Gym" and f"{gym}:5,5" not in agent.s["nav_noroute"]
+    agent.s.pop("reobserve")
+    agent.s["prev_map"] = "Route 21"
+    agent.remember_door(J.parse("BATTLE (trainer): enemy STARYU L30 0/90 | you CHARIZARD L62 150/205 | FIGHT"),
+                        J.Option("auto-battle", "battle", {"action": "auto"}), win.replace("SUPER NERD", "SWIMMER"))
+    assert "reobserve" not in agent.s
+
+
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):
     """it75 end-state experiment: with a carried atlas but fresh agent memory, every map looked first reached during
     the objective, so the frontier beat the route to Pallet Town. A blank atlas (goal runs) leaves visited empty."""
