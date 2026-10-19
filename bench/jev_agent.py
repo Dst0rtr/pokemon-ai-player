@@ -44,7 +44,7 @@ AGENT_VERSION = "2"
 NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
-MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster", re.I)   # the floor changed in place
+MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE", re.I)   # the floor changed in place
 CLUE_RE = re.compile(r"\bposter\b", re.I)                    # a person guarding something on the wall
 SPOT_STEPS = 1500                               # an item ball with no way to it from here is sought this long
 SCREEN_LOOP = 3                                 # a non-map screen seen this often without progress is a loop
@@ -855,10 +855,17 @@ class Agent:
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
             route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked,
                                    entry=entry, goal_cells=cells)
-            if not route and isinstance(self.nav, LearnedAtlas) and why != "heal" and cells is None:
+            mark = self.s.setdefault("node_mark", {})
+            if why not in ("heal", "train") and why not in mark:
+                mark[why] = len(self.s["visited"])           # the maps visited before this objective began
+            new_here = o.map in self.s["visited"][mark.get(why, len(self.s["visited"])):]
+            if not route and isinstance(self.nav, LearnedAtlas) and why not in ("heal", "train") and cells is None \
+                    and not new_here:
                 # the last map is not known yet: the route goes to the furthest map of the objective the atlas knows,
                 # past this one, and explores from there (full run 68 blacked out on Pokémon Tower 3F, woke in Celadon,
-                # and explored Celadon's and Route 16's exits for ~8,500 steps with the way to Lavender in the atlas)
+                # and explored Celadon's and Route 16's exits for ~8,500 steps with the way to Lavender in the atlas).
+                # Not from a map first reached during this objective: that is the frontier at work (full run 70 was
+                # sent from the new Route 14 back to Route 13)
                 here = targets.index(o.map) if o.map in targets else -1
                 for t in reversed(targets[here + 1:]):
                     mid = map_id(t)

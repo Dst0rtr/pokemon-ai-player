@@ -2034,6 +2034,12 @@ def test_an_unknown_last_map_routes_to_the_furthest_known_map_of_the_objective(t
     opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
     assert opts[0].label == "follow the map route to Route 7: walk to Route 7 (east edge)" and key
     assert not any(x.label.startswith("explore the frontier") for x in opts)
+    assert agent.s["node_mark"]["flute"] == 2
+    # full run 70: from a map first reached during this objective (Route 14), exploring is the way on, not back
+    agent.s["node_mark"]["flute"] = 0
+    opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
+    assert not key and opts[0].label.startswith("explore the frontier"), opts[0].label
+    agent.s["node_mark"]["flute"] = 2
     # on the furthest known map itself: nothing known lies past it, so explore
     o = J.parse("walked\nf1 Route 7 (2,1) facing down | C L40 120/130 | ¥3000 | 4 badges")
     opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
@@ -2045,3 +2051,23 @@ def test_an_unknown_last_map_routes_to_the_furthest_known_map_of_the_objective(t
     o = J.parse("walked\nf1 Celadon City (2,1) facing down | C L40 120/130 | ¥3000 | 4 badges")
     opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
     assert not key and opts[0].label.startswith("explore the frontier: walk to the untaken warp at (3,0)"), opts[0].label
+
+
+def test_waking_snorlax_forgets_the_refusals_on_its_route(tmp_path):
+    """Full run 70: Route 12's atlas kept the 'no walkable route' records learned while Snorlax slept across it; after
+    the flute (and a trip to heal) the route to Route 13 took a detour that ends at Saffron's guarded gates, and the run
+    never came back to Route 14's tree (~3,500 steps). Playing the flute changes the map like a switch or a door."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r12 = map_id("Route 12")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(r12, _view("Route 12", ["#.#", "#.#", "#.#"]), _warps_hex([]), [])
+    agent.nav.record_noroute(r12, (1, 0), (1, 2))
+    agent.s["nav_noroute"][f"{r12}:1,2"] = agent.s["step"]
+    o = J.parse("walked\nf1 Route 12 (1,0) facing down | C L45 120/130 | ¥3000 | 4 badges")
+    flute = J.Option("play the Poké Flute to wake the sleeping Pokémon", "manage", {"action": "use", "target": "Poké Flute"})
+    agent.remember_door(o, flute, "AAAAAAA played the POKé FLUTE.\nbag: Poké Flute×1")
+    assert not agent.nav.data["maps"][str(r12)].get("noroute")
+    assert not agent.s["nav_noroute"] and agent.s["reobserve"] == "Route 12"
