@@ -32,5 +32,19 @@
     "state": "saves/Pokemon-Red_Version/viridian-gym.state",
     "goal": "badge: Earth",
     "initial_milestones": []
+  },
+  "after-sabrina": {
+    "state": "saves/Pokemon-Red_Version/after-sabrina.state",
+    "goal": "reached: Cinnabar Island",
+    "initial_milestones": [],
+    "_made_by": "end of the full jev-solo run iteration 75 (blank atlas, stuck): Celadon City, 6 badges, Charizard L62, Giovanni (Silph) beaten, no Surf-capable party member",
+    "progress": "sabrina"
+  },
+  "cinnabar-island": {
+    "state": "saves/Pokemon-Red_Version/cinnabar-island.state",
+    "goal": "badge: Volcano",
+    "initial_milestones": [],
+    "progress": "cinnabar",
+    "_made_by": "end of the after-sabrina experiment cinnabar-leg-3 (431e308): Pokémon Mansion, 6 badges, Lapras with Surf"
   }
 }
