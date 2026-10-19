@@ -1783,7 +1783,7 @@ def test_an_item_ball_out_of_reach_is_sought_from_another_arrival(tmp_path, nav)
     agent.s["step"] = 10
     talk = J.Option("talk to the person or object at (21,16) (an item ball: pick it up)", "walk", {"path": "to 20,16"})
     agent.remember_talk(o, talk, J.parse("no walkable route from (27,1) to (20,16) on this map"))
-    assert agent.s["spot_goal"] == ["Silph Co. 5F", 21, 16, 10]
+    assert agent.s["spot_goal"] == ["Silph Co. 5F", 21, 16, 10, "ball"]
     cells = agent.spot_cells(o, f5, f5)
     assert (21, 16) in cells and (9, 16) in cells and (27, 1) not in cells and (28, 5) in cells
     hops = agent.nav.route(f5, (27, 1), f5, goal_cells=cells)
@@ -1793,6 +1793,29 @@ def test_an_item_ball_out_of_reach_is_sought_from_another_arrival(tmp_path, nav)
     assert agent.spot_cells(there, f5, f5) is None and "21,16" not in agent.s["talk_noroute"]["Silph Co. 5F"]
     gone = dataclasses.replace(o, balls=[], grid={(21, 16): ".", (20, 16): "."})   # a view of its cell without it
     assert agent.spot_cells(gone, f5, f5) is None and "spot_goal" not in agent.s
+
+
+def test_a_gym_leader_behind_warp_pads_is_sought_through_them(tmp_path, nav):
+    """Full run 73: Sabrina's room in the Saffron Gym is joined to the others only by warp pads; the walk to her never
+    crosses a warp ("no walkable route"), and ~4,500 steps went on the same pads. An unreachable person in a gym becomes
+    a spot goal like an item ball: the route crosses the pads (their landings are in the map's own warp list)."""
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    agent.nav = nav
+    gym = map_id("Saffron Gym")
+    o = J.parse("walked\nf1 Saffron Gym (9,16) facing up | C L50 200/207 | ¥3000 | 5 badges")
+    o.npcs = [(9, 8), (10, 15)]
+    agent.s["step"] = 10
+    talk = J.Option("talk to the person or object at (9,8)", "walk", {"path": "to 9,9"})
+    agent.remember_talk(o, talk, J.parse("no walkable route from (9,16) to (9,9) on this map"))
+    assert agent.s["spot_goal"] == ["Saffron Gym", 9, 8, 10, "person"]
+    cells = agent.spot_cells(o, gym, gym)
+    assert (9, 9) in cells and (9, 16) not in cells
+    hops = agent.nav.route(gym, (9, 16), gym, goal_cells=cells)
+    assert hops and all(h.kind == "warp" and h.dest == gym for h in hops), hops
+    gone = dataclasses.replace(o, npcs=[(10, 15)], grid={(9, 8): "."})      # nobody on her cell any more
+    assert agent.spot_cells(gone, gym, gym) is None and "spot_goal" not in agent.s
 
 
 def test_a_status_only_reply_keeps_the_item_balls_and_the_spot_goal(tmp_path, nav):

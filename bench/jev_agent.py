@@ -758,10 +758,13 @@ class Agent:
             # "no walkable route" to Lt. Surge behind his locked door did the same after the door opened (run 46)
             if after.head.startswith("no walkable route"):
                 self.s.setdefault("talk_noroute", {}).setdefault(o.map, {})[key] = self.s["step"]
-                if "item ball" in opt.label:
+                if "item ball" in opt.label or o.map.endswith("Gym"):
                     # an item no way leads to from here: another arrival on this floor may reach it (Silph Co. 5F's
-                    # Card Key: beaten Rockets stand in both ends of its corridor, the way in is 9F's warp pad)
-                    self.s["spot_goal"] = [o.map, int(m[1]), int(m[2]), self.s["step"]]
+                    # Card Key: beaten Rockets stand in both ends of its corridor, the way in is 9F's warp pad).
+                    # Same for a gym's people: Sabrina's rooms are joined only by warp pads (full run 73 stepped on
+                    # the same pads ~4,500 steps; the walk to a person never crosses a warp)
+                    self.s["spot_goal"] = [o.map, int(m[1]), int(m[2]), self.s["step"],
+                                           "ball" if "item ball" in opt.label else "person"]
             return
         if m and opt.label.startswith("talk to the person") and CLUE_RE.search(after.text) and \
                 not MAP_CHANGE_RE.search(after.text):
@@ -785,8 +788,9 @@ class Agent:
         if not sg or sg[0] != o.map or cur is None or cur != goal or self.s["step"] - sg[3] > SPOT_STEPS:
             return None
         ball = (sg[1], sg[2])
-        if ball not in o.balls and ball in o.grid:
-            self.s.pop("spot_goal", None)                 # the view shows its cell without it: taken
+        here = o.npcs if sg[4:] == ["person"] else o.balls
+        if ball not in here and ball in o.grid:
+            self.s.pop("spot_goal", None)                 # the view shows its cell without it: taken (or moved away)
             return None
         try:
             dist, _ = self.nav.reach(cur, ball, avoid=frozenset(n for n in o.npcs if n != ball))
