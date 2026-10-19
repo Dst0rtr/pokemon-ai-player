@@ -788,10 +788,14 @@ class Agent:
         (3F's switch, then its collapsed floor, then the hole to 1F's stairs to B1F) for hundreds of steps."""
         if not self.puzzle_pending(targets):
             return opts
-        kinds = (lambda x: x.label.startswith("explore the frontier") or "(an item ball" in x.label,
+        here = lambda x: x.label.startswith("explore the frontier") and "(unexplored exits)" not in x.label
+        kinds = (lambda x: here(x) or "(an item ball" in x.label,
                  lambda x: x.label.startswith("explore the unvisited floor"),
                  lambda x: x.label.startswith("press the secret switch"),
-                 lambda x: x.label.startswith(("go back to", "take the stairs")))
+                 lambda x: x.label.startswith(("go back to", "take the stairs")),
+                 # another floor's exits last: volcano-leg-14 went 1F <-> 2F ~20 times between "go to 1F (unexplored
+                 # exits)" on 2F and "go back to 3F" (through 2F) on 1F
+                 lambda x: x.label.startswith("explore the frontier"))
         for k in kinds:
             first = [x for x in opts if k(x)]
             if first:
