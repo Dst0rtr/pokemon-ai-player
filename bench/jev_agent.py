@@ -864,10 +864,19 @@ class Agent:
                     mid = map_id(t)
                     if mid is None or mid == goal or mid == cur or mid in entry:
                         continue
-                    route = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut, taken=self.s["nav_taken"],
-                                           blocked=blocked, entry=entry)
-                    if route:
-                        goal = mid
+                    found = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut, taken=self.s["nav_taken"],
+                                           blocked=blocked, entry=entry, arrival=True)
+                    # only where something is left to explore from the arrival (full run 69: Route 2's south part has
+                    # no untaken exit, its frontier sent the player back to Viridian City, this rule back to Route 2,
+                    # ~11,000 steps)
+                    try:
+                        open_ = bool(found and found[0]) and (found[1][1] < 0 or bool([
+                            h for h in self.nav.frontier(mid, (found[1][1], found[1][2]), set(self.s["visited"]),
+                                                         surf=surf, cut=cut, blocked=blocked) if h.dest_name not in closed]))
+                    except (KeyError, IndexError, ValueError):
+                        open_ = False
+                    if open_:
+                        route, goal = found[0], mid
                         break
             if route:
                 h = route[0]

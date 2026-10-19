@@ -2021,7 +2021,9 @@ def test_an_unknown_last_map_routes_to_the_furthest_known_map_of_the_objective(t
     atlas = LearnedAtlas(tmp_path / "a.json")
     atlas.observe(city, _view("Celadon City", ["###D###", "#......", "#######"]), _warps_hex([(3, 0, 0, mart)]),
                   [("east", "Route 7")])
-    atlas.observe(r7, _view("Route 7", ["#######", "......#", "#######"]), _warps_hex([]), [("west", "Celadon City")])
+    gate = map_id("Underground Path (Route 7)")
+    atlas.observe(r7, _view("Route 7", ["#######", "......#", "####D##"]), _warps_hex([(4, 2, 0, gate)]),
+                  [("west", "Celadon City")])
     atlas.record_edge(city, "east", 6, 1, r7, 0, 1)
     atlas.record_edge(r7, "west", 0, 1, city, 6, 1)
     (tmp_path / "data").mkdir()
@@ -2036,3 +2038,10 @@ def test_an_unknown_last_map_routes_to_the_furthest_known_map_of_the_objective(t
     o = J.parse("walked\nf1 Route 7 (2,1) facing down | C L40 120/130 | ¥3000 | 4 badges")
     opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
     assert not key and not any(x.label.startswith("follow the map route") for x in opts)
+    # full run 69: a known map of the objective with nothing left to explore from the arrival (Route 2's south part)
+    # is not a goal: its frontier sends the player back, and this rule would send them there again
+    atlas.record_warp(r7, 4, 2, gate, 3, 7)                                # its one warp taken
+    agent.s["visited"].append("Underground Path (Route 7)")
+    o = J.parse("walked\nf1 Celadon City (2,1) facing down | C L40 120/130 | ¥3000 | 4 badges")
+    opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
+    assert not key and opts[0].label.startswith("explore the frontier: walk to the untaken warp at (3,0)"), opts[0].label
