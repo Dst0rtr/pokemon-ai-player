@@ -33,7 +33,7 @@ from games import gen1_data as D
 UNKNOWN = (-1, -1)                    # arrival point not known yet: "somewhere on that map"
 UNKNOWN_COST = 30                     # steps assumed from an unknown arrival point to any warp/edge of that map
 NOROUTE_NEAR = 6                      # a "no walkable route" learned from a cell applies to starts this close to it
-ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^Lo]+)$")
+ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS]+)$")
 HEX_RE = re.compile(r"^([0-9A-F]{4}): ((?:[0-9A-F]{2} ?)+)$", re.M)
 SIDES = ("north", "south", "west", "east")
 OPPOSITE = {"north": "south", "south": "north", "west": "east", "east": "west"}
@@ -160,10 +160,14 @@ class LearnedAtlas(WorldNav):
             self._maps.pop(mid, None)
             self.dirty = True
 
-    def forget_noroute(self, mid: int) -> None:
-        """The map changed under the player (a Card Key door opened): its walls learned from refusals may be gone."""
+    def forget_noroute(self, mid: int, walked: bool = False) -> None:
+        """The map changed under the player (a Card Key door opened): its walls learned from refusals may be gone. With
+        `walked`, doors may also have shut (a Pokémon Mansion switch): the walks that linked its sections go too."""
         m = self.data["maps"].get(str(mid))
-        if m and m.pop("noroute", None):
+        if m and (m.pop("noroute", None) or walked and m.pop("walked", None)):
+            if walked:
+                m.pop("walked", None)
+                self._groups.pop(mid, None)
             self._maps.pop(mid, None)
             self.dirty = True
 

@@ -330,6 +330,9 @@ CUT_TREE_TILES = {0: 0x3D, 7: 0x50}
 # Silph Co.'s locked doors: the card-key routine (bank 3) opens the door in front of the player when its bottom-left
 # tile is one of these (pokered CardKeyTable1-3 by door tile); checked only on Silph Co. floors
 CARD_KEY_DOOR_TILES = (0x18, 0x24, 0x5E)
+# the Pokémon Mansion's switch statue (tileset 22): its four tiles, top-left, top-right, bottom-left, bottom-right; it
+# appears only where the secret switches are (pokered hidden events 1F (2,5), 2F (2,11), 3F (10,5), B1F (20,3), (18,25))
+MANSION_SWITCH_QUAD = (0x37, 0x3F, 0x3D, 0x3E)
 MISSABLE_LIST = 0xD5CE      # wMissableObjectList: (sprite slot, global missable index) pairs, 0xFF-terminated
 MISSABLE_FLAGS = 0xD5A6     # wMissableObjectFlags: bit set = object hidden (a taken item ball, a person gone)
 SPRITE_POKE_BALL = 0x3D     # picture id of an item ball lying on the map (wSpriteStateData1 +0)

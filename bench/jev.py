@@ -191,7 +191,7 @@ MON_RE = re.compile(r"^(?P<name>.+?) L(?P<level>\d+) (?P<hp>\d+)/(?P<max_hp>\d+)
 PARTY_RE = re.compile(r"^(?P<n>\d+)\. (?P<mon>.+?\d+/\d+[^\[\n]*(?:\[[^\]]*\])?)", re.M)
 MOVE_RE = re.compile(r"^(?P<name>.+?) (?P<pp>\d+)pp(?P<dis> DISABLED)?$")
 EXIT_RE = re.compile(r"\(\d+,\d+\)→([^,\n]+)")
-MAP_ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^Lo]+)$")
+MAP_ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS]+)$")
 WINDOW_RE = re.compile(r"window x(-?\d+)\.\.-?\d+ y(-?\d+)\.\.-?\d+")
 CONN_RE = re.compile(r"(north|south|east|west) edge→([^,\n]+)")
 HEAL_ITEMS = ("Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore", "Fresh Water", "Soda Pop", "Lemonade")
@@ -294,7 +294,7 @@ def parse(text: str) -> Obs:
     if win and not o.npcs:
         x0, y0, i0 = win
         for r, ln in enumerate(lines[i0 + 1:i0 + 10]):
-            if not re.fullmatch(r"[#.,NPDvT<>~^Lo]{10}", ln):
+            if not re.fullmatch(r"[#.,NPDvT<>~^LoS]{10}", ln):
                 break
             o.npcs += [(x0 + x, y0 + r) for x, c in enumerate(ln) if c in "No"]
             o.balls += [(x0 + x, y0 + r) for x, c in enumerate(ln) if c == "o"]

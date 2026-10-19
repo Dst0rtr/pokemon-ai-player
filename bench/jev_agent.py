@@ -44,7 +44,8 @@ AGENT_VERSION = "2"
 NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
-MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE", re.I)   # the floor changed in place
+MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?",
+                           re.I)   # the floor changed in place ("Who wouldn't?": a Pokémon Mansion switch was pressed)
 CLUE_RE = re.compile(r"\bposter\b", re.I)                    # a person guarding something on the wall
 SPOT_STEPS = 1500                               # an item ball with no way to it from here is sought this long
 SCREEN_LOOP = 3                                 # a non-map screen seen this often without progress is a loop
@@ -382,6 +383,7 @@ class Agent:
             if doors:                                     # Silph Co.: a locked door is the way on until it is open
                 opts = doors + opts
             opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
+            opts = self.switch_options(o, opts)           # the Pokémon Mansion: secret switches open and shut doors
             opts = self.sealed_first(o, opts, why)
             if any(x.label.startswith("search the trash can") for x in opts):
                 # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
@@ -727,25 +729,64 @@ class Agent:
                               "the floor this side cannot reach", then=then))
         return out[:3]
 
+    def switch_options(self, o: Obs, opts: list[Option]) -> list[Option]:
+        """The Pokémon Mansion's secret switches (S in the map view) this part of the floor reaches: stand below, face
+        up, examine, answer YES. A press opens some doors and shuts others on every floor (the volcano-leg experiment
+        explored the Mansion's open part, never pressed one, and left for Route 23). First when nothing on this floor
+        is left to explore or route through, otherwise last."""
+        if not o.pos or not o.map.startswith("Pokémon Mansion") or not isinstance(self.nav, LearnedAtlas):
+            return opts
+        cur = map_id(o.map)
+        try:
+            cells = self.nav.map(cur)["cells"]
+            dist, _ = self.nav.reach(cur, tuple(o.pos))
+        except (KeyError, IndexError, ValueError):
+            return opts
+        out = []
+        for y, row in enumerate(cells):
+            for x, c in enumerate(row):
+                if c != "S" or (x, y + 1) not in dist:
+                    continue
+                pressed = self.s.get("switches", {}).get(f"{o.map}:{x},{y}", [])
+                face = ("walk", {"path": "up 1", "on_battle": "stop"})
+                at = tuple(o.pos) == (x, y + 1)
+                first = face[1] if at else {"path": f"to {x},{y + 1}", "on_battle": "stop"}
+                desc = "a statue with a secret switch: pressing it opens some doors and shuts others on every floor; " + \
+                    (f"pressed {len(pressed)} time(s), last at step {pressed[-1]}" if pressed else "not pressed yet")
+                out.append(Option(f"press the secret switch at ({x},{y}) (from below)", "walk", first, desc,
+                                  then=([] if at else [face]) + [("talk", {})]))
+        if not out:
+            return opts
+        onward = any(x.label.startswith(("explore the frontier", "follow the map route")) for x in opts)
+        return opts + out if onward else out + opts
+
     def remember_door(self, o: Obs, opt: Option, reply: str) -> None:
         """A door that did not open (blocked on the way, wrong side) is not offered again for a while."""
         m = re.match(r"open the locked door at \((\d+),(\d+)\)", opt.label)
         if m and o.map and not MAP_CHANGE_RE.search(reply):
             self.s.setdefault("card_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}"] = self.s["step"]
-        elif o.map and MAP_CHANGE_RE.search(reply):
+        elif (o.map or self.s.get("prev_map")) and MAP_CHANGE_RE.search(reply):
             # the floor changed without a map change: read it again next step (the atlas kept the door as a wall until
             # the player left and came back) and forget the ways that were refused while it was shut (the Game Corner's
             # stairs open with the switch behind the poster: full run 65 had learned them as unreachable)
-            self.s["reobserve"] = o.map
-            self.s.get("clues", {}).pop(o.map, None)
-            self.s.get("sealed", {}).pop(o.map, None)
-            cur = map_id(o.map)
-            for k in ("nav_noroute", "nav_blocked"):
-                for key in [key for key in self.s[k] if key.startswith(f"{cur}:")]:
-                    del self.s[k][key]
-            self.s.get("talk_noroute", {}).pop(o.map, None)
-            if isinstance(self.nav, LearnedAtlas) and cur is not None:
-                self.nav.forget_noroute(cur)
+            name = o.map or self.s.get("prev_map", "")    # (the switch's last line is a dialogue: no status line)
+            self.s["reobserve"] = name
+            # a Pokémon Mansion switch opens and shuts doors on every floor: all of them are forgotten, walks included
+            names = [D.map_name(int(k)) for k in self.nav.data["maps"]] if isinstance(self.nav, LearnedAtlas) else []
+            mansion = name.startswith("Pokémon Mansion")
+            for n in {name} | ({x for x in names if x.startswith("Pokémon Mansion")} if mansion else set()):
+                self.s.get("clues", {}).pop(n, None)
+                self.s.get("sealed", {}).pop(n, None)
+                cur = map_id(n)
+                for k in ("nav_noroute", "nav_blocked"):
+                    for key in [key for key in self.s[k] if key.startswith(f"{cur}:")]:
+                        del self.s[k][key]
+                self.s.get("talk_noroute", {}).pop(n, None)
+                if isinstance(self.nav, LearnedAtlas) and cur is not None:
+                    self.nav.forget_noroute(cur, walked=mansion)
+        sw = re.match(r"press the secret switch at \((\d+),(\d+)\)", opt.label)
+        if sw and o.map:
+            self.s.setdefault("switches", {}).setdefault(f"{o.map}:{sw[1]},{sw[2]}", []).append(self.s["step"])
 
     def remember_tree(self, o: Obs, after: Obs, reply: str) -> None:
         """A walk refused by a small tree makes cutting it an option; once a tree is cut, the people this map had no way

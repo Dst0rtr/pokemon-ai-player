@@ -1263,6 +1263,40 @@ def test_ordinary_warp_options_skip_a_blocked_warp(tmp_path):
     assert any("(5,1)" in x.label for x in opts)
 
 
+def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
+    """Volcano-leg experiment: the Mansion's switches were walls in the map view and never pressed. S cells this part
+    of the floor reaches are offered (stand below, face up, talk); "Who wouldn't?" (the YES answer) changes doors on
+    every floor, so refusals and walks learned on all Mansion floors are forgotten."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f1, f2 = map_id("Pokémon Mansion 1F"), map_id("Pokémon Mansion 2F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(f1, _view("Pokémon Mansion 1F", ["######", "#.S..#", "#.P#D#", "######"]), _warps_hex([(4, 2, 0, f2)]), [])
+    agent.nav.observe(f2, _view("Pokémon Mansion 2F", ["#####", "#P.D#", "#####"]), _warps_hex([(3, 1, 0, f1)]), [])
+    agent.nav.record_noroute(f2, (1, 1), (3, 1))
+    agent.nav.record_walk(f2, (1, 1), (2, 1))
+    o = J.parse("walked\nf1 Pokémon Mansion 1F (2,2) facing up | C L60 200/207 | ¥3000 | 6 badges")
+    rest = [J.Option("walk down 4 tiles", "walk", {"path": "down 4"})]
+    opts = agent.switch_options(o, rest)
+    assert opts[0].label == "press the secret switch at (2,1) (from below)" and "not pressed yet" in opts[0].desc
+    assert opts[0].args == {"path": "up 1", "on_battle": "stop"} and opts[0].then == [("talk", {})]
+    onward = [J.Option("explore the frontier: walk to the untaken warp at (4,2) → Pokémon Mansion 2F", "walk", {"path": "to 4,2"})]
+    assert agent.switch_options(o, onward)[-1].label.startswith("press the secret switch")   # last while there is a way on
+    agent.s["nav_noroute"][f"{f2}:3,1"] = agent.s["nav_blocked"][f"{f2}:3,1"] = agent.s["step"]
+    agent.remember_door(o, opts[0], "said: A secret switch! | Press it?")
+    agent.s["prev_map"] = "Pokémon Mansion 1F"
+    agent.remember_door(J.parse("choice:\n▶YES\nNO"), J.Option("continue the conversation", "talk", {}),
+                        "dialogue ended: Who wouldn't?")     # a dialogue: no map in the observation
+    assert agent.s["reobserve"] == "Pokémon Mansion 1F"
+    assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
+    m2 = agent.nav.data["maps"][str(f2)]
+    assert not m2.get("noroute") and not m2.get("walked")
+    assert "pressed 1 time(s)" in agent.switch_options(o, rest)[0].desc
+    assert agent.switch_options(J.parse("walked\nf1 Cinnabar Island (2,2) facing up | C L60 200/207 | ¥3000 | 6 badges"), rest) == rest
+
+
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):
     """it75 end-state experiment: with a carried atlas but fresh agent memory, every map looked first reached during
     the objective, so the frontier beat the route to Pallet Town. A blank atlas (goal runs) leaves visited empty."""

@@ -1359,6 +1359,20 @@ class PokemonGen1Profile(GameProfile):
             tiles.append(row)
         return tiles
 
+    def switch_cells(self) -> set[tuple[int, int]]:
+        """The Pokémon Mansion's secret switches: the statue drawn with its own four tiles (examine it from below)."""
+        if not D.map_name(self._u8(D.CUR_MAP)).startswith("Pokémon Mansion") or self._u8(D.CUR_TILESET) != 22:
+            return set()
+        bw = self._u8(D.MAP_WIDTH) + 6
+        blocks = self.mem[D.OVERWORLD_MAP:D.OVERWORLD_MAP + bw * (self._u8(D.MAP_HEIGHT) + 6)]
+        out = set()
+        for y in range(self._u8(D.MAP_HEIGHT) * 2):
+            for x in range(self._u8(D.MAP_WIDTH) * 2):
+                blk = self._block(blocks[(y // 2 + 3) * bw + (x // 2 + 3)])
+                if tuple(blk[((y % 2) * 2 + r) * 4 + (x % 2) * 2 + c] for r in (0, 1) for c in (0, 1)) == D.MANSION_SWITCH_QUAD:
+                    out.add((x, y))
+        return out
+
     def full_map_cells(self) -> list[list[str]]:
         """Walkability of every 2x2-tile metatile of the current map."""
         walkable = self._walkable_tiles()
@@ -1368,11 +1382,14 @@ class PokemonGen1Profile(GameProfile):
         water = D.WATER_TILE if tileset in D.WATER_TILESETS else -1
         tree = D.CUT_TREE_TILES.get(tileset, -1)
         doors = D.CARD_KEY_DOOR_TILES if D.map_name(self._u8(D.CUR_MAP)).startswith("Silph Co.") else ()
+        switches = self.switch_cells()
         cells = []
-        for trow in self.full_map_tiles():
+        for y, trow in enumerate(self.full_map_tiles()):
             row = []
-            for tile in trow:
-                if tile == grass:
+            for x, tile in enumerate(trow):
+                if (x, y) in switches:
+                    row.append("S")
+                elif tile == grass:
                     row.append(",")
                 elif tile in ledges:
                     row.append(D.LEDGE_CHAR[ledges[tile]])
@@ -1409,7 +1426,7 @@ class PokemonGen1Profile(GameProfile):
             cells[ty][tx] = "."                 # a solid door tile can still be walked into as the destination
         if (tx, ty) == (px, py):
             return []
-        solid = ("#", "T", "L") if self.surfing() else ("#", "T", "L", "~")
+        solid = ("#", "T", "L", "S") if self.surfing() else ("#", "T", "L", "S", "~")
         tileset = self._u8(D.CUR_TILESET)
         pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(tileset, ()))
         if self.surfing():
@@ -1701,7 +1718,8 @@ class PokemonGen1Profile(GameProfile):
             cells[py][px] = "P"
         head = (f"{D.map_name(m)} {w}x{h}, you at ({px},{py}) facing {self.facing()}. "
                 "x→ right, y↓ down. P=you N=npc D=door/warp #=blocked .=walkable ,=tall grass v<>=one-way ledge "
-                "~=water (Surf) T=small tree (Cut)" + (" L=locked door (Card Key)" if any("L" in r for r in cells) else "")
+                "~=water (Surf) T=small tree (Cut)" + (" L=locked door (Card Key)" if any("L" in r for r in cells) else "") + \
+                (" S=secret switch (examine it from below)" if any("S" in r for r in cells) else "")
                 + (" o=item ball" if any("o" in r for r in cells) else ""))
         ruler = "   " + "".join(str(x % 10) for x in range(w))
         body = "\n".join(f"{y:2d} " + "".join(row) for y, row in enumerate(cells))

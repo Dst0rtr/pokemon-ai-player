@@ -754,6 +754,33 @@ def test_walk_waits_out_a_spinner_slide(emu):
     assert emu.profile.position() == (45, 1, 17) and not emu.profile.sliding()
 
 
+def test_mansion_switch_is_drawn_and_toggles_doors(emu):
+    """The Pokémon Mansion's secret switches are statues the map view drew as walls: they are drawn S (solid), and
+    examining one from below and answering YES opens and shuts doors on the floor. Needs a local
+    saves/<rom>/mansion-1f.state (Mansion 1F at (2,6), below the switch)."""
+    import pytest
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "mansion-1f.state"
+    if not state.exists():
+        pytest.skip("no local mansion-1f.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    assert emu.profile.position() == (165, 2, 6)
+    before = emu.profile.full_map_cells()
+    assert before[5][2] == "S" and sum(r.count("S") for r in before) == 1
+    assert "S=secret switch" in emu.state("map")
+    assert emu.profile.find_path(2, 5) is None                         # solid
+    emu.walk("up 1")
+    assert "A secret switch" in emu.talk()
+    emu.press("A")                                                     # YES
+    assert "Who wouldn't?" in emu.talk()
+    after = emu.profile.full_map_cells()
+    assert before[13][24] == "." and after[13][24] == "#"              # a door shut...
+    assert before[7][16] == "#" and after[7][16] == "."                # ...and another opened
+
+
 def test_walk_learns_spinners_and_plans_with_them(emu):
     """Rocket Hideout B2F is a spinner maze: the server's route crossed spinner tiles it knew nothing about and every
     walk ended where a spinner dropped it (full run 47: 2,000 decisions there). Each slide is now remembered (spinner
