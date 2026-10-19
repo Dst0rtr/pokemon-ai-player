@@ -395,6 +395,7 @@ class Agent:
             opts = self.switch_options(o, opts)           # the Pokémon Mansion: secret switches open and shut doors
             if o.map in targets and why not in ("heal", "train"):
                 opts = self.floor_options(o, opts, targets)   # floor never walked on (a hole drops to the floor below)
+                opts = self.puzzle_stay(o, opts, targets)     # and the other floors, not the way out
             elif why not in ("heal", "train"):
                 opts = self.puzzle_return(o, opts, targets)   # the way on is a switch back there, not a new map
             opts = self.sealed_first(o, opts, why)
@@ -742,6 +743,41 @@ class Agent:
                               "the floor this side cannot reach", then=then))
         return out[:3]
 
+    def puzzle_pending(self, targets: list[str]) -> bool:
+        """One of the objective's maps has secret switches (S) and a warp not taken yet."""
+        for name in targets:
+            mid = map_id(name)
+            m = self.nav.data["maps"].get(str(mid)) if mid is not None and isinstance(self.nav, LearnedAtlas) else None
+            if m and any("S" in row for row in m.get("cells", [])) and any(
+                    not m.get("arrivals", {}).get(f"{w[0]},{w[1]}", {}).get("seen") for w in m.get("warps", [])):
+                return True
+        return False
+
+    def puzzle_stay(self, o: Obs, opts: list[Option], targets: list[str]) -> list[Option]:
+        """On one of the objective's maps while a puzzle is pending there: the stairs to its other floors are offered
+        and exploring the way out is not (volcano-leg-7 went in and out of the Mansion's front door ~16 times: with
+        1F walked, the untaken door twin outside was the only 'explore' left and the stairs were hidden as revisits)."""
+        if not o.pos or not self.puzzle_pending(targets):
+            return opts
+        cur = map_id(o.map)
+        try:
+            warps = self.nav.map(cur)["warps"]
+            _, trans = self.nav.reach(cur, tuple(o.pos))
+        except (KeyError, IndexError, ValueError):
+            return opts
+        near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}
+        stairs = []
+        for i, (x, y, _, _) in enumerate(warps):
+            dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
+            if (x, y) not in near or not dests & set(targets) or dests == {o.map}:
+                continue
+            walk = self.hop_walk(cur, tuple(o.pos), x, y)
+            label = f"take the stairs at ({x},{y}) → {sorted(dests & set(targets))[0]}"
+            if walk and not any(f"({x},{y})" in z.label and "warp" in z.label for z in opts):
+                stairs.append(Option(label, "walk", walk[0], "another floor of the objective's building", then=walk[1]))
+        keep = [x for x in opts if not (x.label.startswith("explore the frontier") and not any(t in x.label for t in targets))]
+        return keep + stairs
+
     def puzzle_return(self, o: Obs, opts: list[Option], targets: list[str]) -> list[Option]:
         """Off the objective's maps while one of them has secret switches (S) and an untaken warp: the route back to the
         nearest such map replaces exploring elsewhere (volcano-leg-6 left the Pokémon Mansion for Route 22 with the
@@ -749,11 +785,12 @@ class Agent:
         if not o.pos or not isinstance(self.nav, LearnedAtlas):
             return opts
         cur, best = map_id(o.map), None
+        if not self.puzzle_pending(targets):
+            return opts
         for name in targets:
             mid = map_id(name)
             m = self.nav.data["maps"].get(str(mid)) if mid is not None else None
-            if not m or not any("S" in row for row in m.get("cells", [])) or not any(
-                    not m.get("arrivals", {}).get(f"{w[0]},{w[1]}", {}).get("seen") for w in m.get("warps", [])):
+            if not m or not any("S" in row for row in m.get("cells", [])):
                 continue
             r = self.nav.route(cur, tuple(o.pos), mid)
             if r and (best is None or len(r) < len(best[1])):
