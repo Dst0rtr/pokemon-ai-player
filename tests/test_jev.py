@@ -1297,8 +1297,10 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
                         "dialogue ended: Who wouldn't?")     # a dialogue: no map in the observation
     assert agent.s["reobserve"] == "Pokémon Mansion 1F"
     assert agent.s["floor_changed"] == ["Pokémon Mansion 2F"]                       # its doors changed too
+    agent.s.setdefault("trod", {})["Pokémon Mansion 1F"] = [[1, 1], [1, 2], [3, 2], [4, 2]]   # this floor walked
     back = agent.floor_options(o, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
     assert any(x.label.startswith("go back to Pokémon Mansion 2F") for x in back)
+    agent.s["trod"]["Pokémon Mansion 1F"] = []
     agent.learn_trod(J.parse("walked\nf1 Pokémon Mansion 2F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges"))
     assert agent.s["floor_changed"] == []                                          # seen again
     isl = map_id("Cinnabar Island")                                                 # outside, a stairway still untaken
@@ -1368,6 +1370,10 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     back = J.Option("walk to the warp at (1,1) → Pokémon Mansion 2F", "walk", {"path": "to 1,1"})
     opts = agent.floor_options(o, [J.Option("walk down 4 tiles", "walk", {"path": "down 4"}), back], targets)
     assert [x.label for x in opts] == ["explore the unvisited floor at (5,1)", "explore the unvisited floor at (12,1)"]
+    agent.s["floor_changed"] = ["Pokémon Mansion 1F"]                     # this floor first (volcano-leg-9)
+    agent.nav.route = lambda *a, **k: [type("H", (), {"x": 1, "y": 1, "kind": "warp", "side": "", "label": lambda self: "x"})()]
+    assert not any(x.label.startswith("go back") for x in agent.floor_options(o, [], targets))
+    del agent.nav.route
     agent.s["trod"]["Pokémon Mansion 3F"] += [[6, 1], [10, 1]]
     assert [x.label for x in agent.floor_options(o, [], targets)] == []      # all walked (within 3 cells)
     agent.s["trod"]["Pokémon Mansion 3F"] = [[1, 1]]

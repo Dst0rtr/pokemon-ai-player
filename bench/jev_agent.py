@@ -843,8 +843,8 @@ class Agent:
                 break
         new = [Option(f"explore the unvisited floor at ({x},{y})", "walk", {"path": f"to {x},{y}", "on_battle": "stop"},
                       "part of this floor never walked on: some ways on are not doors (a hole in the floor)") for x, y in out]
-        for name in self.s.get("floor_changed", []):
-            mid = map_id(name)
+        for name in ([] if new else self.s.get("floor_changed", [])):   # this floor first (volcano-leg-9 pressed 3F's
+            mid = map_id(name)                                             # switch and left by "go back to 2F" at once)
             if name not in targets or mid is None or mid == cur:
                 continue
             r = self.nav.route(cur, tuple(o.pos), mid)
