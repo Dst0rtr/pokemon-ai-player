@@ -281,6 +281,8 @@ def test_solo_jev_done_votes_and_stuck_tracking():
     for step in range(12):
         d.track(step, o, f)
     assert s["recovery"] == 2 and s["pos_repeat"] >= 10
+    d.track(12, o, SOLO.Facts(**{**f.__dict__, "events": f.events | {"fuji"}}))   # a story event is progress
+    assert s["last_progress_step"] == 12 and d.want_checkpoint(12)
     s["pos_repeat"] = 15
     assert d.forced_recovery(100).args["buttons"].startswith("START")
 

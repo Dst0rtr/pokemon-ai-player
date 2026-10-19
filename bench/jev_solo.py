@@ -348,7 +348,10 @@ class SoloDirector:
             self.s["gym_map_seen"] = o.map
         elif o.map:
             self.s["gym_map_seen"] = ""
-        sig = f"{len(f.visited)}|{len(f.milestones)}|{len(f.ever_items)}|{f.badges}|{sorted(f.moves)}|{sum(f.levels)}|{f.explored}"
+        # story events are progress: a checkpoint follows each one, so a reload does not go back before an event the
+        # agent keeps (Codex review: "silph" survived a reload to before Giovanni's defeat)
+        sig = f"{len(f.visited)}|{len(f.milestones)}|{len(f.ever_items)}|{f.badges}|{sorted(f.moves)}|{sum(f.levels)}|" \
+              f"{f.explored}|{sorted(f.events)}"
         if sig != self.s["progress_sig"]:
             self.s["progress_sig"] = sig
             self.s["last_progress_step"] = step
