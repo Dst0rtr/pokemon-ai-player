@@ -1230,6 +1230,26 @@ def test_vermilion_gym_trash_cans_are_searched_in_order():
     assert not [x for x in d.extra_options(o, f, [], [], [], "surge") if x.label.startswith("search")]
 
 
+def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):
+    """it75 end-state experiment: with a carried atlas but fresh agent memory, every map looked first reached during
+    the objective, so the frontier beat the route to Pallet Town. A blank atlas (goal runs) leaves visited empty."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    old = LearnedAtlas(tmp_path / "old.json")
+    old.observe(map_id("Pallet Town"), _view("Pallet Town", ["#####", "#P..#", "#####"]), _warps_hex([]), [])
+    old.data["maps"][str(map_id("Pallet Town"))]["visits"] = 3
+    old.save()
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json", seed=tmp_path / "old.json"))
+    assert agent.s["visited"] == ["Pallet Town"]
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "data").mkdir()
+    blank = Agent(_agent_args(tmp_path / "b", "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "b" / "data" / "jev_atlas.json"))
+    assert blank.s["visited"] == []
+
+
 def test_rom_maps_and_carried_atlases_are_experiments_only(monkeypatch):
     from bench import run
     from bench.report import map_cell

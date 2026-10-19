@@ -94,6 +94,12 @@ class Agent:
         if self.director and getattr(a, "progress", "") and not self.resumed:
             ids = [n.id for n in GRAPH]                 # a segment start state: nodes up to this one are finished
             self.s["manual_done"] = ids[:ids.index(a.progress) + 1]
+        if isinstance(self.nav, LearnedAtlas) and not self.resumed and not self.s["visited"]:
+            # a carried atlas (--atlas, experiments only) was walked in an earlier run: its maps count as visited, or
+            # every map looks first reached during the current objective and its frontier wins over the route
+            # (it75 end-state experiment: after the Lapras, Saffron and Vermilion were explored instead of routing to
+            # Pallet Town). A blank atlas has no maps here, so goal runs are unchanged.
+            self.s["visited"] = [D.map_name(int(k)) for k, m in self.nav.data["maps"].items() if m.get("visits")]
         self.party: list[dict] = []
         self.items: list[tuple[str, int]] = []
         self.team_step = -10**9
