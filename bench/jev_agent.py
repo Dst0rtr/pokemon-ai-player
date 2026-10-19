@@ -395,6 +395,8 @@ class Agent:
             opts = self.switch_options(o, opts)           # the Pokémon Mansion: secret switches open and shut doors
             if o.map in targets and why not in ("heal", "train"):
                 opts = self.floor_options(o, opts, targets)   # floor never walked on (a hole drops to the floor below)
+            elif why not in ("heal", "train"):
+                opts = self.puzzle_return(o, opts, targets)   # the way on is a switch back there, not a new map
             opts = self.sealed_first(o, opts, why)
             if any(x.label.startswith("search the trash can") for x in opts):
                 # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
@@ -739,6 +741,33 @@ class Agent:
                               "a locked door (L): face it and talk with the Card Key in the bag; beyond it is part of "
                               "the floor this side cannot reach", then=then))
         return out[:3]
+
+    def puzzle_return(self, o: Obs, opts: list[Option], targets: list[str]) -> list[Option]:
+        """Off the objective's maps while one of them has secret switches (S) and an untaken warp: the route back to the
+        nearest such map replaces exploring elsewhere (volcano-leg-6 left the Pokémon Mansion for Route 22 with the
+        stairs to B1F, 2F's (6,1) stairs and 3F's east stairs all still untaken behind the switch doors)."""
+        if not o.pos or not isinstance(self.nav, LearnedAtlas):
+            return opts
+        cur, best = map_id(o.map), None
+        for name in targets:
+            mid = map_id(name)
+            m = self.nav.data["maps"].get(str(mid)) if mid is not None else None
+            if not m or not any("S" in row for row in m.get("cells", [])) or not any(
+                    not m.get("arrivals", {}).get(f"{w[0]},{w[1]}", {}).get("seen") for w in m.get("warps", [])):
+                continue
+            r = self.nav.route(cur, tuple(o.pos), mid)
+            if r and (best is None or len(r) < len(best[1])):
+                best = (name, r)
+        if not best:
+            return opts
+        name, r = best
+        walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "")
+        if not walk:
+            return opts
+        back = Option(f"go back to {name}: {r[0].label()}", "walk", walk[0],
+                      "its switches open and shut doors; stairs there are still untaken: the way on is there", then=walk[1])
+        return [back] + [x for x in opts if not x.label.startswith("explore ")
+                         and not (x.label.startswith("walk ") and x.label.endswith(" tiles"))]
 
     def learn_trod(self, o: Obs) -> None:
         """Cells the player has stood on, per map (for floor_options)."""

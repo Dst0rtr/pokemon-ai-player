@@ -1301,6 +1301,16 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     assert any(x.label.startswith("go back to Pokémon Mansion 2F") for x in back)
     agent.learn_trod(J.parse("walked\nf1 Pokémon Mansion 2F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges"))
     assert agent.s["floor_changed"] == []                                          # seen again
+    isl = map_id("Cinnabar Island")                                                 # outside, a stairway still untaken
+    agent.nav.observe(isl, _view("Cinnabar Island", ["#####", "#P.D#", "#####"]), _warps_hex([(3, 1, 0, f1)]), [])
+    agent.nav.record_warp(isl, 3, 1, f1, 5, 1)
+    agent.nav.record_warp(f1, 5, 1, isl, 3, 1)                                      # (the way in, and back out)
+    out = J.parse("walked\nf1 Cinnabar Island (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges")
+    away = [J.Option("explore the frontier: go to Route 20 (unexplored exits): walk to Route 20 (west edge)", "walk", {"path": "to west edge"})]
+    agent.nav.data["maps"][str(f1)]["warps"].append([5, 2, 0, map_id("Pokémon Mansion B1F")])
+    agent.nav._maps.pop(f1, None)
+    back = agent.puzzle_return(out, away, ["Pokémon Mansion 1F", "Pokémon Mansion B1F"])
+    assert [x.label.split(":")[0] for x in back] == ["go back to Pokémon Mansion 1F"]
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
     assert not m2.get("noroute") and not m2.get("walked")
