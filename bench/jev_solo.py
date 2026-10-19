@@ -316,6 +316,10 @@ class SoloDirector:
             if o.map == "Mr. Fuji's House" and self.s["came_from"] == "Pokémon Tower 7F":
                 self.s["events"] = sorted(set(self.s.get("events", [])) | {"fuji"})   # rescued: the warp home
                 f.events.add("fuji")
+            # the facts were read before this step's map change: on the arrival step they still named the map before
+            # the last one (full run 68: every arrival on B4F from the elevator read "came from B4F", the stage routed
+            # back into the elevator, ~1,400 steps in and out of it, and Giovanni's Silph Scope lay there ~1,150 of them)
+            f.came_from, f.elevator = self.s["came_from"], self.s.get("elevator", "")
         if o.map:
             self.s["prev_map"] = o.map
         if o.map.endswith("Gym"):

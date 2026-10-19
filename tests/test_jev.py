@@ -1971,3 +1971,68 @@ def test_a_warp_that_did_not_open_puts_the_people_on_its_map_first(tmp_path):
     assert agent.sealed_talks(o, [guard, gambler, leave]) == [guard]
     agent.s["step"] += 601
     assert agent.sealed_talks(o, [guard, gambler, leave]) == []
+
+
+def test_the_arrival_step_reads_the_map_it_came_from(tmp_path):
+    """Full run 68: the facts were read before the step's map change, so on arriving on B4F from the elevator they
+    said "came from B4F", the elevator stage routed straight back in (~1,400 steps in and out of the elevator)."""
+    d = SOLO.SoloDirector({})
+    order = [n.id for n in SOLO.GRAPH]
+    at = lambda m: J.parse(f"walked\nf1 {m} (24,15) facing down | C L51 160/170 | ¥3000 | 4 badges")   # noqa: E731
+    fact = lambda: SOLO.Facts(badges=4, levels=[51], visited={"Celadon City", "Rocket Hideout B4F"},   # noqa: E731
+                              ever_items={"Lift Key"}, manual_done=set(order[:order.index("scope")]),
+                              came_from=d.s.get("came_from", ""), elevator=d.s.get("elevator", ""))
+    for m in ("Rocket Hideout B4F", "Rocket Hideout Elevator"):
+        d.track(1, at(m), fact())
+    d.s["elevator"] = "B4F"
+    b4f = at("Rocket Hideout B4F")
+    f = fact()                                                             # read before the step's map change
+    assert f.came_from == "Rocket Hideout B4F"
+    d.track(2, b4f, f)
+    assert f.came_from == "Rocket Hideout Elevator" and f.elevator == ""
+    assert d.objective(f, b4f)[1][-1] == "Rocket Hideout B4F"           # Giovanni's side: not back to the elevator
+
+
+def test_an_item_ball_on_the_objectives_map_comes_before_leaving_it(tmp_path):
+    """Full run 68 beat Giovanni next to the Silph Scope's ball and chose 'walk to Rocket Hideout Elevator' (0.40 over
+    the ball's 0.05): an untaken ball on the objective's own map keeps every way out off the list, by name too."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    o = J.parse("walked\nf1 Rocket Hideout B4F (26,3) facing left | C L51 160/170 | ¥3000 | 4 badges")
+    ball = J.Option("talk to the person or object at (25,2) (an item ball: pick it up)", "walk", {"path": "to 25,3"},
+                    "1 tiles away; an item lying here, not taken yet")
+    giovanni = J.Option("talk to the person or object at (25,3)", "walk", {"path": "left 1"},
+                        "1 tiles away; already talked to it, it said: I see that you raise")
+    by_name = J.Option("walk to Rocket Hideout Elevator", "walk", {"path": "to Rocket Hideout Elevator"})
+    warp = J.Option("walk to the warp at (24,15) → Rocket Hideout Elevator", "walk", {"path": "to 24,15"})
+    up = J.Option("walk up 4 tiles", "walk", {"path": "up 4"})
+    assert agent.objective_map_options(o, [ball, giovanni, by_name, warp, up]) == [ball, giovanni, up]
+    taken = J.Option(ball.label, "walk", ball.args, "1 tiles away; already talked to it, it said: nothing to talk to")
+    assert by_name in agent.objective_map_options(o, [taken, giovanni, by_name, warp, up])
+
+
+def test_an_unknown_last_map_routes_to_the_furthest_known_map_of_the_objective(tmp_path):
+    """Full run 68 blacked out in the Pokémon Tower, woke in Celadon and explored Celadon's and Route 16's exits for
+    ~8,500 steps: 7F was not in the atlas, but the way to the objective's known maps was. The route goes to the
+    furthest of them past this map, and explores from there."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    city, r7, mart = map_id("Celadon City"), map_id("Route 7"), map_id("Celadon Mart 1F")
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    atlas.observe(city, _view("Celadon City", ["###D###", "#......", "#######"]), _warps_hex([(3, 0, 0, mart)]),
+                  [("east", "Route 7")])
+    atlas.observe(r7, _view("Route 7", ["#######", "......#", "#######"]), _warps_hex([]), [("west", "Celadon City")])
+    atlas.record_edge(city, "east", 6, 1, r7, 0, 1)
+    atlas.record_edge(r7, "west", 0, 1, city, 6, 1)
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s["visited"] = ["Celadon City", "Route 7"]
+    o = J.parse("walked\nf1 Celadon City (2,1) facing down | C L40 120/130 | ¥3000 | 4 badges")
+    targets = ["Lavender Town", "Route 7", "Pokémon Tower 7F"]
+    opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
+    assert opts[0].label == "follow the map route to Route 7: walk to Route 7 (east edge)" and key
+    assert not any(x.label.startswith("explore the frontier") for x in opts)
+    # on the furthest known map itself: nothing known lies past it, so explore
+    o = J.parse("walked\nf1 Route 7 (2,1) facing down | C L40 120/130 | ¥3000 | 4 badges")
+    opts, key = agent.nav_options(o, targets, SOLO.Facts(badges=4), "flute")
+    assert not key and not any(x.label.startswith("follow the map route") for x in opts)

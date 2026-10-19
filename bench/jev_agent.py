@@ -371,14 +371,7 @@ class Agent:
             if o.map.endswith(" Elevator") and not self.s.get("elevator"):
                 opts = self.panel_first(o, opts)
             elif targets and o.map == targets[-1] and why not in ("heal", "train") and not self.entry_pending:
-                if any(x.label.startswith("talk to the person") and "not talked to yet" in (x.desc or "") for x in opts):
-                    # on the objective's own map: talk to everyone there before leaving it again
-                    opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
-                else:
-                    objects = self.object_options(o)      # then the machines, PCs and furniture of a small room
-                    if any("not tried yet" in (x.desc or "") for x in objects):
-                        opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
-                    opts = objects + opts
+                opts = self.objective_map_options(o, opts)
             doors = self.card_door_options(o)
             if doors:                                     # Silph Co.: a locked door is the way on until it is open
                 opts = doors + opts
@@ -591,6 +584,21 @@ class Agent:
         if want is None:
             want = "1F" if "1F" in floors else next((f for f in floors if f != "CANCEL"), None)
         return [floors[want]] if want else choices
+
+    def objective_map_options(self, o: Obs, opts: list[Option]) -> list[Option]:
+        """On the objective's own map: talk to everyone there, and pick up what lies there, before leaving it again
+        (full run 68 beat Giovanni next to the Silph Scope and took "walk to Rocket Hideout Elevator"); then the
+        machines, PCs and furniture of a small room."""
+        def leaving(x: Option) -> bool:
+            return x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")
+                                         or bool(NAME_WALK_RE.match(x.args.get("path", ""))))
+        if any(x.label.startswith("talk to the person") and ("not talked to yet" in (x.desc or "") or
+                                                             "not taken yet" in (x.desc or "")) for x in opts):
+            return [x for x in opts if not leaving(x)]
+        objects = self.object_options(o)
+        if any("not tried yet" in (x.desc or "") for x in objects):
+            opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
+        return objects + opts
 
     def remember_choice(self, o: Obs, opt: Option) -> None:
         """The floor chosen on an elevator panel (a prompt carries no status line: the map is the last one seen)."""
@@ -847,6 +855,20 @@ class Agent:
             blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
             route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked,
                                    entry=entry, goal_cells=cells)
+            if not route and isinstance(self.nav, LearnedAtlas) and why != "heal" and cells is None:
+                # the last map is not known yet: the route goes to the furthest map of the objective the atlas knows,
+                # past this one, and explores from there (full run 68 blacked out on Pokémon Tower 3F, woke in Celadon,
+                # and explored Celadon's and Route 16's exits for ~8,500 steps with the way to Lavender in the atlas)
+                here = targets.index(o.map) if o.map in targets else -1
+                for t in reversed(targets[here + 1:]):
+                    mid = map_id(t)
+                    if mid is None or mid == goal or mid == cur or mid in entry:
+                        continue
+                    route = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut, taken=self.s["nav_taken"],
+                                           blocked=blocked, entry=entry)
+                    if route:
+                        goal = mid
+                        break
             if route:
                 h = route[0]
                 args, then = self.hop_walk(cur, tuple(o.pos), h.x, h.y, h.side if h.kind == "edge" else "") or \
