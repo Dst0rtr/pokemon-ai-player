@@ -1329,6 +1329,8 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     assert [x.label for x in agent.puzzle_order(mixed[:2] + mixed[3:], T)] == ["press the secret switch at (2,1) (from below)"]
     ball = mk("talk to the person or object at (5,5) (an item ball: pick it up)")
     assert agent.puzzle_order(mixed + ball, T) == ball
+    near = mk("talk to the person or object at (1,1) (an item ball: pick it up)")       # next to (1,2), reachable
+    assert agent.puzzle_order(mixed + ball + near, T, inside) == near                    # (5,5) is out of reach
     away = mk("explore the frontier: go to Pokémon Mansion 1F (unexplored exits): walk to the warp at (5,10) → Pokémon Mansion 1F",
               "go back to Pokémon Mansion 3F: walk to the warp at (7,10) → Pokémon Mansion 3F")
     assert [x.label[:7] for x in agent.puzzle_order(away, T)] == ["go back"]

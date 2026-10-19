@@ -396,7 +396,7 @@ class Agent:
             if o.map in targets and why not in ("heal", "train"):
                 opts = self.floor_options(o, opts, targets)   # floor never walked on (a hole drops to the floor below)
                 opts = self.puzzle_stay(o, opts, targets)     # and the other floors, not the way out
-                opts = self.puzzle_order(opts, targets)       # one kind of move at a time while a puzzle is pending
+                opts = self.puzzle_order(opts, targets, o)    # one kind of move at a time while a puzzle is pending
             elif why not in ("heal", "train"):
                 opts = self.puzzle_return(o, opts, targets)   # the way on is a switch back there, not a new map
             opts = self.sealed_first(o, opts, why)
@@ -780,7 +780,7 @@ class Agent:
         keep = [x for x in opts if not (x.label.startswith("explore the frontier") and not any(t in x.label for t in targets))]
         return keep + stairs
 
-    def puzzle_order(self, opts: list[Option], targets: list[str]) -> list[Option]:
+    def puzzle_order(self, opts: list[Option], targets: list[str], o: Optional[Obs] = None) -> list[Option]:
         """Inside a building whose switches still hide a warp: the first kind of move that exists, in this order:
         untaken warps and item balls here, floor never walked on, a switch, another floor (changed by a switch, or
         stairs not taken yet); Jev picks within it. Volcano-leg experiments 5-13 offered all of them at once and Jev's
@@ -789,12 +789,21 @@ class Agent:
         if not self.puzzle_pending(targets):
             return opts
         here = lambda x: x.label.startswith("explore the frontier") and "(unexplored exits)" not in x.label
+        dist = None
+        if o is not None and o.pos and map_id(o.map) is not None:
+            try:
+                dist, _ = self.nav.reach(map_id(o.map), tuple(o.pos))
+            except (KeyError, IndexError, ValueError):
+                dist = None
+        def ball(x: Option) -> bool:                      # one this part of the floor reaches (volcano-leg-15 tried 3F's
+            m = re.search(r"at \((\d+),(\d+)\) \(an item ball", x.label)     # ball at (25,5) from the far side ~5 times)
+            return bool(m) and (dist is None or any((int(m[1]) + dx, int(m[2]) + dy) in dist for dx, dy in MOVES.values()))
         switch = lambda x: x.label.startswith("press the secret switch")
         floors = lambda x: x.label.startswith(("go back to", "take the stairs"))
         # floors a press changed are seen before pressing again (volcano-leg-14 pressed 1F's switch 11 times, every
         # time its rest ended, flipping the doors back before anyone looked)
         pair = (floors, switch) if self.s.get("floor_changed") else (switch, floors)
-        kinds = (lambda x: here(x) or "(an item ball" in x.label,
+        kinds = (lambda x: here(x) or ball(x),
                  lambda x: x.label.startswith("explore the unvisited floor"),
                  *pair,
                  # another floor's exits last: volcano-leg-14 went 1F <-> 2F ~20 times between "go to 1F (unexplored
