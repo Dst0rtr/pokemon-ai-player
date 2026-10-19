@@ -1195,6 +1195,14 @@ class Agent:
             self.s["nav_taken"][key] = self.s["nav_taken"].get(key, 0) + 1
             if isinstance(self.nav, LearnedAtlas) and after.pos and map_id(after.map) is not None and "edge" not in opt.label:
                 self.nav.record_warp(cur, int(m[1]), int(m[2]), map_id(after.map), *after.pos)
+        if m and isinstance(self.nav, LearnedAtlas) and cur is not None and after.map == o.map and after.pos:
+            # a pad on the same map (Saffron Gym): the walk "could not get closer" and the player stands on another
+            # pad. Recorded as taken, or the gym stays frontier for good (full run 75: the Cinnabar objective
+            # explored Saffron Gym's pads again and again, ~1,400 steps)
+            x, y, (ax, ay) = int(m[1]), int(m[2]), after.pos
+            pads = {(w[0], w[1]) for w in self.nav.data["maps"].get(str(cur), {}).get("warps", [])}
+            if (x, y) in pads and (ax, ay) in pads and abs(ax - x) + abs(ay - y) > 1:
+                self.nav.record_warp(cur, x, y, cur, ax, ay)
         if isinstance(self.nav, LearnedAtlas) and self.edge_hop and after.map and after.map != o.map and after.pos \
                 and cur is not None and map_id(after.map) is not None:
             side, ex_, ey_ = self.edge_hop

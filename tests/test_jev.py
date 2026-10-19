@@ -1842,6 +1842,28 @@ def test_a_gym_leader_behind_warp_pads_is_sought_through_them(tmp_path, nav):
     assert agent.spot_cells(gone, gym, gym) is None and "spot_goal" not in agent.s
 
 
+
+def test_a_warp_pad_on_the_same_map_is_recorded_as_taken(tmp_path):
+    """Full run 75: walking onto a Saffron Gym pad ends "could not get closer" on another pad of the same map; only a
+    map change recorded a warp, so the pads stayed frontier and the Cinnabar objective came back to them (~1,400 steps)."""
+    from bench.jev_atlas import LearnedAtlas, frontier_maps
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    gym = map_id("Saffron Gym")
+    agent.nav = atlas = LearnedAtlas(tmp_path / "atlas.json")
+    atlas.observe(gym, _view("Saffron Gym", ["#######", "#.D#D.#", "#######"]), _warps_hex([(2, 1, 1, gym), (4, 1, 0, gym)]), [])
+    assert gym in frontier_maps(atlas, {"Saffron Gym"})
+    o = J.parse("walked\nf1 Saffron Gym (1,1) facing up | C L50 200/207 | ¥3000 | 6 badges")
+    opt = J.Option("explore the frontier: walk to the untaken warp at (2,1) → Saffron Gym", "walk", {"path": "to 2,1"})
+    after = J.parse("went toward (2,1): right 1/1 — could not get closer\nf1 Saffron Gym (4,1) facing right | C L50 200/207 | ¥3000 | 6 badges")
+    agent.nav_feedback(o, opt, after, "")
+    assert atlas.data["maps"][str(gym)]["arrivals"]["2,1"] == {"map": gym, "x": 4, "y": 1, "seen": True}
+    assert [(h.x, h.y) for h in atlas.frontier(gym, (1, 1), {"Saffron Gym"})] == []
+    stuck = J.parse("went toward (2,1): right 0/1 — could not get closer\nf1 Saffron Gym (1,1) facing right | C L50 200/207 | ¥3000 | 6 badges")
+    agent.nav_feedback(o, J.Option("walk to the warp at (4,1) → Saffron Gym", "walk", {"path": "to 4,1"}), stuck, "")
+    assert "4,1" not in atlas.data["maps"][str(gym)]["arrivals"] or not atlas.data["maps"][str(gym)]["arrivals"]["4,1"]["seen"]
+
 def test_a_status_only_reply_keeps_the_item_balls_and_the_spot_goal(tmp_path, nav):
     """The refusal that makes the Card Key a spot goal carries no map rows, and the next reply may show only the status
     line: no balls in it is not a taken ball (the goal was dropped right away). Balls are remembered per map like
