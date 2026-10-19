@@ -772,7 +772,7 @@ class Agent:
             if (x, y) not in near or not dests & set(targets) or dests == {o.map}:
                 continue
             walk = self.hop_walk(cur, tuple(o.pos), x, y)
-            label = f"take the stairs at ({x},{y}) → {sorted(dests & set(targets))[0]}"
+            label = f"take the stairs: walk to the warp at ({x},{y}) → {sorted(dests & set(targets))[0]}"   # (nav_feedback learns it)
             if walk and not any(f"({x},{y})" in z.label and "warp" in z.label for z in opts):
                 stairs.append(Option(label, "walk", walk[0], "another floor of the objective's building", then=walk[1]))
         keep = [x for x in opts if not (x.label.startswith("explore the frontier") and not any(t in x.label for t in targets))]

@@ -1316,7 +1316,10 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     inside = J.parse("walked\nf1 Pokémon Mansion 1F (3,2) facing up | C L60 200/207 | ¥3000 | 6 badges")
     leave = [J.Option("explore the frontier: walk to the untaken warp at (5,1) → Cinnabar Island", "walk", {"path": "to 5,1"})]
     stay = agent.puzzle_stay(inside, leave, ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
-    assert [x.label for x in stay] == ["take the stairs at (4,2) → Pokémon Mansion 2F"]          # not the way out
+    assert [x.label for x in stay] == ["take the stairs: walk to the warp at (4,2) → Pokémon Mansion 2F"]   # not the way out
+    up = J.parse("walked up 0/1 — stopped: entered Pokémon Mansion 2F\nf1 Pokémon Mansion 2F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges")
+    agent.nav_feedback(inside, stay[0], up, "")
+    assert agent.nav.data["maps"][str(f1)]["arrivals"]["4,2"]["seen"]                     # taken: learned like any warp
     assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 2F", "Pokémon Mansion 1F"]) == leave  # 1F is the goal floor
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
