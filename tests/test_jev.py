@@ -1321,6 +1321,14 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     agent.nav_feedback(inside, stay[0], up, "")
     assert agent.nav.data["maps"][str(f1)]["arrivals"]["4,2"]["seen"]                     # taken: learned like any warp
     assert agent.puzzle_stay(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]) == []   # not again
+    T = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]
+    mk = lambda *labels: [J.Option(lb, "walk", {"path": "up 1"}) for lb in labels]
+    mixed = mk("walk to the warp at (4,2) → Pokémon Mansion 2F", "press the secret switch at (2,1) (from below)",
+               "explore the unvisited floor at (9,9)", "talk to what you are facing")
+    assert [x.label for x in agent.puzzle_order(mixed, T)] == ["explore the unvisited floor at (9,9)"]
+    assert [x.label for x in agent.puzzle_order(mixed[:2] + mixed[3:], T)] == ["press the secret switch at (2,1) (from below)"]
+    ball = mk("talk to the person or object at (5,5) (an item ball: pick it up)")
+    assert agent.puzzle_order(mixed + ball, T) == ball
     assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 2F", "Pokémon Mansion 1F"]) == leave  # 1F is the goal floor
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
@@ -1389,6 +1397,9 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
                    "f1 Pokémon Mansion 1F (16,14) facing right | C L60 200/207 | ¥3000 | 6 badges")
     agent.nav_feedback(o, J.Option("explore the unvisited floor at (12,1)", "walk", {"path": "to 12,1"}), fall, "")
     assert "12,1" not in agent.nav.data["maps"][str(f3)].get("arrivals", {})
+    agent.nav_feedback(o, J.Option("explore the unvisited floor at (9,1)", "walk", {"path": "to 9,1"}),
+                       J.parse("no walkable route from (1,1) to (9,1) on this map"), "")
+    assert [9, 1] in agent.s["trod"]["Pokémon Mansion 3F"]                  # not reached: not offered again
 
 
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):

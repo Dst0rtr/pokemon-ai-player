@@ -396,6 +396,7 @@ class Agent:
             if o.map in targets and why not in ("heal", "train"):
                 opts = self.floor_options(o, opts, targets)   # floor never walked on (a hole drops to the floor below)
                 opts = self.puzzle_stay(o, opts, targets)     # and the other floors, not the way out
+                opts = self.puzzle_order(opts, targets)       # one kind of move at a time while a puzzle is pending
             elif why not in ("heal", "train"):
                 opts = self.puzzle_return(o, opts, targets)   # the way on is a switch back there, not a new map
             opts = self.sealed_first(o, opts, why)
@@ -778,6 +779,24 @@ class Agent:
                 stairs.append(Option(label, "walk", walk[0], "another floor of the objective's building", then=walk[1]))
         keep = [x for x in opts if not (x.label.startswith("explore the frontier") and not any(t in x.label for t in targets))]
         return keep + stairs
+
+    def puzzle_order(self, opts: list[Option], targets: list[str]) -> list[Option]:
+        """Inside a building whose switches still hide a warp: the first kind of move that exists, in this order:
+        untaken warps and item balls here, floor never walked on, a switch, another floor (changed by a switch, or
+        stairs not taken yet); Jev picks within it. Volcano-leg experiments 5-13 offered all of them at once and Jev's
+        picks among them (stairs just taken at ~0.5, the unwalked floor at ~0.1) broke the sequence the Mansion needs
+        (3F's switch, then its collapsed floor, then the hole to 1F's stairs to B1F) for hundreds of steps."""
+        if not self.puzzle_pending(targets):
+            return opts
+        kinds = (lambda x: x.label.startswith("explore the frontier") or "(an item ball" in x.label,
+                 lambda x: x.label.startswith("explore the unvisited floor"),
+                 lambda x: x.label.startswith("press the secret switch"),
+                 lambda x: x.label.startswith(("go back to", "take the stairs")))
+        for k in kinds:
+            first = [x for x in opts if k(x)]
+            if first:
+                return first
+        return opts
 
     def puzzle_return(self, o: Obs, opts: list[Option], targets: list[str]) -> list[Option]:
         """Off the objective's maps while one of them has secret switches (S) and an untaken warp: the route back to the
@@ -1403,6 +1422,11 @@ class Agent:
         m = re.search(r"warp at \((\d+),(\d+)\)", opt.label) or re.fullmatch(r"to (\d+),(\d+)", opt.args.get("path", ""))
         if opt.label.startswith("explore the unvisited floor"):
             m = None                                     # a fall on the way is not a warp at the walk's target cell
+            fx = re.search(r"\((\d+),(\d+)\)", opt.label)
+            if fx and o.map and "arrived" not in after.head and "battle" not in after.head:
+                # not reached (a wall the view does not show, someone in the way): it counts as walked, or the strict
+                # puzzle order would offer it again and again
+                self.s.setdefault("trod", {}).setdefault(o.map, []).append([int(fx[1]), int(fx[2])])
         cur = map_id(o.map)
         if m and after.map and after.map != o.map and cur is not None:
             key = f"{cur}:{m[1]},{m[2]}"
