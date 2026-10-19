@@ -58,6 +58,7 @@ JUNK = ("Moon Stone", "Fire Stone", "Water Stone", "Thunder Stone", "Leaf Stone"
         "Old Amber", "Nugget", "Poké Doll", "Antidote", "Burn Heal", "Ice Heal", "Awakening", "Paralyze Heal")
 TOSS_RETRY_STEPS = 50                                # a toss whose menu failed waits this long
 NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
+NURSE_SPOTS = {"Indigo Plateau Lobby": (7, 7)}       # elsewhere: the Lobby's nurse stands at (7,5) (ROM object list)
 GYM_NODES = ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni")
 
 
@@ -480,12 +481,13 @@ class SoloDirector:
                     opts.append(Option(f"teach {hm} ({move}) to {mon}", "manage",
                                        {"action": "use", "target": hm, "target2": f"{mon}: weakest"},
                                        f"{move} is needed to pass obstacles"))
-        if why == "heal" and o.map.endswith("Poké Center") and o.pos:
+        if why == "heal" and (o.map.endswith("Poké Center") or o.map in NURSE_SPOTS) and o.pos:
             # code knows where the nurse is: every Gen 1 Poké Center has her at (3,1) behind the counter, talked to
             # from (3,3) facing up; the generic talk-to options cannot reach her across the counter
-            at = tuple(o.pos) == NURSE_SPOT
+            spot = NURSE_SPOTS.get(o.map, NURSE_SPOT)
+            at = tuple(o.pos) == spot
             face = ("walk", {"path": "up 1", "on_battle": "stop"})
-            first = face[1] if at else {"path": f"to {NURSE_SPOT[0]},{NURSE_SPOT[1]}", "on_battle": "stop"}
+            first = face[1] if at else {"path": f"to {spot[0]},{spot[1]}", "on_battle": "stop"}
             opts.append(Option("talk to the nurse across the counter", "walk", first,
                                "the Poké Center nurse heals the whole team: this is what the objective asks for",
                                then=([] if at else [face]) + [("talk", {})]))

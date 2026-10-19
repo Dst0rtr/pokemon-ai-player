@@ -853,6 +853,11 @@ def test_heal_offers_the_nurse():
     nurse = [x for x in d.extra_options(o, SOLO.Facts(badges=1, levels=[20], hp_ratio=0.2), [], [], [], "heal")
              if x.label.startswith("talk to the nurse")]
     assert nurse[0].args["path"] == "up 1" and nurse[0].then == [("talk", {})]
+    # the Indigo Plateau Lobby's nurse (7,5) is not where a Poké Center's is, and its name has no "Poké Center"
+    o = J.parse("walked\nf1 Indigo Plateau Lobby (7,10) facing up | Charizard L60 10/160 | ¥3000 | 8 badges")
+    nurse = [x for x in d.extra_options(o, SOLO.Facts(badges=8, levels=[60], hp_ratio=0.1), [], [], [], "heal")
+             if x.label.startswith("talk to the nurse")]
+    assert nurse and nurse[0].args["path"] == "to 7,7" and nurse[0].then[-1] == ("talk", {})
 
 
 # ---------------------------------------------------------------- --map-source learned (bench/jev_atlas.py)
