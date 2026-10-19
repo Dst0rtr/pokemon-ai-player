@@ -1320,13 +1320,14 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     up = J.parse("walked up 0/1 — stopped: entered Pokémon Mansion 2F\nf1 Pokémon Mansion 2F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges")
     agent.nav_feedback(inside, stay[0], up, "")
     assert agent.nav.data["maps"][str(f1)]["arrivals"]["4,2"]["seen"]                     # taken: learned like any warp
+    assert agent.puzzle_stay(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]) == []   # not again
     assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 2F", "Pokémon Mansion 1F"]) == leave  # 1F is the goal floor
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
     assert not m2.get("noroute") and not m2.get("walked")
     facing = [J.Option("talk to what you are facing", "talk", {})] + rest
     assert [x.label for x in agent.switch_options(o, facing)] == ["walk down 4 tiles"]   # just pressed: no press back
-    agent.s["step"] += 41
+    agent.s["step"] += 16
     assert "pressed 1 time(s)" in agent.switch_options(o, rest)[0].desc
     prompt = J.parse("said: A secret switch!\nscreen:\nA secret switch!\n              ▶YES\n               NO\nPress it?")
     assert prompt.mode == "prompt"

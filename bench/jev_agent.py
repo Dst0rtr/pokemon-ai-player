@@ -43,7 +43,7 @@ from bench import jev as J  # noqa: E402
 AGENT_VERSION = "2"
 NAME_WALK_RE = re.compile(r"^to (?!.*\bedge$)(?!\d+,\d+$).+")   # walk("to <map name>"): the server picks the nearest warp
 TROD_RADIUS = 3                                 # floor within this many steps of a cell stood on counts as walked
-SWITCH_REST_STEPS = 40                          # a Mansion switch just pressed is not offered again this long
+SWITCH_REST_STEPS = 15                          # a Mansion switch just pressed is not offered again this long
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?",
@@ -766,11 +766,12 @@ class Agent:
         except (KeyError, IndexError, ValueError):
             return opts
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}
+        arr = self.nav.data["maps"].get(str(cur), {}).get("arrivals", {})
         stairs = []
         for i, (x, y, _, _) in enumerate(warps):
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
-            if (x, y) not in near or not dests & set(targets) or dests == {o.map}:
-                continue
+            if (x, y) not in near or not dests & set(targets) or dests == {o.map} or arr.get(f"{x},{y}", {}).get("seen"):
+                continue                                  # (stairs already taken: volcano-leg-12 went 2F <-> 3F ~70 times)
             walk = self.hop_walk(cur, tuple(o.pos), x, y)
             label = f"take the stairs: walk to the warp at ({x},{y}) → {sorted(dests & set(targets))[0]}"   # (nav_feedback learns it)
             if walk and not any(f"({x},{y})" in z.label and "warp" in z.label for z in opts):
