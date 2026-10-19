@@ -2044,6 +2044,12 @@ def test_a_warp_that_did_not_open_puts_the_people_on_its_map_first(tmp_path):
     agent.nav_feedback(o, stairs, J.parse("went toward (17,1): right 5/5, up 0/1 — could not get closer\n"
                                           "f1 Game Corner (17,2) facing up | C L40 120/130 | ¥3000 | 4 badges"), "")
     assert agent.sealed_talks(o, [guard, gambler, leave]) == [guard]
+    pads = J.Option("follow the map route to Game Corner: walk to the warp at (5,1) → Game Corner", "walk", {"path": "to 5,1"})
+    agent.entry_pending = False
+    assert agent.sealed_first(o, [guard, gambler, leave, pads], "scope") == [guard, gambler]
+    agent.entry_pending = True             # a spot goal across this map's own pads (Saffron Gym): its route stays
+    assert agent.sealed_first(o, [guard, gambler, leave, pads], "scope") == [guard, gambler, pads]
+    assert agent.sealed_first(o, [guard, gambler, leave], "heal") == [guard, gambler, leave]   # healing comes first
     agent.s["step"] += 601
     assert agent.sealed_talks(o, [guard, gambler, leave]) == []
 

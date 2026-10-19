@@ -376,13 +376,7 @@ class Agent:
             if doors:                                     # Silph Co.: a locked door is the way on until it is open
                 opts = doors + opts
             opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
-            sealed = self.sealed_talks(o, opts)
-            if sealed:
-                # a warp the map shows a way to did not open: something on this map opens it, so the people here come
-                # before leaving (full run 67 hit the Game Corner's shut stairs before talking to the poster guard,
-                # learned them unreachable, left, and paced Celadon ~3,800 steps)
-                opts = sealed + [x for x in opts if x not in sealed and not (
-                    x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
+            opts = self.sealed_first(o, opts, why)
             if any(x.label.startswith("search the trash can") for x in opts):
                 # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
                 opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
@@ -631,6 +625,18 @@ class Agent:
         balls = [tuple(b) for b in known.get(o.map, []) if tuple(b) not in o.grid] + list(o.balls)
         o.balls = list(dict.fromkeys(balls))
         known[o.map] = [list(b) for b in o.balls]
+
+    def sealed_first(self, o: Obs, opts: list[Option], why: str) -> list[Option]:
+        """A warp the map shows a way to did not open: something on this map opens it, so the people here come before
+        leaving (full run 67 hit the Game Corner's shut stairs before talking to the poster guard, learned them
+        unreachable, left, and paced Celadon ~3,800 steps). Not while healing, and the route to a spot goal or an entry
+        rule's warp stays: it crosses this map's own pads (Saffron Gym; Codex review)."""
+        sealed = self.sealed_talks(o, opts)
+        if not sealed or why == "heal":
+            return opts
+        return sealed + [x for x in opts if x not in sealed and not (
+            x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)"))
+            and not (self.entry_pending and x.label.startswith("follow the map route")))]
 
     def sealed_talks(self, o: Obs, opts: list[Option]) -> list[Option]:
         """After a warp on this map could not be reached (no one in the way): the talk options to people here not
