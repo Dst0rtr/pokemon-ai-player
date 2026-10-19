@@ -743,6 +743,8 @@ class Agent:
     def learn_trod(self, o: Obs) -> None:
         """Cells the player has stood on, per map (for floor_options)."""
         if o.mode == "overworld" and o.map and o.pos:
+            if o.map in self.s.get("floor_changed", []):
+                self.s["floor_changed"].remove(o.map)     # seen again (the atlas re-reads it on entry)
             t = self.s.setdefault("trod", {}).setdefault(o.map, [])
             if list(o.pos) not in t and len(t) < 600:
                 t.append(list(o.pos))
@@ -775,6 +777,18 @@ class Agent:
                 break
         new = [Option(f"explore the unvisited floor at ({x},{y})", "walk", {"path": f"to {x},{y}", "on_battle": "stop"},
                       "part of this floor never walked on: some ways on are not doors (a hole in the floor)") for x, y in out]
+        for name in self.s.get("floor_changed", []):
+            mid = map_id(name)
+            if name not in targets or mid is None or mid == cur:
+                continue
+            r = self.nav.route(cur, tuple(o.pos), mid)
+            walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "") if r else None
+            if walk:
+                new.append(Option(f"go back to {name}: {r[0].label()}", "walk", walk[0],
+                                  "a switch pressed since you were there changed its doors: parts may be open now",
+                                  then=walk[1]))
+        if new:                                           # (blind walks only dilute them: ~60 of them on 3F in volcano-leg-5)
+            opts = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))]
         onward = any(x.label.startswith("explore the frontier") and any(t in x.label for t in targets) for x in opts)
         return opts + new if onward else new + opts
 
@@ -836,6 +850,8 @@ class Agent:
             # a Pokémon Mansion switch opens and shuts doors on every floor: all of them are forgotten, walks included
             names = [D.map_name(int(k)) for k in self.nav.data["maps"]] if isinstance(self.nav, LearnedAtlas) else []
             mansion = name.startswith("Pokémon Mansion")
+            if mansion:                                   # the other floors' doors changed too: worth seeing again
+                self.s["floor_changed"] = sorted({x for x in names if x.startswith("Pokémon Mansion")} - {name})
             for n in {name} | ({x for x in names if x.startswith("Pokémon Mansion")} if mansion else set()):
                 self.s.get("clues", {}).pop(n, None)
                 self.s.get("sealed", {}).pop(n, None)

@@ -1296,6 +1296,11 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     agent.remember_door(J.parse("choice:\n▶YES\nNO"), J.Option("continue the conversation", "talk", {}),
                         "dialogue ended: Who wouldn't?")     # a dialogue: no map in the observation
     assert agent.s["reobserve"] == "Pokémon Mansion 1F"
+    assert agent.s["floor_changed"] == ["Pokémon Mansion 2F"]                       # its doors changed too
+    back = agent.floor_options(o, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
+    assert any(x.label.startswith("go back to Pokémon Mansion 2F") for x in back)
+    agent.learn_trod(J.parse("walked\nf1 Pokémon Mansion 2F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges"))
+    assert agent.s["floor_changed"] == []                                          # seen again
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
     assert not m2.get("noroute") and not m2.get("walked")
@@ -1345,7 +1350,7 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     targets = ["Pokémon Mansion 1F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
     o = J.parse("walked\nf1 Pokémon Mansion 3F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges")
     agent.learn_trod(o)
-    opts = agent.floor_options(o, [], targets)
+    opts = agent.floor_options(o, [J.Option("walk down 4 tiles", "walk", {"path": "down 4"})], targets)
     assert [x.label for x in opts] == ["explore the unvisited floor at (5,1)", "explore the unvisited floor at (12,1)"]
     agent.s["trod"]["Pokémon Mansion 3F"] += [[6, 1], [10, 1]]
     assert [x.label for x in agent.floor_options(o, [], targets)] == []      # all walked (within 3 cells)
