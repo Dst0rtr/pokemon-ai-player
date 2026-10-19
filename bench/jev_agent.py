@@ -757,8 +757,8 @@ class Agent:
         """On one of the objective's maps while a puzzle is pending there: the stairs to its other floors are offered
         and exploring the way out is not (volcano-leg-7 went in and out of the Mansion's front door ~16 times: with
         1F walked, the untaken door twin outside was the only 'explore' left and the stairs were hidden as revisits)."""
-        if not o.pos or not self.puzzle_pending(targets):
-            return opts
+        if not o.pos or not self.puzzle_pending(targets) or o.map == targets[-1]:
+            return opts                                   # (the last floor is where the goal is: volcano-leg-10 left B1F)
         cur = map_id(o.map)
         try:
             warps = self.nav.map(cur)["warps"]
@@ -823,8 +823,8 @@ class Agent:
         if not o.pos or not isinstance(self.nav, LearnedAtlas) or not targets:
             return opts
         last = map_id(targets[-1])
-        if last is None or self.nav.known(last):
-            return opts
+        if last is None or self.nav.known(last) and o.map != targets[-1]:
+            return opts                                   # (on the last map itself the goal lies somewhere on its floor)
         cur = map_id(o.map)
         try:
             cells = self.nav.map(cur)["cells"]

@@ -1317,6 +1317,7 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     leave = [J.Option("explore the frontier: walk to the untaken warp at (5,1) → Cinnabar Island", "walk", {"path": "to 5,1"})]
     stay = agent.puzzle_stay(inside, leave, ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
     assert [x.label for x in stay] == ["take the stairs at (4,2) → Pokémon Mansion 2F"]          # not the way out
+    assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 2F", "Pokémon Mansion 1F"]) == leave  # 1F is the goal floor
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
     assert not m2.get("noroute") and not m2.get("walked")
@@ -1379,6 +1380,7 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     agent.s["trod"]["Pokémon Mansion 3F"] = [[1, 1]]
     agent.nav.observe(map_id("Pokémon Mansion B1F"), _view("Pokémon Mansion B1F", ["###", "#P#", "###"]), _warps_hex([]), [])
     assert agent.floor_options(o, [], targets) == []                         # the last target is known: routes do it
+    assert agent.floor_options(o, [], targets[:2]) != []                     # ...unless this is it: the goal is on its floor
     fall = J.parse("went toward (12,1): right 6/11 — stopped: entered Pokémon Mansion 1F\n"
                    "f1 Pokémon Mansion 1F (16,14) facing right | C L60 200/207 | ¥3000 | 6 badges")
     agent.nav_feedback(o, J.Option("explore the unvisited floor at (12,1)", "walk", {"path": "to 12,1"}), fall, "")
