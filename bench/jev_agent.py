@@ -789,10 +789,14 @@ class Agent:
         if not self.puzzle_pending(targets):
             return opts
         here = lambda x: x.label.startswith("explore the frontier") and "(unexplored exits)" not in x.label
+        switch = lambda x: x.label.startswith("press the secret switch")
+        floors = lambda x: x.label.startswith(("go back to", "take the stairs"))
+        # floors a press changed are seen before pressing again (volcano-leg-14 pressed 1F's switch 11 times, every
+        # time its rest ended, flipping the doors back before anyone looked)
+        pair = (floors, switch) if self.s.get("floor_changed") else (switch, floors)
         kinds = (lambda x: here(x) or "(an item ball" in x.label,
                  lambda x: x.label.startswith("explore the unvisited floor"),
-                 lambda x: x.label.startswith("press the secret switch"),
-                 lambda x: x.label.startswith(("go back to", "take the stairs")),
+                 *pair,
                  # another floor's exits last: volcano-leg-14 went 1F <-> 2F ~20 times between "go to 1F (unexplored
                  # exits)" on 2F and "go back to 3F" (through 2F) on 1F
                  lambda x: x.label.startswith("explore the frontier"))
