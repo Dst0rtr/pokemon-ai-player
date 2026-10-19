@@ -855,6 +855,13 @@ class Agent:
                                   then=walk[1]))
         if new:                                           # (blind walks only dilute them: ~60 of them on 3F in volcano-leg-5)
             opts = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))]
+        if any(x.label.startswith("explore the unvisited floor") for x in new):
+            # warps already taken lead to floors already seen: volcano-leg-8 took the stairs it had just come up by
+            # (Jev ~0.5 for them, ~0.1 for the unwalked floor) ~150 times between Mansion 2F and 3F
+            arr = self.nav.data["maps"].get(str(cur), {}).get("arrivals", {})
+            taken = {k for k, a in arr.items() if a.get("seen")}
+            opts = [x for x in opts if not (x.label.startswith(("walk to the warp", "take the stairs")) and any(
+                f"({k})" in x.label for k in taken))]
         onward = any(x.label.startswith("explore the frontier") and any(t in x.label for t in targets) for x in opts)
         return opts + new if onward else new + opts
 

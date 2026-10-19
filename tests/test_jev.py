@@ -1364,7 +1364,9 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     targets = ["Pokémon Mansion 1F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
     o = J.parse("walked\nf1 Pokémon Mansion 3F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges")
     agent.learn_trod(o)
-    opts = agent.floor_options(o, [J.Option("walk down 4 tiles", "walk", {"path": "down 4"})], targets)
+    agent.nav.data["maps"][str(f3)]["arrivals"]["1,1"] = {"map": map_id("Pokémon Mansion 2F"), "x": 1, "y": 1, "seen": True}
+    back = J.Option("walk to the warp at (1,1) → Pokémon Mansion 2F", "walk", {"path": "to 1,1"})
+    opts = agent.floor_options(o, [J.Option("walk down 4 tiles", "walk", {"path": "down 4"}), back], targets)
     assert [x.label for x in opts] == ["explore the unvisited floor at (5,1)", "explore the unvisited floor at (12,1)"]
     agent.s["trod"]["Pokémon Mansion 3F"] += [[6, 1], [10, 1]]
     assert [x.label for x in agent.floor_options(o, [], targets)] == []      # all walked (within 3 cells)
