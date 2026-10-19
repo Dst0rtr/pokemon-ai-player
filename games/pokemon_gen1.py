@@ -1082,9 +1082,13 @@ class PokemonGen1Profile(GameProfile):
         return None
 
     def _party_cursor_to(self, emu, k: int) -> bool:
-        """Move the ▶ cursor of the open party list to slot k (the menu remembers its last position)."""
+        """Move the ▶ cursor of the open party list to slot k (the menu remembers its last position). The slot is
+        read from WRAM: names cannot tell apart Pokémon with the same nickname (full runs 71-75: all AAAAAAAAAA)."""
+        n = len(self.party())
         for _ in range(8):
-            cur = self._party_cursor_index(self.screen_text() or "")
+            cur = self._u8(D.CURRENT_MENU_ITEM)
+            if not 0 <= cur < n:
+                cur = self._party_cursor_index(self.screen_text() or "")
             if cur is None:
                 return False
             if cur == k:

@@ -986,3 +986,16 @@ def test_taken_item_balls_are_not_drawn(emu):
     emu.pyboy.memory[D.MISSABLE_FLAGS + 157 // 8] |= 1 << (157 % 8)
     assert emu.profile.hidden_slots() == {8} and (21, 16) not in emu.profile.npcs(balls=True)
     assert "o=item ball" in emu.profile.full_map_text()                    # the two other balls are still there
+
+
+def test_party_menus_pick_the_named_slot_when_every_nickname_is_the_same(emu):
+    # full runs 71-75: the intro's A presses nicknamed every Pokémon AAAAAAAAAA; the party cursor was read from the
+    # names, so every slot looked like slot 1 and HMs went to the wrong Pokémon (Doduo "learned" Surf, Charizard
+    # "refused" Strength)
+    for k, (species, moves) in enumerate(((0xB0, [10]), (0xB1, [33]), (0x99, [33]))):   # Charmander Squirtle Bulbasaur
+        _inject_mon(emu, k, species, 12, moves, hp=30, nick="AAAAAAAAAA")
+    _give_item(emu, 0xC4)                                                 # HM01 Cut
+    r = emu.manage("use", "HM01", "Bulbasaur")
+    assert [[n for n, _ in p["moves"]] for p in emu.profile.party()] == [["Scratch"], ["Tackle"], ["Tackle", "Cut"]], r
+    r = emu.manage("lead", "Squirtle")
+    assert [p["species"] for p in emu.profile.party()] == ["Squirtle", "Charmander", "Bulbasaur"], r
