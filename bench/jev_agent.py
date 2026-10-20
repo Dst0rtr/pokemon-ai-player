@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, ClaudePlanner, JevError, drop_repeats,  # noqa: E402
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
-from bench.jev_solo import GRAPH, GYM_NODES, STATUS_MOVES, STUCK_Q, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS  # noqa: E402
+from bench.jev_solo import GRAPH, GYM_NODES, STUCK_Q, is_status_move, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS  # noqa: E402
 from bench.jev_nav import MOVES, Hop, WorldNav, map_id  # noqa: E402
 from bench.jev_atlas import LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
@@ -234,7 +234,7 @@ class Agent:
             # a level-up move: code decides (run 75's Charizard never learned Flamethrower: cursor presses tried to delete
             # Cut, an HM). A damaging move is learned over the weakest one; a status move is not
             new = (learn[1].strip().title() if learn else "")
-            if new and new in STATUS_MOVES:
+            if new and is_status_move(new):
                 return [Option(f"keep the old moves (do not learn {new})", "battle", {"action": "skip"}, "a status move")]
             return [Option(f"learn {new or 'the new move'} and forget the weakest move (never an HM)", "battle",
                            {"action": "learn"}, "a new damaging move replaces the weakest one")]

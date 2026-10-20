@@ -518,14 +518,29 @@ class PokemonGen1Profile(GameProfile):
             return "prompt"
         return None
 
+    _LEARN_WORDS = ("learn", "forgot", "forget", "poof", "1, 2", "make room", "abandon", "trying to", "older move")
+
+    def _learner(self, txt: str) -> Optional[dict[str, Any]]:
+        """The party Pokémon learning the move: wWhichPokemon, checked against the move list on screen (Codex 6: the
+        Pokémon in battle is not always the learner); else the member whose moves the list shows."""
+        party = self.party()
+        listed = {self._norm(ln.replace("▶", "")) for ln in txt.split("\n") if ln.strip()}
+        fits = lambda m: bool(m["moves"]) and all(self._norm(n) in listed for n, _ in m["moves"])  # noqa: E731
+        idx = self._u8(D.WHICH_POKEMON)
+        if idx < len(party) and fits(party[idx]):
+            return party[idx]
+        return next((m for m in party if fits(m)), party[idx] if idx < len(party) else None)
+
     def _learn_prompt(self, emu, learn: bool) -> str:
         """battle('learn') / battle('skip') on a level-up move prompt: learn it and forget the weakest move (status
         moves first, then the least power; HM moves stay), or keep the old moves (run 75: Charizard L36+ never learned
-        Flamethrower; generic cursor presses tried to delete Cut, an HM, and gave up)."""
+        Flamethrower; generic cursor presses tried to delete Cut, an HM, and gave up). It stops at the battle menu or
+        any text that is not about the move (Codex 6: pressing A through the menu attacked three times)."""
         seen: list[str] = []
-        idx = min(self._u8(D.PLAYER_MON_NUMBER), max(len(self.party()) - 1, 0))
         for _ in range(16):
             txt, d = self.screen_text() or "", (self.dialog_text() or "").lower()
+            if self.in_battle() and self._classify(txt) in ("main", "choose"):
+                break
             if "▶YES" in txt or "▶NO" in txt:
                 self._collect(seen)
                 if "abandon" in d:
@@ -537,7 +552,7 @@ class PokemonGen1Profile(GameProfile):
                 if not learn:
                     emu.press("B", settle=1)
                     continue
-                mon = self.party()[idx] if idx < len(self.party()) else None
+                mon = self._learner(txt)
                 if not mon:
                     emu.press("B", settle=1)
                     continue
@@ -558,7 +573,7 @@ class PokemonGen1Profile(GameProfile):
                     emu.press(("DOWN " if k > cur else "UP ") * abs(k - cur), settle=1)
                 emu.press("A", settle=1)
                 continue
-            if self.is_text_visible() and d.strip():
+            if self.is_text_visible() and d.strip() and ("▼" in txt or any(w in d for w in self._LEARN_WORDS)):
                 self._collect(seen)
                 emu.press("A", settle=1)
                 continue

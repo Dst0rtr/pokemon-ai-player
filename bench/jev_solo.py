@@ -240,12 +240,24 @@ def current_node(f: Facts) -> Node:
 STUCK_Q = "Do `recent_actions` show the player repeating actions that fail or change nothing, without progress toward `objective`?"
 
 
+def _move_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+_STATUS_KEYS = {_move_key(m) for m in STATUS_MOVES}
+
+
+def is_status_move(name: str) -> bool:
+    """Case and punctuation do not matter: the screen says SMOKESCREEN / SAND-ATTACK, the table SmokeScreen."""
+    return _move_key(name) in _STATUS_KEYS
+
+
 def attack_pp(party: list[dict]) -> Optional[int]:
     """PP left on damaging moves of the party Pokémon that are not fainted; None when no moves are known."""
     moves = [m for p in party if p.get("hp", 0) > 0 for m in p.get("moves", [])]
     if not any(p.get("moves") for p in party):
         return None
-    return sum(m.get("pp", 0) for m in moves if m["name"] not in STATUS_MOVES)
+    return sum(m.get("pp", 0) for m in moves if not is_status_move(m["name"]))
 
 
 class SoloDirector:

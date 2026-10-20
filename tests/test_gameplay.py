@@ -8,6 +8,7 @@ import time
 from PIL import Image
 
 from tests.conftest import requires_rom
+from games import gen1_data as D
 
 pytestmark = requires_rom
 
@@ -346,6 +347,53 @@ def test_elite_four_defeat_milestone(emu):
     assert "defeated: Champion" in prof.milestones(champ, {**champ, "in_battle": 0})
     hof = {**champ, "in_battle": 0, "hall_of_fame": 1}
     assert "champion defeated (Hall of Fame)" in prof.milestones({**champ, "in_battle": 0}, hof)
+
+
+def test_events_accumulate_across_nested_presses(emu, monkeypatch):
+    # A battle helper presses many times inside one tool call; a milestone seen on an early press
+    # (e.g. "defeated: Lorelei") must still reach the reply, not be replaced by the later presses' [].
+    emu.pop_events()
+    feed = iter([["defeated: Lorelei"], [], ["reached: Bruno's Room"], []])
+    monkeypatch.setattr(emu.profile, "milestones", lambda prev, cur: next(feed))
+    for _ in range(4):
+        emu._after_action()
+    assert emu.pop_events() == ["defeated: Lorelei", "reached: Bruno's Room"]
+    assert emu.pop_events() == []
+    emu.pending_events = ["stale"]
+    emu.save_state("evt")
+    emu.load_state("evt")
+    assert "stale" not in emu.pending_events
+
+
+def test_learn_prompt_uses_the_learner_and_stops_at_the_battle_menu(emu, monkeypatch):
+    # Codex 6: battle('learn') read the Pokémon in battle as the learner and pressed A through the battle menu after
+    # the prompt (three attacks in a Lorelei probe). Scripted screens: the learner is slot 2 (wWhichPokemon).
+    prof = emu.profile
+    screens = ["Delete an older move to\nmake room for FLAMETHROWER?\n▶YES\n NO",
+               "Which move should be\nforgotten?\n▶SLASH\n CUT\n EMBER\n STRENGTH",
+               "1, 2 and... Poof!\n▼", "CHARIZARD learned\nFLAMETHROWER!\n▼",
+               "▶FIGHT PKMN\n ITEM  RUN"]
+    at = {"i": 0}
+    presses = []
+    party = [{"species": "Lapras", "moves": [("Surf", 15), ("Ice Beam", 10)], "hp": 100},
+             {"species": "Pidgeot", "moves": [("Fly", 15)], "hp": 80},
+             {"species": "Charizard", "moves": [("Slash", 20), ("Cut", 30), ("Ember", 25), ("Strength", 15)], "hp": 150}]
+    monkeypatch.setattr(prof, "screen_text", lambda: screens[at["i"]])
+    monkeypatch.setattr(prof, "dialog_text", lambda: screens[at["i"]].replace("▼", ""))
+    monkeypatch.setattr(prof, "is_text_visible", lambda: True)
+    monkeypatch.setattr(prof, "in_battle", lambda: 1)
+    monkeypatch.setattr(prof, "party", lambda: party)
+    real_u8 = prof._u8
+    monkeypatch.setattr(prof, "_u8", lambda a: {D.WHICH_POKEMON: 2, D.PLAYER_MON_NUMBER: 0}.get(a, real_u8(a)))
+
+    def press(script, **kw):
+        presses.append(script.strip())
+        if script.strip().endswith("A"):
+            at["i"] = min(at["i"] + 1, len(screens) - 1)
+    monkeypatch.setattr(emu, "press", press)
+    out = prof._learn_prompt(emu, True)
+    assert "forgot Ember" in out
+    assert presses == ["A", "DOWN DOWN", "A", "A", "A"]                    # nothing pressed at the battle menu
 
 
 def test_milestone_snapshot_includes_team(emu):

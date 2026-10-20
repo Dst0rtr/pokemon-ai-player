@@ -691,6 +691,7 @@ class Emulator:
             slots = self.list_states()
             return f"no state '{slot}'. available: {', '.join(slots) or 'none'}"
         self._load_slot(path.stem)
+        self.pending_events = []               # events from before the reload belong to the abandoned timeline
         self.metrics.mark_load(path.stem)     # reloads are visible in the benchmark timeline
         return f"loaded state '{path.stem}'"
 
@@ -791,7 +792,8 @@ class Emulator:
         if self.autosave_every and self.actions % self.autosave_every == 0:
             self._autosave()
             self.metrics.checkpoint()
-        self.pending_events = events
+        # One tool call can press many times (battle/talk helpers): keep every press's events until the reply pops them.
+        self.pending_events = self.pending_events + [e for e in events if e not in self.pending_events]
         return events
 
     pending_events: list[str] = []

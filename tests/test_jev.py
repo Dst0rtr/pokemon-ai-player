@@ -1316,6 +1316,9 @@ def test_a_level_up_move_prompt_is_decided_in_code(tmp_path):
     assert [(x.tool, x.args) for x in opts] == [("battle", {"action": "learn"})] and "Flamethrower" in opts[0].label
     q = J.parse("needs a decision\nscreen:\nDelete an older move to make room for LEER?\n▶YES\nNO")
     assert [(x.tool, x.args) for x in agent.options(q, [], [], [])] == [("battle", {"action": "skip"})]
+    r = J.parse("needs a decision\nscreen:\nDelete an older move to make room for SMOKESCREEN?\n▶YES\nNO")
+    assert [(x.tool, x.args) for x in agent.options(r, [], [], [])] == [("battle", {"action": "skip"})]  # Codex 6
+    assert SOLO.is_status_move("SAND-ATTACK") and not SOLO.is_status_move("FLAMETHROWER")
 
 
 def test_the_poke_flute_is_played_at_a_sleeping_snorlax(tmp_path):
