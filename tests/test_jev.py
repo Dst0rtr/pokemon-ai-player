@@ -1014,14 +1014,34 @@ def test_learned_refusal_with_a_blocker_on_the_path_is_not_a_wall(tmp_path):
     agent.nav.observe(b2, _view("Mt. Moon B2F", ["#######", "#D..P.#", "#######"]), _warps_hex([(1, 1, 0, 60)]), [])
     o = J.parse("walked\nf1 Mt. Moon B2F (4,1) facing left | C L24 38/68 | ¥2543 | 1 badges")
     opt = J.Option("walk to the warp at (1,1) → Mt. Moon B1F", "walk", {"path": "to 1,1"})
-    agent.nav_feedback(o, opt, J.parse("no walkable route from (4,1) to (1,1) on this map"), "")
+    walked = J.parse("no walkable route from (4,1) to (1,1) on this map — left 1/3")   # refused after trying: a sprite
+    agent.nav_feedback(o, opt, walked, "")
     o.npcs = [(2, 1)]                                   # someone stands in the corridor
     agent.learn_noroute(o)
     assert not agent.nav.unreachable(b2, (4, 1), (1, 1))
-    agent.nav_feedback(o, opt, J.parse("no walkable route from (4,1) to (1,1) on this map"), "")
+    agent.nav_feedback(o, opt, walked, "")
     o.npcs = []                                         # nobody: a wall the map view did not show
     agent.learn_noroute(o)
     assert agent.nav.unreachable(b2, (4, 1), (1, 1))
+
+
+def test_a_refusal_before_any_step_is_the_terrain_even_with_people_on_the_path(tmp_path):
+    """Full runs 78-79: Rock Tunnel B1F's far ladder was refused before any step ("no walkable route ... on this map",
+    no walking report) again and again; trainers on the agent's path made it "a blocker to clear". The server's
+    pathfinder walks past people, so such a refusal is the terrain: a wall, and no 'clear the way' option."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b1 = map_id("Rock Tunnel B1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(b1, _view("Rock Tunnel B1F", ["#######", "#D..P.#", "#######"]), _warps_hex([(1, 1, 0, 82)]), [])
+    o = J.parse("walked\nf1 Rock Tunnel B1F (4,1) facing left | C L30 80/90 | ¥2543 | 3 badges")
+    opt = J.Option("walk to the warp at (1,1) → Rock Tunnel 1F", "walk", {"path": "to 1,1"})
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (4,1) to (1,1) on this map"), "")
+    o.npcs = [(2, 1)]                                   # a trainer stands on the agent's idea of the path
+    agent.learn_noroute(o)
+    assert agent.nav.unreachable(b1, (4, 1), (1, 1))
 
 
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):

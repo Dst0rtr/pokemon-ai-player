@@ -1594,8 +1594,10 @@ class Agent:
             except KeyError:
                 on_path, tree = set(), False
             # a small tree on the way is Cut's job, not a wall (full run 41); water is Surf's (Pallet Town's south
-            # edge: the walk to the water cell is refused until the player surfs)
-            if not on_path and not tree:
+            # edge: the walk to the water cell is refused until the player surfs); a refusal before any step is the
+            # terrain whoever stands on the agent's path (see nav_feedback)
+            terrain = len(p) > 5 and bool(p[5])
+            if (terrain or not on_path) and not tree:
                 self.nav.record_noroute(cur, frm, to)
 
     def clear_option(self, cur: int, o: Obs, h, prefix: str, desc: str, surf: bool, cut: bool) -> Optional[Option]:
@@ -1608,6 +1610,8 @@ class Agent:
         path = set(self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=cut))
         tried = self.s.setdefault("clear_tries", {})
         blockers = [n for n in o.npcs if n in path and tried.get(f"{h.map}:{n[0]},{n[1]}", 0) < 2]   # 2 tries: it stays
+        if self.s["step"] - self.s.get("terrain_noroute", {}).get(key, -10**9) <= NAV_BLOCK_STEPS:
+            blockers = []                                 # refused for the terrain: no one to talk out of the way
         if surf and blockers:
             # the first obstacle along the way decides: water before anyone standing further on is Surf's job (plateau-
             # leg experiment: Route 23's guards stand past its water, and "talk to the guard" was offered, not Surf)
@@ -1721,8 +1725,14 @@ class Agent:
             self.s.setdefault("clear_tries", {})[k] = self.s["clear_tries"].get(k, 0) + 1
         nr = re.match(r"no walkable route from \((\d+),(\d+)\) to \((\d+),(\d+)\)", after.head)
         if nr and isinstance(self.nav, LearnedAtlas) and cur is not None:
-            # decided next step, once the map view (with the people in it) has been read: see learn_noroute()
-            self.s["pending_noroute"] = [[cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4])]]
+            # decided next step, once the map view (with the people in it) has been read: see learn_noroute(). Refused
+            # before any step (no "— up 0/2" report) is the terrain itself: the server's pathfinder walks past people
+            # (they only cost more), so no one standing there is the reason (full runs 78-79: Rock Tunnel B1F's far
+            # ladder, refused again and again while trainers on the agent's path made it "a blocker to clear")
+            terrain = not re.search(r"on this map — (?:up|down|left|right) \d+/\d+", after.head)
+            self.s["pending_noroute"] = [[cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4]), int(terrain)]]
+            if terrain:
+                self.s.setdefault("terrain_noroute", {})[f"{cur}:{nr[3]},{nr[4]}"] = self.s["step"]
         elif m and "could not get closer" in after.head and "slid" not in after.head and after.map == o.map and \
                 after.pos and abs(after.pos[0] - int(m[1])) + abs(after.pos[1] - int(m[2])) <= 1 and \
                 isinstance(self.nav, LearnedAtlas) and cur is not None:
