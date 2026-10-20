@@ -1323,8 +1323,8 @@ class Agent:
                 opts.append(c)
         if goal is not None and (goal != cur or self.entry_pending):
             blocked = self.blocked_now(o)
-            route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked,
-                                   entry=entry, goal_cells=cells)
+            route = self.route_ok(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked,
+                                  entry=entry, goal_cells=cells)
             if route and self.loops_back(cur, route):
                 # the route leaves this map and comes back to "somewhere on it" through arrivals not known yet: it only
                 # says this part of the map does not reach the goal (full run 81: from Route 15's east part to Fuchsia
@@ -1350,7 +1350,7 @@ class Agent:
                     mid = map_id(t)
                     if mid is None or mid == goal or mid == cur or mid in entry:
                         continue
-                    found = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut, taken=self.s["nav_taken"],
+                    found = self.route_ok(cur, tuple(o.pos), mid, surf=surf, cut=cut, taken=self.s["nav_taken"],
                                            blocked=blocked, entry=entry, arrival=True)
                     # only where something is left to explore from the arrival (full run 69: Route 2's south part has
                     # no untaken exit, its frontier sent the player back to Viridian City, this rule back to Route 2,
@@ -1413,7 +1413,7 @@ class Agent:
                 for mid in frontier_maps(self.nav, visited):
                     if mid == cur:
                         continue
-                    found = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut, blocked=blocked, arrival=True)
+                    found = self.route_ok(cur, tuple(o.pos), mid, surf=surf, cut=cut, blocked=blocked, arrival=True)
                     if not found or not found[0]:
                         continue
                     r, arr = found
@@ -1588,7 +1588,7 @@ class Agent:
                     continue
             except (KeyError, IndexError):
                 continue
-            r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked, **caps)
+            r = self.route_ok(cur, tuple(o.pos), mid, blocked=blocked, **caps)
             if r and self.loops_back(cur, r):
                 r = None
             if r and (best is None or len(r) < len(best[1])):
@@ -1648,7 +1648,7 @@ class Agent:
                                            "pace back and forth until a wild Pokémon appears, then fight it",
                                            then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
                 return []
-            r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked, **caps)
+            r = self.route_ok(cur, tuple(o.pos), mid, blocked=blocked, **caps)
             r = None if r and self.loops_back(cur, r) else r
             walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "") if r else None
             if walk:
@@ -1713,6 +1713,28 @@ class Agent:
             self.s["sleeper"].pop(here)
             if (self.s.get("spot_goal") or [""])[0] == here:
                 self.s.pop("spot_goal")
+
+    def route_ok(self, cur: int, pos: tuple, goal: int, **kw):
+        """`nav.route`, but a route that loops back through an unknown arrival is searched again without the hop that
+        makes the loop (full run 86: from Route 12's south part to Lavender the cheapest route went by Route 11 and back
+        to "somewhere on Route 12", and was dropped; the real one, north through Route 12's gate, was never looked at)."""
+        blocked = kw.pop("blocked", frozenset())
+        for _ in range(4):
+            r = self.nav.route(cur, pos, goal, blocked=blocked, **kw)
+            hops = r[0] if kw.get("arrival") and r else r
+            if not hops or not self.loops_back(cur, hops):
+                return r
+            seen, bad = {cur}, None
+            for i, h in enumerate(hops):
+                if i and h.map in seen and (h.x < 0 or not self.nav.arrival_known(hops[i - 1])):
+                    bad = hops[i - 1]
+                    break
+                seen.add(h.map)
+            if bad is None:
+                return None
+            key = f"{bad.map}:{bad.x},{bad.y}"
+            blocked = ScopedBlocks(set(blocked) | {key}, getattr(blocked, "origins", {}), getattr(blocked, "linked", None))
+        return None
 
     def loops_back(self, cur: int, route: list) -> bool:
         """A route that comes back to this map at a point the atlas does not know (then a warp or an edge from there):

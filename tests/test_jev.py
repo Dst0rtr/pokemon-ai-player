@@ -1197,6 +1197,29 @@ def test_after_a_black_out_in_viridian_forest_the_route_goes_back_to_it(tmp_path
     assert opts[0].label.startswith("follow the map route to Viridian Forest"), [x.label for x in opts]
 
 
+def test_a_route_that_loops_is_searched_again_without_the_loop(tmp_path):
+    """Full run 86: from Route 12's south part the cheapest route to Lavender went by Route 11 and back to "somewhere on
+    Route 12" (an unknown arrival costs a flat 30); it was dropped, and the real route north through Route 12's gate
+    was never looked at. The search is repeated without the hop that makes the loop."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    r12, r11, gate, lav = map_id("Route 12"), map_id("Route 11"), map_id("Route 12 Gate 1F"), map_id("Lavender Town")
+    agent.nav.observe(r12, _view("Route 12", [".." + "#" * 58, "..#D" + "." * 56, "#" * 60]), _warps_hex([(3, 1, 0, gate)]),
+                      [("north", "Lavender Town"), ("east", "Route 11")])
+    agent.nav.observe(gate, _view("Route 12 Gate 1F", ["D.D"]), _warps_hex([(0, 0, 0, r12), (2, 0, 0, r12)]), [])
+    agent.nav.observe(r11, _view("Route 11", ["..."]), _warps_hex([]), [("west", "Route 12")])
+    agent.nav.record_warp(r12, 3, 1, gate, 2, 0)
+    agent.nav.record_warp(gate, 0, 0, r12, 1, 1)                            # the gate's far door: Route 12's west part
+    agent.nav.data["edges"][f"{r12}:east"] = {"map": r11, "offset": 0, "fixed": 0, "seen": True}
+    first = agent.nav.route(r12, (59, 1), lav)
+    assert first and agent.loops_back(r12, first)                            # cheapest: by Route 11 and back
+    hops = agent.route_ok(r12, (59, 1), lav)
+    assert hops and hops[0].dest == gate and not agent.loops_back(r12, hops), hops
+
+
 def test_a_back_outside_warp_lands_on_the_outside_maps_warp_it_names(tmp_path):
     """Full run 83: Mt. Moon B1F's exit is a "back outside" warp (0xFF) whose index names Route 4's (24,5); taken as
     "somewhere on Route 4", the route to Cerulean (which crosses Route 4 twice) looked like a loop and was dropped."""
