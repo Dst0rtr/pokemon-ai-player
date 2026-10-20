@@ -1529,6 +1529,9 @@ def test_the_route_to_grass_for_training_leaves_out_blocked_hops(tmp_path):
     assert agent.train_options(o, None) == []                                # (the only grass known is too weak)
     agent.s["wild_levels"] = {}
     assert agent.train_options(o, None)[0].label.startswith("follow the map route to the tall grass on Route 9")
+    agent.s["train_paces"] = {"Route 9": 8}                                  # paced there, never a wild Pokémon
+    assert agent.train_options(o, None) == []
+    agent.s.pop("train_paces")
     agent.s["wild_levels"] = {"Route 9": 40}                                 # league-leg-2: train where they are strong
     assert agent.train_options(o, None)[0].label.startswith("follow the map route to train on Route 9 (wild Pokémon up to L40)")
     agent.s.pop("wild_levels")

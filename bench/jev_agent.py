@@ -1110,6 +1110,9 @@ class Agent:
         gb = re.match(r"go back to (Pokémon Mansion \w+)", opt.label)
         if gb:
             self.s["revisit"] = gb[1]                     # kept until reached (see puzzle_order)
+        if opt.label.startswith(("train in the tall grass", "train here")) and o.map:
+            tp = self.s.setdefault("train_paces", {})
+            tp[o.map] = tp.get(o.map, 0) + 1              # (see train_options: no wild Pokémon after 8 is no grass)
         sw = re.match(r"press the secret switch at \((\d+),(\d+)\)", opt.label)
         if sw and o.map:
             self.s.setdefault("switches", {}).setdefault(f"{o.map}:{sw[1]},{sw[2]}", []).append(self.s["step"])
@@ -1461,7 +1464,10 @@ class Agent:
             return best
         top = max((p["level"] for p in self.party), default=0)
         lv = self.s.get("wild_levels", {})
-        weak = lambda name: name in lv and lv[name] * 2 < top   # (met there and not worth it: try grass not met yet)
+        paced = self.s.get("train_paces", {})
+        # met there and not worth it, or paced there with no wild Pokémon at all (Pallet Town's two cells of Route 1's
+        # grass: league-leg-4 paced there and back to Route 1): try grass not met yet
+        weak = lambda name: (name in lv and lv[name] * 2 < top) or (name not in lv and paced.get(name, 0) >= 8)
         grass = [] if safari(o.map) or weak(o.map) else sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
         no_grass = self.s.setdefault("no_grass", [])
         if not grass and any("," in "".join(r) for r in cells) and o.map not in no_grass:
