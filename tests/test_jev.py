@@ -1439,6 +1439,10 @@ def test_the_route_to_grass_for_training_leaves_out_blocked_hops(tmp_path):
     assert [x.label[:41] for x in agent.train_options(o, None)] == ["follow the map route to the tall grass on"]
     agent.s["nav_blocked"][f"{lav}:3,1"] = agent.s["step"] + 300
     assert agent.train_options(o, None) == []                               # the only way there is blocked
+    # full run 76: the Safari Zone's grass gives no experience (its battles are balls and bait)
+    sz = map_id("Safari Zone Center")
+    agent.nav.observe(sz, _view("Safari Zone Center", ["#####", "#P,,#", "#####"]), _warps_hex([]), [])
+    assert agent.train_options(J.parse("walked\nf1 Safari Zone Center (1,1) facing up | C L50 200/207 | ¥3000 | 5 badges"), None) == []
 
 
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):

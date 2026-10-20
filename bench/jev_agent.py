@@ -1366,7 +1366,9 @@ class Agent:
         except (KeyError, IndexError):
             return []
         cells = m["cells"]
-        grass = sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
+        # the Safari Zone's battles give no experience (balls and bait only): full run 76 trained there ~2,000 steps
+        safari = lambda name: name.startswith("Safari Zone")
+        grass = [] if safari(o.map) else sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
         no_grass = self.s.setdefault("no_grass", [])
         if not grass and any("," in "".join(r) for r in cells) and o.map not in no_grass:
             no_grass.append(o.map)                       # its grass is out of reach from where you arrive
@@ -1386,7 +1388,7 @@ class Agent:
         blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
         for name in self.s["visited"]:
             mid = map_id(name)
-            if mid is None or mid == cur or name in no_grass:
+            if mid is None or mid == cur or name in no_grass or safari(name):
                 continue
             try:
                 if not any("," in "".join(r) for r in self.nav.map(mid)["cells"]):
