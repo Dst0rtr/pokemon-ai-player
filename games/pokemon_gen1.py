@@ -779,6 +779,10 @@ class PokemonGen1Profile(GameProfile):
                     return " | ".join(logs) + f" — stopped: the trainer sent out {b['enemy']['species']} (L{b['enemy']['level']}); switch, use an item, or battle('auto') again"
             r = self.battle_action(emu, "fight", self._auto_move(target) if b else "")
             logs.append(r)
+            if b and b.get("kind") == "trainer" and re.search(r"Enemy [^|]*fainted", r) and self.in_battle() \
+                    and "battle over" not in r:
+                # its next Pokémon may be the same species (Lance's two Dragonair: Codex review 16): hand back now
+                return " | ".join(logs) + " — stopped: the trainer is sending out its next Pokémon; switch, use an item, or battle('auto') again"
             if ("needs a decision" in r or "prompt" in r or "battle('switch'" in r or "battle over" in r
                     or "battle is over" in r or r.startswith(("cannot", "could not", "no move", "no PP"))):
                 break

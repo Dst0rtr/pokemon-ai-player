@@ -131,6 +131,11 @@ def test_battle_options_are_the_legal_set():
     assert "throw a Poké Ball" in wild and "run away" in wild and "auto-battle" not in wild
     sw = J.battle_options(o.battle, party, [], only_switch=True)
     assert [x.label for x in sw] == ["switch to Charmeleon"] and sw[0].args == {"action": "switch", "target": "Charmeleon"}
+    # Codex review 16: Revives and status cures in battle
+    fainted = party + [{"species": "Lapras", "level": 15, "hp": 0, "max_hp": 65, "moves": []}]
+    frozen = dict(o.battle, mine=dict(o.battle["mine"], status="FRZ"))
+    labels = [x.label for x in J.battle_options(frozen, fainted, [("Revive", 2), ("Full Restore", 3)])]
+    assert "revive Lapras with a Revive" in labels and any(lb.startswith("cure") and "Full Restore" in lb for lb in labels)
     safari = dict(o.battle, menu="menu: BALL/BAIT/ROCK/RUN (Safari: cursor on BALL)")
     assert [x.args["action"] for x in J.battle_options(safari, party, [])] == ["item", "bait", "rock", "run"]
 
@@ -278,7 +283,14 @@ def test_the_league_is_prepared_for_in_the_lobby_and_between_rooms():
     lobby = J.parse("walked\nf1 Indigo Plateau Lobby (7,7) facing up | C L74 197/251 | ¥84142 | 8 badges")
     items = [("Rare Candy", 2), ("TM24", 1), ("Full Restore", 1)]
     o1 = d.league_prep_option(lobby, party, items)
-    assert o1.args == {"action": "use", "target": "Rare Candy", "target2": "Charizard"}
+    assert o1.args == {"action": "use", "target": "Rare Candy", "target2": "Charizard: weakest"}
+    # Codex review 16: a vitamin with no effect is not chosen again; a reliable same-type move is not traded away
+    d.s["no_effect"] = ["HP Up:Charizard"]
+    assert d.league_prep_option(lobby, party, [("HP Up", 1), ("TM24", 1)]).args["target"] == "TM24"
+    fl = [dict(party[0], moves=[{"name": "Flamethrower", "pp": 15}])]
+    assert d.league_prep_option(lobby, fl, [("TM38", 1), ("Full Restore", 10), ("Revive", 5)]) is None
+    d.s.pop("prep_done", None)
+    d.s.pop("no_effect")
     o2 = d.league_prep_option(lobby, party, items[1:])
     assert o2.args == {"action": "use", "target": "TM24", "target2": "Charizard: weakest"}
     d.s["hm_no"] = ["TM24:Charizard"]
@@ -292,6 +304,8 @@ def test_the_league_is_prepared_for_in_the_lobby_and_between_rooms():
     assert fr.args == {"action": "use", "target": "Full Restore", "target2": "Charizard"}
     rv = d.league_recover_option(room, [dict(party[0], hp=0)], [("Revive", 5)])
     assert rv.args["target"] == "Revive"
+    fz = d.league_recover_option(room, [dict(party[0], hp=240, status="FRZ")], [("Full Restore", 9)])
+    assert fz.args["target"] == "Full Restore" and "FRZ" in fz.label                 # healthy but frozen (Codex 16)
     d.objective(SOLO.Facts(badges=8, levels=[74]), room)                    # an attempt began: prepare again next time
     assert "prep_done" not in d.s
 
@@ -341,6 +355,9 @@ def test_a_tm_not_learned_twice_passes_that_pokemon_over(tmp_path):
     assert "TM24:Lapras" in agent.s["hm_no"]
     agent.remember_refusal(J.Option("x", "manage", {"action": "use", "target": "TM13", "target2": "Lapras: weakest"}),
                            "LAPRAS learned ICE BEAM!")
+    agent.remember_refusal(J.Option("x", "manage", {"action": "use", "target": "HP Up", "target2": "Lapras: weakest"}),
+                           "It won't have any effect.")
+    assert "HP Up:Lapras" in agent.s["no_effect"]
     assert "TM13:Lapras" not in agent.s["hm_no"] and "TM13:Lapras" not in agent.s.get("teach_tries", {})
 
 
@@ -1468,6 +1485,23 @@ def test_a_refusal_the_party_can_clear_is_no_failed_hop(tmp_path):
     agent.nav_feedback(o, opt, J.parse("went toward (13,3): left 15/15 — stopped: dialogue appeared"), "")
     key = f"{r8}:13,3"
     assert key not in agent.s["nav_blocked"] and key in agent.s["nav_noroute"]
+
+
+def test_a_door_walked_up_to_but_not_entered_is_a_failed_hop(tmp_path):
+    """Codex review 16: runs 88/89 got "arrived at (10,29): right 1/1, right 0/1 — stopped: blocked" at Route 5's gate
+    ~37 times per half; the player had moved, and the ' 0/1' check wanted it at the very end of the reply."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r5 = map_id("Route 5")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    o = J.parse("walked\nf1 Route 5 (9,29) facing right | C L40 100/120 | ¥3000 | 4 badges")
+    opt = J.Option("walk to the warp at (10,29) → Route 5 Gate", "walk", {"path": "to 10,29"})
+    after = J.parse("arrived at (10,29): right 1/1, right 0/1 — stopped: blocked\n"
+                    "f1 Route 5 (10,29) facing right | C L40 100/120 | ¥3000 | 4 badges")
+    agent.nav_feedback(o, opt, after, "")
+    assert f"{r5}:10,29" in agent.s["nav_noroute"]
 
 
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):

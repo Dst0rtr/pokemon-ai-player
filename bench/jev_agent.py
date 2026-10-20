@@ -623,6 +623,11 @@ class Agent:
                 self.s.setdefault("no_toss", []).append(opt.args["target"])
             else:
                 self.s["toss_failed_step"] = self.s["step"]
+        if opt.tool == "manage" and opt.args.get("action") == "use" and "won't have any effect" in reply.lower():
+            # a vitamin at its cap, a candy on a L100 Pokémon: not offered again for it (Codex review 16: HP Up and Iron
+            # stayed in run 88's bag and league preparation chose them again and again)
+            self.s.setdefault("no_effect", []).append(
+                f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}")
         if opt.tool == "manage" and opt.args.get("action") == "use" and "not compatible" in reply:
             refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
             self.s.setdefault("hm_no", []).append(refused)
@@ -2031,7 +2036,7 @@ class Agent:
         elif "no walkable route" in after.head or (after.mode == "overworld" and after.map == o.map and after.pos == o.pos
                                                     and "already at" not in after.head) \
                 or (m and after.mode == "overworld" and after.map == o.map and after.pos
-                    and re.search(r" 0/1(?: — could not get closer)?$", after.head)
+                    and re.search(r" 0/1(?: — could not get closer| — stopped: blocked)?$", after.head)
                     and abs(after.pos[0] - int(m[1])) + abs(after.pos[1] - int(m[2])) <= 2) \
                 or ("stopped: dialogue appeared" in after.head and after.map in ("", o.map)):
             # (a person who stops the walk every time, e.g. Saffron's thirsty gate guards, blocks the hop like a wall;

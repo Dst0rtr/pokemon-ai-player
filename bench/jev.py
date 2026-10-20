@@ -416,6 +416,10 @@ def choice_options(o: Obs) -> list[Option]:
     return out
 
 
+BATTLE_CURES = {"PSN": ("Antidote",), "BRN": ("Burn Heal",), "PAR": ("Paralyze Heal",), "FRZ": ("Ice Heal",),
+                "SLP": ("Awakening",)}
+
+
 def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], allow_auto: bool = True,
                    only_switch: bool = False, run_note: str = "") -> list[Option]:
     """The legal battle actions. Switches name the species: Gen 1 reorders the party in battle, so slot numbers go
@@ -449,6 +453,18 @@ def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], all
         for h in HEAL_ITEMS:
             if h in names:
                 opts.append(Option(f"use {h}", "battle", {"action": "item", "target": h}, "heal the Pokémon in battle"))
+    # a fainted teammate revived and a status cured in battle (Codex review 16: bought Revives were only usable between
+    # rooms, and a frozen or paralysed fighter at full HP had no option)
+    revive = next((r for r in ("Max Revive", "Revive") if r in names), None)
+    for p in party:
+        if revive and p["hp"] <= 0:
+            opts.append(Option(f"revive {p['species']} with a {revive}", "battle",
+                               {"action": "item", "target": f"{revive}: {p['species']}"}, "back in the fight"))
+    st = (mine.get("status") or "").split(" ")[0]
+    cure = next((c for c in BATTLE_CURES.get(st, ()) + ("Full Heal", "Full Restore") if c in names), None) if st else None
+    if cure:
+        opts.append(Option(f"cure {mine.get('species', 'it')} ({st}) with {cure}", "battle",
+                           {"action": "item", "target": cure}, "it cannot fight well like this"))
     if kind == "wild":
         ball = next((x for x in BALLS if x in names), None)
         if ball and len(party) < 4:                    # a small team: catching is worth an option

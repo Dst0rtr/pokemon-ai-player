@@ -66,6 +66,7 @@ JUNK = ("Moon Stone", "Fire Stone", "Water Stone", "Thunder Stone", "Leaf Stone"
         "Old Amber", "Nugget", "Poké Doll", "Antidote", "Burn Heal", "Ice Heal", "Awakening", "Paralyze Heal")
 # strong attacks taught from the bag, never tossed (Codex 6: runs 73/75 tossed TM24 Thunderbolt first; the Elite Four
 # beat a team with one fighter and no coverage). A TM is used up when taught, so the strongest Pokémon gets it first.
+SAME_TYPE_RELIABLE = {"Fire Blast": "Flamethrower", "Blizzard": "Ice Beam", "Thunder": "Thunderbolt"}
 KEEP_TMS = {"TM24": "Thunderbolt", "TM13": "Ice Beam", "TM26": "Earthquake", "TM29": "Psychic", "TM38": "Fire Blast",
             "TM14": "Blizzard", "TM25": "Thunder", "TM15": "Hyper Beam"}
 STATUS_CURES = {"PSN": ("Antidote",), "BRN": ("Burn Heal",), "PAR": ("Paralyze Heal",), "FRZ": ("Ice Heal",),
@@ -487,17 +488,23 @@ class SoloDirector:
             return None
         have = dict(items)
         carry = max(party, key=lambda p: p.get("level", 0))
+        no_effect = set(self.s.get("no_effect", []))
         for it in ("Rare Candy", "HP Up", "Protein", "Iron", "Carbos", "Calcium"):
-            if have.get(it):
+            if have.get(it) and f"{it}:{carry['species']}" not in no_effect:
+                # (a candy's level-up move is learned over the weakest move, never skipped: Codex review 16)
                 return Option(f"use a {it} on {carry['species']} (league preparation)", "manage",
-                              {"action": "use", "target": it, "target2": carry["species"]}, "stronger for the Elite Four")
+                              {"action": "use", "target": it, "target2": f"{carry['species']}: weakest"},
+                              "stronger for the Elite Four")
         refused = set(self.s.get("hm_no", []))
         for tm, move in KEEP_TMS.items():
             if not have.get(tm):
                 continue
+            # (a reliable move of the same type is kept: Fire Blast's 5 PP for Flamethrower's 15, Blizzard over the Ice Beam
+            # just taught; Codex review 16)
             mon = next((p["species"] for p in sorted(party, key=lambda p: -p.get("level", 0))
                         if f"{tm}:{p['species']}" not in refused
-                        and move not in [m["name"] if isinstance(m, dict) else m for m in p.get("moves", [])]), None)
+                        and not {move, SAME_TYPE_RELIABLE.get(move)} & {m["name"] if isinstance(m, dict) else m
+                                                                       for m in p.get("moves", [])}), None)
             if mon:
                 return Option(f"teach {tm} ({move}) to {mon} (league preparation)", "manage",
                               {"action": "use", "target": tm, "target2": f"{mon}: weakest"}, "coverage for the Elite Four")
@@ -532,6 +539,12 @@ class SoloDirector:
                 return Option(f"use a {it} on {carry['species']}", "manage",
                               {"action": "use", "target": it, "target2": carry["species"]}, "it fainted")
             return None
+        if carry.get("status"):                           # frozen/asleep/paralysed at full HP is no fighter either
+            cure = next((c for c in STATUS_CURES.get(carry["status"].split(" ")[0], ()) + ("Full Heal", "Full Restore")
+                         if have.get(c)), None)
+            if cure:
+                return Option(f"cure {carry['species']} ({carry['status']}) with {cure}", "manage",
+                              {"action": "use", "target": cure, "target2": carry["species"]}, "before the next fight")
         if carry["hp"] < carry["max_hp"] * 0.7:
             it = next((i for i in ("Full Restore", "Max Potion", "Hyper Potion", "Super Potion") if have.get(i)), None)
             if it:

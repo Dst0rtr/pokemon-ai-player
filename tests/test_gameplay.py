@@ -470,6 +470,16 @@ def test_auto_battle_hands_back_a_trainers_next_pokemon(emu, monkeypatch):
     monkeypatch.setattr(prof, "battle_action", act)
     out = prof.battle_auto(emu)
     assert "trainer sent out Cloyster" in out and "Cloyster" not in attacked, (out, attacked)
+    # Codex review 16: two of the same species in a row (Lance's Dragonair): the faint itself hands back
+    state["foe"] = "Dragonair"
+    attacked.clear()
+
+    def act2(emu_, action, target=""):
+        attacked.append(state["foe"])
+        return "Enemy DRAGONAIR fainted! | turn done"
+    monkeypatch.setattr(prof, "battle_action", act2)
+    out = prof.battle_auto(emu)
+    assert "sending out its next" in out and attacked == ["Dragonair"], (out, attacked)
 
 
 def test_milestone_snapshot_includes_team(emu):
