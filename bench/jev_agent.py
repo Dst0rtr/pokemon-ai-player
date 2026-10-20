@@ -46,6 +46,7 @@ TROD_RADIUS = 3                                 # floor within this many steps o
 SWITCH_REST_STEPS = 15                          # a Mansion switch just pressed is not offered again this long
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
+SHORT_BLOCK_STEPS = 30                          # ...or this long when something on the way stopped the walk
 FACING_STEP = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?|"
                            r"the boulder is at \(|fell into the hole|pushed \w+ to \(\d+,\d+\), then stopped",
@@ -2002,7 +2003,13 @@ class Agent:
                 same_part = bool(fails) and (not o.pos or not isinstance(self.nav, LearnedAtlas) or ScopedBlocks(
                     (key,), {key: [f[:2] for f in fails]}, self.nav.linked).applies(key, (cur, o.pos[0], o.pos[1])))
                 if same_part:
-                    self.s["nav_blocked"][key] = self.s["step"] + NAV_BLOCK_STEPS   # failed again: try another way
+                    # failed again: try another way; stopped by something on the way before the first step ("— down
+                    # 0/7": someone standing in a one-cell corridor) only for a short while (full run 87: Pokémon Tower
+                    # 6F's corridor to the 7F stairs, blocked 300 steps after two such stops, and the player left for
+                    # Route 8; run 85 had walked through on the next try)
+                    held = SHORT_BLOCK_STEPS if re.search(r"on this map — (?:up|down|left|right) 0/\d+", after.head) \
+                        else NAV_BLOCK_STEPS
+                    self.s["nav_blocked"][key] = self.s["step"] + held
                     if o.pos:                             # the parts of the map it is blocked in (Codex review 8)
                         fs = self.s.setdefault("nav_block_from", {}).get(key) or []
                         fs = [f for f in (fs if not fs or isinstance(fs[0], list) else [fs])

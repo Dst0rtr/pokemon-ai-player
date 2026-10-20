@@ -1373,6 +1373,26 @@ def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
     assert agent.loops_back(gate14, [J_Hop(gate14, "edge", 0, 1, r15, side="west")] + route)
 
 
+def test_a_hop_stopped_by_someone_on_the_way_is_held_only_briefly(tmp_path):
+    """Full run 87: Pokémon Tower 6F's one-cell corridor to the 7F stairs was stopped twice ("no walkable route ... —
+    down 0/7": someone in the way), the hop was blocked for 300 steps and the player left for Route 8; run 85 walked
+    through on the next try. Such a block lasts SHORT_BLOCK_STEPS."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    import bench.jev_agent as JA
+    f6 = map_id("Pokémon Tower 6F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    o = J.parse("walked\nf1 Pokémon Tower 6F (6,7) facing down | C L40 100/120 | ¥3000 | 4 badges")
+    opt = J.Option("follow the map route to Pokémon Tower 7F: walk to the warp at (9,16) → Pokémon Tower 7F", "walk",
+                   {"path": "to 9,16"})
+    for step in (100, 101):
+        agent.s["step"] = step
+        agent.nav_feedback(o, opt, J.parse("no walkable route from (6,7) to (9,16) on this map — down 0/7"), "")
+    assert agent.s["nav_blocked"][f"{f6}:9,16"] == 101 + JA.SHORT_BLOCK_STEPS
+
+
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
     from bench.jev_atlas import LearnedAtlas
     from bench.jev_nav import map_id
