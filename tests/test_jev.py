@@ -2838,6 +2838,13 @@ def test_a_guarded_poster_is_examined_from_where_the_guard_stood(tmp_path):
     assert agent.clue_options(at)[0].args == {"path": "up 1", "on_battle": "stop"} and agent.clue_options(at)[0].then == [("talk", {})]
     agent.remember_door(at, opts[0], "dialogue ended: Hey! | A switch behind the poster!?")
     assert "clues" in agent.s and agent.clue_options(at) == [] and agent.atlas_due(at) and not agent.nav.unreachable(gc, (12, 2), (17, 1))
+    # full run 84: the guard was heard through "first clear the way" (the route's blocker), not "talk to the person"
+    agent.s.pop("clues", None)
+    clear = J.Option("follow the map route to Rocket Hideout B1F: first clear the way at (9,2) (talk to it / take it)",
+                     "walk", {"path": "to 10,2"}, then=[("talk", {})])
+    agent.remember_talk(o, clear, J.parse("dialogue ended: I'm guarding this poster! | Go away, or else!\n"
+                                          "f1 Game Corner (10,2) facing left | C L40 120/130 | ¥3000 | 4 badges"))
+    assert agent.s["clues"]["Game Corner"] == [9, 2]
 
 
 def test_a_walk_that_ends_far_from_a_warp_or_slides_does_not_learn_it_unreachable(tmp_path):

@@ -1175,9 +1175,13 @@ class Agent:
 
     def remember_talk(self, o: Obs, opt: Option, after: Obs) -> None:
         """What a person or object answered, per map (shown in the next talk options; empty spots are dropped)."""
-        if not (o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk")):
+        clear = re.search(r"first clear the way at \((\d+),(\d+)\)", opt.label)
+        if not (o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk" or clear)):
             return
-        m = re.search(r"\((\d+),(\d+)\)", opt.label) if opt.label.startswith(("talk to the person", "examine the object")) else None
+        # (clearing the way is talking to whoever stands there: full run 84 heard "I'm guarding this poster!" through
+        # it, recorded no clue, and left the Game Corner with the poster switch untried)
+        person = opt.label.startswith("talk to the person") or bool(clear)
+        m = clear or (re.search(r"\((\d+),(\d+)\)", opt.label) if opt.label.startswith(("talk to the person", "examine the object")) else None)
         key = f"{m[1]},{m[2]}" if m else f"facing {o.pos} {o.facing}"
         if m and opt.label.startswith("examine the object"):
             key += " " + opt.label.rsplit(" from ", 1)[-1]     # each side is a different try
@@ -1196,7 +1200,7 @@ class Agent:
                     self.s["spot_goal"] = [o.map, int(m[1]), int(m[2]), self.s["step"],
                                            "ball" if "item ball" in opt.label else "person"]
             return
-        if m and opt.label.startswith("talk to the person") and CLUE_RE.search(after.text) and \
+        if m and person and CLUE_RE.search(after.text) and \
                 not MAP_CHANGE_RE.search(after.text):
             # "I'm guarding this poster!": the walls beside where they stand hide something (full run 64 found the
             # Game Corner's switch only by a lucky talk from the guard's spot; run 65 never did)
@@ -1324,7 +1328,8 @@ class Agent:
                     # no untaken exit, its frontier sent the player back to Viridian City, this rule back to Route 2,
                     # ~11,000 steps)
                     try:
-                        open_ = bool(found and found[0]) and (found[1][1] < 0 or bool([
+                        # (a target map with a clue not followed yet is somewhere to go too: the Game Corner's poster)
+                        open_ = bool(found and found[0]) and (found[1][1] < 0 or t in self.s.get("clues", {}) or bool([
                             h for h in self.nav.frontier(mid, (found[1][1], found[1][2]), set(self.s["visited"]),
                                                          surf=surf, cut=cut, blocked=blocked) if h.dest_name not in closed]))
                     except (KeyError, IndexError, ValueError):
