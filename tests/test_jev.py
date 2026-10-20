@@ -1167,6 +1167,7 @@ def test_after_a_black_out_in_viridian_forest_the_route_goes_back_to_it(tmp_path
 
 
 def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
+    from bench.jev_nav import Hop as J_Hop
     """Full run 81: from Route 15's east part (its gate not entered yet) the route to Fuchsia went round by Route 14,
     13, 12, Lavender and Route 8 and back to "somewhere on Route 15", then out its west edge. Such a route only says
     this part does not reach the goal: the frontier (the gate) takes over."""
@@ -1190,6 +1191,10 @@ def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
     route = agent.nav.route(r15, (5, 1), gate)
     assert route and route[0].dest == r14 and agent.loops_back(r15, route)
     assert not agent.loops_back(r14, agent.nav.route(r14, (2, 1), r15))     # a plain route is kept
+    # full run 82: the loop back to a map the route was on before (not the current one) is caught too
+    gate14 = map_id("Route 14")
+    route = agent.nav.route(r15, (5, 1), gate)
+    assert agent.loops_back(gate14, [J_Hop(gate14, "edge", 0, 1, r15, side="west")] + route)
 
 
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):

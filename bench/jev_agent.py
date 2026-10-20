@@ -1648,7 +1648,12 @@ class Agent:
         arrival was missed)."""
         if not isinstance(self.nav, LearnedAtlas):
             return False
-        return any(h.map == cur and (h.x < 0 or not self.nav.arrival_known(route[i])) for i, h in enumerate(route[1:]))
+        seen = {cur}                                      # any map the route was already on, not only this one (full
+        for i, h in enumerate(route):                     # run 82: from the Underground Path's building out to Route 5,
+            if i and h.map in seen and (h.x < 0 or not self.nav.arrival_known(route[i - 1])):   # through Route 5's gate
+                return True                               # and back to "somewhere on Route 5"; the building and Route 5
+            seen.add(h.map)                               # sent the player to each other ~600 steps)
+        return False
 
     def boulders(self, cur: int, o: Obs) -> set:
         """Boulders on this map: in the current view, else where the last view of it showed them (a status-only reply
