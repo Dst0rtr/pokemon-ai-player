@@ -793,7 +793,17 @@ class Agent:
         (3F's switch, then its collapsed floor, then the hole to 1F's stairs to B1F) for hundreds of steps."""
         if not self.puzzle_pending(targets):
             return opts
-        here = lambda x: x.label.startswith("explore the frontier") and "(unexplored exits)" not in x.label
+        # stairs where a known staircase lands on this floor lead back the way it came, not anywhere new (volcano-leg-20
+        # came up 2F's (6,1) into 3F's top left for the first time and went straight back down by 3F's untaken (6,1))
+        lands = set()
+        if o is not None and isinstance(self.nav, LearnedAtlas) and map_id(o.map) is not None:
+            for m in self.nav.data["maps"].values():
+                lands |= {(a["x"], a["y"]) for a in m.get("arrivals", {}).values()
+                          if a.get("seen") and a.get("map") == map_id(o.map)}
+        def back(x: Option) -> bool:
+            w = re.search(r"warp at \((\d+),(\d+)\)", x.label)
+            return bool(w) and any(abs(int(w[1]) - a) + abs(int(w[2]) - b) <= 1 for a, b in lands)
+        here = lambda x: x.label.startswith("explore the frontier") and "(unexplored exits)" not in x.label and not back(x)
         dist = None
         if o is not None and o.pos and map_id(o.map) is not None:
             try:
@@ -809,6 +819,7 @@ class Agent:
                  lambda x: x.label.startswith("explore the unvisited floor"),
                  lambda x: x.label.startswith(("go back to", "take the stairs")),
                  lambda x: x.label.startswith("press the secret switch"),
+                 back,
                  # another floor's exits last: volcano-leg-14 went 1F <-> 2F ~20 times between "go to 1F (unexplored
                  # exits)" on 2F and "go back to 3F" (through 2F) on 1F
                  lambda x: x.label.startswith("explore the frontier"))

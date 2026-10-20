@@ -1345,6 +1345,9 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     assert [x.label[:7] for x in agent.puzzle_order(away + mixed[1:2], T, inside)] == ["go back"]   # a switch comes last
     assert [x.label[:5] for x in agent.puzzle_order(away[:1] + mixed[1:2], T, inside)] == ["press"]
     assert agent.s["flips"] == 1 and agent.trod_key("Pokémon Mansion 1F") == "Pokémon Mansion 1F#1"   # one YES so far
+    agent.nav.data["maps"][str(f2)]["arrivals"]["3,1"] = {"map": f1, "x": 4, "y": 2, "seen": True}   # 2F's stairs land at (4,2)
+    stairs_back = mk("explore the frontier: walk to the untaken warp at (4,2) → Pokémon Mansion 2F")
+    assert agent.puzzle_order(stairs_back + mixed[2:3], T, inside) == mixed[2:3]        # the way back is not new
     assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 2F", "Pokémon Mansion 1F"]) == leave  # 1F is the goal floor
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
