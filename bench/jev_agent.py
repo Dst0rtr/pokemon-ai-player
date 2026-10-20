@@ -1295,7 +1295,7 @@ class Agent:
             blocked = self.blocked_now(o)
             route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked,
                                    entry=entry, goal_cells=cells)
-            if route and isinstance(self.nav, LearnedAtlas) and any(h.map == cur and h.x < 0 for h in route[1:]):
+            if route and self.loops_back(cur, route):
                 # the route leaves this map and comes back to "somewhere on it" through arrivals not known yet: it only
                 # says this part of the map does not reach the goal (full run 81: from Route 15's east part to Fuchsia
                 # round by Route 14, 13, 12, Lavender and Route 8, while Route 15's own gate was the way on)
@@ -1331,7 +1331,7 @@ class Agent:
                                                          surf=surf, cut=cut, blocked=blocked) if h.dest_name not in closed]))
                     except (KeyError, IndexError, ValueError):
                         open_ = False
-                    if open_:
+                    if open_ and not self.loops_back(cur, found[0]):
                         route, goal = found[0], mid
                         break
             if route:
@@ -1642,6 +1642,14 @@ class Agent:
             self.s["sleeper"].pop(here)
             if (self.s.get("spot_goal") or [""])[0] == here:
                 self.s.pop("spot_goal")
+
+    def loops_back(self, cur: int, route: list) -> bool:
+        """A route that comes back to this map at a point the atlas does not know (then a warp or an edge from there):
+        it only says this part of the map does not reach the goal (a601d76; Codex review 8: a warp after the unknown
+        arrival was missed)."""
+        if not isinstance(self.nav, LearnedAtlas):
+            return False
+        return any(h.map == cur and (h.x < 0 or not self.nav.arrival_known(route[i])) for i, h in enumerate(route[1:]))
 
     def boulders(self, cur: int, o: Obs) -> set:
         """Boulders on this map: in the current view, else where the last view of it showed them (a status-only reply

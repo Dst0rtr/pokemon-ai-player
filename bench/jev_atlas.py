@@ -303,6 +303,19 @@ class LearnedAtlas(WorldNav):
                 out.append((dist[c] + 1, Hop(mid, "edge", c[0], c[1], dm, side=side, steps=dist[c] + 1), arr))
         return dist, out
 
+    def arrival_known(self, hop) -> bool:
+        """Whether the atlas knows where `hop` lands (an edge needs its learned offset; a warp its arrival or the
+        destination's warp list)."""
+        try:
+            if hop.kind == "edge":
+                e = self.data["edges"].get(f"{hop.map}:{hop.side}")
+                return hop.x >= 0 and bool(e) and e.get("map") == hop.dest
+            m = self.map(hop.map)
+            i = next(i for i, w in enumerate(m["warps"]) if (w[0], w[1]) == (hop.x, hop.y))
+            return all(a[1:] != UNKNOWN for a in self.warp_dest(hop.map, i))
+        except (KeyError, StopIteration, IndexError):
+            return False
+
     def route(self, mid, pos, goal, **kw):
         try:
             return super().route(mid, pos, goal, **kw)

@@ -1145,6 +1145,12 @@ def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
     opts, _ = agent.nav_options(o, ["Route 13", "Fuchsia City"], SOLO.Facts(badges=4), "fuchsia")
     assert not [x for x in opts if x.label.startswith("follow the map route to Fuchsia")], [x.label for x in opts]
     assert any("(3,1)" in x.label for x in opts), [x.label for x in opts]   # the gate
+    # Codex review 8: the same, with a warp after the unknown arrival (a gate walled off from this part)
+    agent.nav.observe(r15, _view("Route 15", ["..#.#..", "..#D#..", "..###.."]), _warps_hex([(3, 1, 0, gate)]),
+                      [("west", "Fuchsia City"), ("east", "Route 14")])
+    route = agent.nav.route(r15, (5, 1), gate)
+    assert route and route[0].dest == r14 and agent.loops_back(r15, route)
+    assert not agent.loops_back(r14, agent.nav.route(r14, (2, 1), r15))     # a plain route is kept
 
 
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
