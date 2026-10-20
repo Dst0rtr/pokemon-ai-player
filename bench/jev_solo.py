@@ -135,7 +135,10 @@ GRAPH: list[Node] = [
          ("Pallet Town", "Oak's Lab"), lambda f: "Oak's Parcel" in f.ever_items and "Oak's Parcel" not in f.items),
     Node("forest", "Go north from Viridian City along Route 2 into Viridian Forest.", ("Viridian City", "Route 2", "Viridian Forest"),
          lambda f: f.reached("Viridian Forest")),
-    Node("pewter", "Find the way through Viridian Forest to Pewter City.", ("Route 2", "Pewter City"), lambda f: f.reached("Pewter City")),
+    # (the forest is a target too: full run 82 blacked out in it, woke in Viridian, and with Route 2's south part fully
+    # explored the frontier chose Pallet Town, nearer than the forest, ~600 steps)
+    Node("pewter", "Find the way through Viridian Forest to Pewter City.", ("Route 2", "Viridian Forest", "Pewter City"),
+         lambda f: f.reached("Pewter City")),
     Node("brock", "Beat Brock in the Pewter Gym.", ("Pewter Gym",), _badge(1)),
     Node("mtmoon", "Go east along Route 3 to Mt. Moon (the 'follow the map route' option knows the way).",
          ("Route 3", "Route 4", "Mt. Moon 1F"), lambda f: f.reached("Mt. Moon 1F")),

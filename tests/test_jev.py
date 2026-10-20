@@ -1136,6 +1136,31 @@ def test_a_blocked_hop_stays_blocked_only_in_the_part_it_failed_from(tmp_path):
     assert hops and hops[-1].dest == r10, hops
 
 
+def test_after_a_black_out_in_viridian_forest_the_route_goes_back_to_it(tmp_path):
+    """Full run 82 blacked out in Viridian Forest and woke in Viridian City; the objective named Route 2 and Pewter only,
+    Route 2's south part had nothing left to explore, and the frontier went to Pallet Town (nearer) ~600 steps."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    vc, r2, vf, pal = map_id("Viridian City"), map_id("Route 2"), map_id("Viridian Forest"), map_id("Pallet Town")
+    agent.nav.observe(vc, _view("Viridian City", ["...", "...", "..."]), _warps_hex([]), [("north", "Route 2"), ("south", "Pallet Town")])
+    agent.nav.observe(r2, _view("Route 2", ["...", ".D.", "..."]), _warps_hex([(1, 1, 0, vf)]), [("south", "Viridian City")])
+    agent.nav.observe(vf, _view("Viridian Forest", ["...", "...", ".D."]), _warps_hex([(1, 2, 0, r2)]), [("north", "Route 2")])
+    agent.nav.observe(pal, _view("Pallet Town", ["...", ".D.", "..."]), _warps_hex([(1, 1, 0, 37)]), [("north", "Viridian City")])
+    for a, side, b in ((vc, "north", r2), (r2, "south", vc), (vc, "south", pal), (pal, "north", vc)):
+        agent.nav.data["edges"][f"{a}:{side}"] = {"map": b, "offset": 0, "fixed": 2 if side == "north" else 0, "seen": True}
+    agent.nav.data["maps"][str(r2)]["arrivals"]["1,1"] = {"map": vf, "x": 1, "y": 2, "seen": True}
+    agent.nav.data["maps"][str(vf)]["arrivals"]["1,2"] = {"map": r2, "x": 1, "y": 1, "seen": True}
+    agent.nav._maps.clear()
+    agent.s["visited"] = ["Pallet Town", "Viridian City", "Route 2", "Viridian Forest"]
+    o = J.parse("walked\nf1 Viridian City (1,1) facing down | C L7 20/24 | ¥2543 | 0 badges")
+    node = next(n for n in SOLO.GRAPH if n.id == "pewter")
+    opts, _ = agent.nav_options(o, list(node.targets), SOLO.Facts(badges=0), node.id)
+    assert opts[0].label.startswith("follow the map route to Viridian Forest"), [x.label for x in opts]
+
+
 def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
     """Full run 81: from Route 15's east part (its gate not entered yet) the route to Fuchsia went round by Route 14,
     13, 12, Lavender and Route 8 and back to "somewhere on Route 15", then out its west edge. Such a route only says
