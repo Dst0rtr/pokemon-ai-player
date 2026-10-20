@@ -2845,6 +2845,11 @@ def test_a_guarded_poster_is_examined_from_where_the_guard_stood(tmp_path):
     agent.remember_talk(o, clear, J.parse("dialogue ended: I'm guarding this poster! | Go away, or else!\n"
                                           "f1 Game Corner (10,2) facing left | C L40 120/130 | ¥3000 | 4 badges"))
     assert agent.s["clues"]["Game Corner"] == [9, 2]
+    # Codex review 11: a clear-the-way walk that never got there is no conversation (nothing said, no clue)
+    agent.s.pop("clues", None)
+    agent.s["said"].pop("Game Corner", None)
+    agent.remember_talk(o, clear, J.parse("no walkable route from (12,2) to (10,2) on this map"))
+    assert "9,2" not in agent.s["said"].get("Game Corner", {}) and "clues" not in agent.s
 
 
 def test_a_walk_that_ends_far_from_a_warp_or_slides_does_not_learn_it_unreachable(tmp_path):
