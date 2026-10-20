@@ -1089,14 +1089,15 @@ def test_a_boulder_or_a_door_change_keeps_a_refusal_from_being_a_lasting_wall(tm
                   nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
     agent.nav.observe(vr, _view("Victory Road 1F", ["#######", "#D.B.P#", "#######"]), _warps_hex([(1, 1, 0, 34)]), [])
     o = J.parse("walked\nf1 Victory Road 1F (5,1) facing left | C L60 180/190 | ¥2543 | 7 badges")
-    o.grid = {(3, 1): "B"}
     opt = J.Option("walk to the warp at (1,1) → Route 23", "walk", {"path": "to 1,1"})
-    agent.nav_feedback(o, opt, J.parse("no walkable route from (5,1) to (1,1) on this map"), "")
-    assert not agent.s.get("terrain_noroute")
-    agent.learn_noroute(o)
-    assert not agent.nav.unreachable(vr, (5, 1), (1, 1))
-    # a terrain refusal elsewhere: recorded with its origin, and dropped when the map changes
-    o.grid = {}
+    for grid in ({(3, 1): "B"}, {}):                  # in the view, or only in the atlas's last view (Codex 7)
+        o.grid = grid
+        agent.nav_feedback(o, opt, J.parse("no walkable route from (5,1) to (1,1) on this map"), "")
+        assert not agent.s.get("terrain_noroute")
+        agent.learn_noroute(o)
+        assert not agent.nav.unreachable(vr, (5, 1), (1, 1))
+    # a terrain refusal once the boulder is gone: recorded with its origin, and dropped when the map changes
+    o.grid = {(3, 1): ".", (4, 1): "."}                # a view without it
     agent.nav_feedback(o, opt, J.parse("no walkable route from (5,1) to (1,1) on this map"), "")
     assert agent.s["terrain_noroute"][f"{vr}:1,1"][1:] == [5, 1]
 
@@ -2435,8 +2436,11 @@ def test_with_the_flute_the_route_goes_to_where_snorlax_sleeps(tmp_path, nav):
     cells = agent.spot_cells(north, r12, r12)
     hops = agent.nav.route(r12, (9, 0), r12, goal_cells=cells)
     assert hops and any(h.dest == map_id("Route 12 Gate 1F") for h in hops), hops
-    f.events = {"snorlax"}
-    agent.s.pop("spot_goal")
+    agent.s["sleeper"]["Route 16"] = [26, 10]
+    woke = J.parse("Enemy SNORLAX fainted! | AAAA gained 660 EXP. Points!\n"
+                   "f1 Route 12 (10,61) facing down | C L40 100/120 | ¥3000 | 4 badges")
+    agent.sleeper_gone(J.parse("battle"), woke)
+    assert "spot_goal" not in agent.s and agent.s["sleeper"] == {"Route 16": [26, 10]}   # Route 16's stays (Codex 7)
     agent.nav_options(north, ["Lavender Town", "Route 12"], f, "fuchsia")
     assert "spot_goal" not in agent.s                                      # awake: no goal
 

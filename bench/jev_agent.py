@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, ClaudePlanner, JevError, drop_repeats,  # noqa: E402
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
-from bench.jev_solo import GRAPH, GYM_NODES, STUCK_Q, is_status_move, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS  # noqa: E402
+from bench.jev_solo import GRAPH, GYM_NODES, STUCK_Q, is_status_move, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS, STORY_RE as SOLO_STORY_RE  # noqa: E402
 from bench.jev_nav import MOVES, Hop, WorldNav, map_id  # noqa: E402
 from bench.jev_atlas import LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
@@ -529,6 +529,7 @@ class Agent:
         after = parse(reply)
         if self.nav and o.map and opt.tool == "walk":
             self.nav_feedback(o, opt, after, route_key)
+        self.sleeper_gone(o, after)
         if o.map and (opt.label.startswith(("talk to", "examine")) or opt.tool == "talk" or any(t == "talk" for t, _ in opt.then)):
             self.s.setdefault("npcs", {}).pop(o.map, None)   # people move after talking (Bill into his machine)
         self.remember_talk(o, opt, after)
@@ -1252,7 +1253,7 @@ class Agent:
             entry = {}
         self.entry_pending = goal in entry
         sl = self.s.get("sleeper", {}).get(o.map)
-        if sl and facts and facts.has("Poké Flute") and "snorlax" not in facts.events:
+        if sl and facts and facts.has("Poké Flute"):
             self.s["spot_goal"] = [o.map, sl[0], sl[1], self.s["step"], "person"]   # the route goes to its side
         cells = self.spot_cells(o, cur, goal)
         if cells is not None:
@@ -1603,6 +1604,23 @@ class Agent:
         if last and last[0] == o.map and self.s["step"] - last[3] <= 40:
             self.nav.record_walk(map_id(o.map), (last[1], last[2]), tuple(o.pos))
 
+    def sleeper_gone(self, o: Obs, after: Obs) -> None:
+        """A Snorlax woken (or beaten, or caught; the reply comes from a battle or its dialogue) on the map the player is
+        on: its goal ends; another map's Snorlax keeps its own (Codex review 7)."""
+        here = after.map or o.map or (self.s.get("last_ow") or [""])[0]
+        if here in self.s.get("sleeper", {}) and SOLO_STORY_RE["snorlax"].search(after.head + "\n" + after.text):
+            self.s["sleeper"].pop(here)
+            if (self.s.get("spot_goal") or [""])[0] == here:
+                self.s.pop("spot_goal")
+
+    def boulders(self, cur: int, o: Obs) -> set:
+        """Boulders on this map: in the current view, else where the last view of it showed them (a status-only reply
+        has no view, and the atlas keeps boulders as floor: Codex review 7 had a refusal there learned as a lasting wall)."""
+        seen = self.s.setdefault("boulders", {})
+        if o.grid and o.map:
+            seen[o.map] = sorted([c[0], c[1]] for c, ch in o.grid.items() if ch == "B")
+        return {tuple(c) for c in seen.get(o.map or "", [])}
+
     def learn_noroute(self, o: Obs) -> None:
         """Learned atlas: a refusal with nobody on the path is a wall the map view does not show (cave elevation);
         with someone or something on it, it is a blocker to clear, not a wall."""
@@ -1614,7 +1632,7 @@ class Agent:
                 continue
             cur, frm, to = p[0], (p[1], p[2]), (p[3], p[4])
             try:
-                stones = {c for c, ch in (o.grid or {}).items() if ch == "B"}   # a boulder is moved, not a wall
+                stones = self.boulders(cur, o)                   # a boulder is moved, not a wall
                 on_path = set(self.nav.path_cells(cur, frm, to)) & (set(o.npcs) | stones)
                 cells = self.nav.map(cur)["cells"]
                 tree = any(0 <= y < len(cells) and 0 <= x < len(cells[y]) and cells[y][x] in ("T", "~")
@@ -1702,6 +1720,7 @@ class Agent:
             # then went back and forth across Lavender's south edge: Route 12's north part is walled off from it)
             dx, dy = FACING_STEP[after.facing]
             self.s.setdefault("sleeper", {})[after.map] = [after.pos[0] + dx, after.pos[1] + dy]
+
         if o.map and o.pos and after.map == o.map and o.mode == "overworld":
             # every cell a walk stepped on counts as walked, not only where it ended ("left 3/3, up 2/2")
             x, y = o.pos
@@ -1767,7 +1786,7 @@ class Agent:
             # Boulders are the exception: the server routes around them, so a map with one may refuse for where they
             # stand now, not for the terrain (Codex 6)
             terrain = not re.search(r"on this map — (?:up|down|left|right) \d+/\d+", after.head) and \
-                "B" not in (o.grid or {}).values()
+                not self.boulders(cur, o)
             self.s["pending_noroute"] = [[cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4]), int(terrain)]]
             if terrain:     # with where it was refused from: elsewhere on the map the way may be someone to clear
                 self.s.setdefault("terrain_noroute", {})[f"{cur}:{nr[3]},{nr[4]}"] = \
