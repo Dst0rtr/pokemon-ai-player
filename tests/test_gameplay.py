@@ -424,6 +424,19 @@ def test_a_safari_battle_shows_its_menu_not_a_battle_intro(emu, monkeypatch):
     assert o.mode == "battle" and [x.args["action"] for x in J.battle_options(o.battle, [], [])] == ["item", "bait", "rock", "run"]
 
 
+def test_route_hint_names_what_blocks_the_route(emu, monkeypatch):
+    # full run 87: a forest elevation step in the Safari Zone was reported as "water (~) needs Surf" because the map has a
+    # pond; the hint now asks the pathfinder what would open the route
+    prof = emu.profile
+    monkeypatch.setattr(prof, "full_map_cells", lambda: [list("#####"), list("#.~.#"), list("#####")])
+    monkeypatch.setattr(prof, "_u8", lambda a, real=prof._u8: 3 if a == D.CUR_TILESET else real(a))   # forest tileset
+    monkeypatch.setattr(prof, "find_path", lambda tx, ty, avoid=frozenset(), allow="": None)
+    hint = prof.route_hint(3, 1)
+    assert "elevation step" in hint and "Surf" not in hint, hint
+    monkeypatch.setattr(prof, "find_path", lambda tx, ty, avoid=frozenset(), allow="": [("right", 2)] if "~" in allow else None)
+    assert "needs Surf" in prof.route_hint(3, 1)
+
+
 def test_milestone_snapshot_includes_team(emu):
     emu.metrics.restart("team")
     mem = emu.pyboy.memory

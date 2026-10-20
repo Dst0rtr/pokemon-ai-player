@@ -1802,8 +1802,13 @@ class Agent:
                 stones = self.boulders(cur, o)                   # a boulder is moved, not a wall
                 on_path = set(self.nav.path_cells(cur, frm, to)) & (set(o.npcs) | stones)
                 cells = self.nav.map(cur)["cells"]
-                tree = any(0 <= y < len(cells) and 0 <= x < len(cells[y]) and cells[y][x] in ("T", "~")
-                           for x, y in self.nav.path_cells(cur, frm, to, cut=True, surf=True))
+                # (only what the party can clear: without Surf, water is a wall; full run 87 was refused ~100 times in a
+                # Safari Zone pocket walled off by an elevation step, each refusal excused as "Surf's job")
+                moves = {m["name"] for p in self.party for m in p.get("moves", [])} | \
+                    {mv for mv, hm in (("Cut", "HM01"), ("Surf", "HM03")) if any(n == hm for n, _ in self.items)}
+                clear = ({"T"} if "Cut" in moves else set()) | ({"~"} if "Surf" in moves else set())
+                tree = bool(clear) and any(0 <= y < len(cells) and 0 <= x < len(cells[y]) and cells[y][x] in clear
+                                           for x, y in self.nav.path_cells(cur, frm, to, cut=True, surf=True))
             except KeyError:
                 on_path, tree = set(), False
             # a small tree on the way is Cut's job, not a wall (full run 41); water is Surf's (Pallet Town's south

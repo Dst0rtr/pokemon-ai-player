@@ -1645,7 +1645,7 @@ class PokemonGen1Profile(GameProfile):
             notes.append(f"pushed {d} to ({b[0]},{b[1]})")
         return "too many pushes; stopped"
 
-    def find_path(self, tx: int, ty: int, avoid=frozenset()) -> Optional[list[tuple[str, int]]]:
+    def find_path(self, tx: int, ty: int, avoid=frozenset(), allow: str = "") -> Optional[list[tuple[str, int]]]:
         """Dijkstra over the decoded map. NPC sprites are expensive rather than solid (some are hidden
         by events, others wander off); cells in `avoid` were found solid by walking and are walls. A spinner tile
         found by walking is a one-way jump to where it carried the player: the path ends with the step onto it
@@ -1666,6 +1666,7 @@ class PokemonGen1Profile(GameProfile):
         if (tx, ty) == (px, py):
             return []
         solid = ("#", "T", "L", "S", "H") if self.surfing() else ("#", "T", "L", "S", "H", "~")
+        solid = tuple(c for c in solid if c not in allow)           # (route_hint asks "what if water/trees were not")
         tileset = self._u8(D.CUR_TILESET)
         pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(tileset, ()))
         if self.surfing():
@@ -1822,10 +1823,21 @@ class PokemonGen1Profile(GameProfile):
             return "the target is a small tree: look for another way around (state('map') exits/connections); Cut removes it later"
         flat = {ch for row in cells for ch in row}
         notes = []
-        if "T" in flat:
+        # name what blocks this route, not whatever the map has (full run 87: a forest elevation step in the Safari Zone
+        # was reported as "water needs Surf" and the agent took it for Surf's job)
+        try:
+            by_tree = "T" in flat and self.find_path(tx, ty, allow="T") is not None
+            by_water = "~" in flat and not self.surfing() and self.find_path(tx, ty, allow="~") is not None
+            by_both = not (by_tree or by_water) and self.find_path(tx, ty, allow="T~") is not None
+        except Exception:  # pragma: no cover
+            by_tree = by_water = by_both = False
+        if by_tree or by_both and "T" in flat:
             notes.append("a small tree (T) blocks part of this map: use another exit or route around it; Cut removes it later")
-        if "~" in flat and not self.surfing():
+        if by_water or by_both and "~" in flat and not self.surfing():
             notes.append("water (~) needs Surf: face it and manage('field', 'Surf')")
+        if not notes and D.TILE_PAIR_COLLISIONS_LAND.get(self._u8(D.CUR_TILESET)):
+            notes.append("an elevation step (a raised ledge in a cave or forest) walls it off from this part of the map: "
+                         "go round through another part or another floor")
         if "L" in flat:
             notes.append("a locked door (L) blocks part of this map: with the Card Key, face it and talk")
         return "; ".join(notes)

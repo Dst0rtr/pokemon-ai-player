@@ -1418,6 +1418,7 @@ def test_route_through_a_small_tree_offers_cut(tmp_path):
     (tmp_path / "data").mkdir()
     agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
                   nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.items = [("HM01", 1), ("HM03", 1)]                                # (can clear trees and water: 87)
     agent.nav.observe(b2, _view("Mt. Moon B2F", ["########", "#D.T.P.#", "########"]), _warps_hex([(1, 1, 0, 60)]), [])
     o = J.parse("walked\nf1 Mt. Moon B2F (5,1) facing left | C L24 38/68 | ¥2543 | 2 badges")
     opt = J.Option("walk to the warp at (1,1) → Mt. Moon B1F", "walk", {"path": "to 1,1"})
@@ -1432,6 +1433,24 @@ def test_route_through_a_small_tree_offers_cut(tmp_path):
     assert not any("cut the tree" in x.label for x in opts)                # no Cut: no such option
 
 
+def test_without_surf_water_on_the_way_does_not_excuse_a_refusal(tmp_path):
+    """Full run 87: in a Safari Zone pocket walled off by a forest elevation step, ~100 refusals were each excused as
+    "Surf's job" (the atlas path crossed the pond) with no Surf in the party, so nothing was learned and the same walks
+    were offered again. Water excuses a refusal only for a party that can surf (or carries HM03)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    sw = map_id("Safari Zone West")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(sw, _view("Safari Zone West", ["#######", "#..~P.#", "#######"]), _warps_hex([]), [])
+    o = J.parse("walked\nf1 Safari Zone West (4,1) facing left | C L57 186/186 | ¥3000 | 5 badges")
+    agent.nav_feedback(o, J.Option("explore the unvisited floor at (1,1)", "walk", {"path": "to 1,1"}),
+                       J.parse("no walkable route from (4,1) to (1,1) on this map — water (~) needs Surf"), "")
+    agent.learn_noroute(o)
+    assert agent.nav.unreachable(sw, (4, 1), (1, 1))
+
+
 def test_route_across_water_offers_surf_from_the_shore(tmp_path):
     """Pallet Town's south edge to Route 21 is water: the server's walk refuses a water cell until the player surfs.
     The refusal is not a wall, and the route's hop becomes 'walk to the shore, face the water, use Surf'."""
@@ -1441,6 +1460,7 @@ def test_route_across_water_offers_surf_from_the_shore(tmp_path):
     (tmp_path / "data").mkdir()
     agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
                   nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.items = [("HM01", 1), ("HM03", 1)]                                # (can clear trees and water: 87)
     agent.nav.observe(pal, _view("Pallet Town", ["#########", "#P..~~.D#", "#########"]), _warps_hex([(7, 1, 0, 60)]), [])
     o = J.parse("walked\nf1 Pallet Town (1,1) facing right | C L50 138/168 | ¥2543 | 6 badges")
     opt = J.Option("walk to the warp at (7,1) → Route 21", "walk", {"path": "to 7,1"})
@@ -1471,6 +1491,7 @@ def test_tree_behind_a_ledge_is_still_found(tmp_path):
     (tmp_path / "data").mkdir()
     agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
                   nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.items = [("HM01", 1), ("HM03", 1)]                                # (can clear trees and water: 87)
     agent.nav.observe(r9, _view("Route 9", ["########", "#P.T..##", "####v###", "#.....D#", "########"]),
                       _warps_hex([(6, 3, 0, 60)]), [])
     assert (3, 1) in agent.nav.path_cells(r9, (1, 1), (6, 3), cut=True)   # tree, then the jump at (4,2)
