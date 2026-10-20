@@ -429,6 +429,7 @@ class Agent:
                 opts = doors + opts
             opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
             opts = self.switch_options(o, opts)           # the Pokémon Mansion: secret switches open and shut doors
+            opts = self.mansion_trapped(o, opts)
             if why not in ("heal", "train"):              # (healing first: Codex review 4)
                 opts = self.boulder_options(o, facts, opts)   # Victory Road: a boulder onto each floor switch (Strength)
             if o.map in targets and why not in ("heal", "train"):
@@ -821,6 +822,25 @@ class Agent:
         """Whether the hop at (x,y) on this map is blocked for the player where they stand."""
         b, key = self.blocked_now(o), f"{cur}:{x},{y}"
         return b.at(key, (cur, *o.pos)) if o.pos and isinstance(b, ScopedBlocks) else key in b
+
+    def mansion_trapped(self, o: Obs, opts: list[Option]) -> list[Option]:
+        """In the Pokémon Mansion with no route to the objective (healing, or Blaine after the Secret Key): the doors are
+        the problem, so a switch not pressed yet in this door state comes first, then any switch, and blind walks go.
+        The stairs stay (B1F's switches are reached from 1F). 1F's part with the stairs to B1F is shut off from the back
+        door unless EVENT_MANSION_SWITCH_ON (pokered PokemonMansion1F.asm swaps block (12,9)): full run 86 and
+        volcano-leg-26 went up and down those stairs ~500 steps, the experiment only got out by fainting."""
+        if not o.map.startswith("Pokémon Mansion") or any(x.label.startswith("follow the map route") for x in opts):
+            return opts
+        sw = [x for x in opts if x.label.startswith("press the secret switch")]
+        if not sw:
+            return opts
+        doors = self.s.get("mansion_doors", self.s.get("flips", 0) % 2)
+        tried = set(self.s.get("switch_tried", []))
+        fresh = [x for x in sw if (w := re.match(r"press the secret switch at \((\d+),(\d+)\)", x.label))
+                 and f"{o.map}:{w[1]},{w[2]}#{doors}" not in tried]
+        if fresh:
+            return fresh                                  # (Jev picked the stairs among them: one kind at a time)
+        return sw + [x for x in opts if x not in sw and not (x.label.startswith("walk ") and x.label.endswith(" tiles"))]
 
     def puzzle_pending(self, targets: list[str]) -> bool:
         """One of the objective's maps has secret switches (S) and a warp not taken yet."""

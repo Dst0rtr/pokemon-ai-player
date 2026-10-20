@@ -1282,6 +1282,25 @@ def test_a_fall_through_the_mansion_floor_is_learned_one_way(tmp_path):
     assert len(agent.nav.data["maps"][str(f1)].get("falls", [])) == 0
 
 
+def test_trapped_in_the_mansion_a_switch_comes_first(tmp_path):
+    """Full run 86 (and volcano-leg-26) took the Secret Key and then went up and down the stairs between 1F's south part
+    and B1F ~500 steps: that part is shut off from the back door unless the switches are on (pokered swaps 1F's block
+    (12,9)). With no route to the objective in the Mansion, a switch not pressed in this door state comes first."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    o = J.parse("walked\nf1 Pokémon Mansion B1F (23,22) facing up | C L60 100/120 | ¥3000 | 7 badges")
+    mk = lambda *labels: [J.Option(lb, "walk", {"path": "up 1"}) for lb in labels]   # noqa: E731
+    opts = mk("walk to the warp at (23,22) → Pokémon Mansion 1F", "press the secret switch at (20,3) (from below)",
+              "press the secret switch at (18,25) (from below)", "walk up 4 tiles")
+    agent.s["mansion_doors"] = 0
+    agent.s["switch_tried"] = ["Pokémon Mansion B1F:20,3#0", "Pokémon Mansion B1F:20,3#1", "Pokémon Mansion B1F:18,25#1"]
+    assert [x.label for x in agent.mansion_trapped(o, opts)] == ["press the secret switch at (18,25) (from below)"]
+    agent.s["switch_tried"].append("Pokémon Mansion B1F:18,25#0")
+    assert [x.label[:10] for x in agent.mansion_trapped(o, opts)] == ["press the ", "press the ", "walk to th"]
+    route = mk("follow the map route to Cinnabar Poké Center: walk to the warp at (23,22) → Pokémon Mansion 1F")
+    assert agent.mansion_trapped(o, route + opts) == route + opts               # a route exists: nothing changes
+
+
 def test_the_celadon_roof_offers_its_machines(tmp_path):
     """Codex review 10: run 75's Celadon Mart Roof has 26 solid cells touching the floor, over the cap of 12, and no
     examine option was offered (full run 71: 274 decisions of blind walks there looking for a vending machine)."""
