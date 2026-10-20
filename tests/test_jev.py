@@ -2126,6 +2126,8 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     back = J.Option("walk to the warp at (1,1) → Pokémon Mansion 2F", "walk", {"path": "to 1,1"})
     opts = agent.floor_options(o, [J.Option("walk down 4 tiles", "walk", {"path": "down 4"}), back], targets)
     assert [x.label for x in opts] == ["explore the unvisited floor at (5,1)", "explore the unvisited floor at (12,1)"]
+    push = J.Option("push the boulder at (3,1) into the hole at (4,1)", "walk", {"path": "push 3,1 to 4,1"})
+    assert agent.floor_options(o, [push, back], targets) == [push, back]   # a boulder puzzle here: pushes first (Codex 17)
     agent.s["floor_changed"] = ["Pokémon Mansion 1F"]                     # this floor first (volcano-leg-9)
     agent.nav.route = lambda *a, **k: [type("H", (), {"x": 1, "y": 1, "kind": "warp", "side": "", "label": lambda self: "x"})()]
     assert not any(x.label.startswith("go back") for x in agent.floor_options(o, [], targets))

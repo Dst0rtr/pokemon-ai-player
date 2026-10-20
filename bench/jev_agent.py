@@ -1036,6 +1036,10 @@ class Agent:
         volcano-leg experiments walked the floors' known parts and the stairs for ~450 steps without falling."""
         if not o.pos or not isinstance(self.nav, LearnedAtlas) or not targets:
             return opts
+        if any(x.label.startswith("push the boulder") for x in opts):
+            # a boulder puzzle on this floor: the pushes first (Codex review 17: full run 90's first steps on Victory
+            # Road 3F walked unwalked floor over eight push options, then left); a filled hole is floor to walk after
+            return opts
         last = map_id(targets[-1])
         if last is None or self.nav.known(last) and o.map != targets[-1]:
             return opts                                   # (on the last map itself the goal lies somewhere on its floor)
