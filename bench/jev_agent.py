@@ -1776,6 +1776,7 @@ class Agent:
         here = after.map or o.map or (self.s.get("last_ow") or [""])[0]
         if here in self.s.get("sleeper", {}) and SOLO_STORY_RE["snorlax"].search(after.head + "\n" + after.text):
             self.s["sleeper"].pop(here)
+            self.atlas_sleepers(here)
             if (self.s.get("spot_goal") or [""])[0] == here:
                 self.s.pop("spot_goal")
 
@@ -1813,6 +1814,15 @@ class Agent:
                 return True                               # and back to "somewhere on Route 5"; the building and Route 5
             seen.add(h.map)                               # sent the player to each other ~600 steps)
         return False
+
+    def atlas_sleepers(self, name: str) -> None:
+        """The atlas keeps where a sleeping Snorlax lies on this map as a wall (see LearnedAtlas.reach)."""
+        mid = map_id(name)
+        if isinstance(self.nav, LearnedAtlas) and mid is not None and str(mid) in self.nav.data["maps"]:
+            sl = self.s.get("sleeper", {}).get(name)
+            self.nav.data["maps"][str(mid)]["sleepers"] = [sl] if sl else []
+            self.nav._maps.pop(mid, None)
+            self.nav.dirty = True
 
     def boulders(self, cur: int, o: Obs) -> set:
         """Boulders on this map: in the current view, else where the last view of it showed them (a status-only reply
@@ -1940,6 +1950,7 @@ class Agent:
             # then went back and forth across Lavender's south edge: Route 12's north part is walled off from it)
             dx, dy = FACING_STEP[after.facing]
             self.s.setdefault("sleeper", {})[after.map] = [after.pos[0] + dx, after.pos[1] + dy]
+            self.atlas_sleepers(after.map)
 
         if o.map and o.pos and after.map == o.map and o.mode == "overworld":
             # every cell a walk stepped on counts as walked, not only where it ended ("left 3/3, up 2/2")

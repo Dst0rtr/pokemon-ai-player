@@ -85,7 +85,7 @@ class LearnedAtlas(WorldNav):
     def merge(self, other: dict) -> None:
         for k, m in (other.get("maps") or {}).items():
             mine = self.data["maps"].setdefault(k, {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
-            for key in ("cells", "warps", "conns", "outside", "seams", "boulders"):
+            for key in ("cells", "warps", "conns", "outside", "seams", "boulders", "sleepers"):
                 if m.get(key):
                     mine[key] = m[key]
             for wk, arr in (m.get("arrivals") or {}).items():
@@ -329,6 +329,9 @@ class LearnedAtlas(WorldNav):
         # Road 1F's corridor from the ladder to the exit held one, and its route was offered ~1,000 steps)
         holes |= frozenset(tuple(b) for b in (self.data["maps"].get(str(mid)) or {}).get("boulders", [])
                            if tuple(b) != tuple(start))
+        # a sleeping Snorlax where it was met is a wall until woken (full run 90: Route 12's, routed through from Route
+        # 11 to Lavender ~1,500 steps before the flute)
+        holes |= frozenset(tuple(b) for b in (self.data["maps"].get(str(mid)) or {}).get("sleepers", []))
         dist, trans = super().reach(mid, start, surf=surf, cut=cut, avoid=frozenset(avoid) | holes, parents=parents)
         out = [t for t in trans if t[1].kind == "warp" and not self.unreachable(mid, start, (t[1].x, t[1].y))]
         for fx, fy, dm, ax, ay in falls:

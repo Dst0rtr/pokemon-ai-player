@@ -2960,6 +2960,25 @@ def test_with_the_flute_the_route_goes_to_where_snorlax_sleeps(tmp_path, nav):
     assert "spot_goal" not in agent.s                                      # awake: no goal
 
 
+def test_a_sleeping_snorlax_is_a_wall_until_woken(tmp_path):
+    """Full run 90: before the flute the route to Lavender went Vermilion → Route 11 → Route 12 past the sleeping
+    Snorlax (drawn as a person, i.e. floor), ~1,500 steps. Where it sleeps is a wall in the atlas until it wakes."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r12 = map_id("Route 12")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(r12, _view("Route 12", ["#.#", "#.#", "#.#", "#.#"]), _warps_hex([]), [])
+    o = J.parse("walked\nf1 Route 12 (1,3) facing up | C L40 100/120 | ¥3000 | 4 badges")
+    agent.nav_feedback(o, J.Option("talk to the person or object at (1,2)", "walk", {"path": "to 1,3"}),
+                       J.parse("dialogue ended: A sleeping POKéMON blocks the way!\n"
+                               "f1 Route 12 (1,3) facing up | C L40 100/120 | ¥3000 | 4 badges"), "")
+    assert (1, 0) not in agent.nav.reach(r12, (1, 3))[0]
+    agent.sleeper_gone(o, J.parse("dialogue ended: SNORLAX calmed down!\nf1 Route 12 (1,3) facing up | C L40 100/120 | ¥3000 | 4 badges"))
+    assert (1, 0) in agent.nav.reach(r12, (1, 3))[0]
+
+
 def test_a_gym_leader_behind_warp_pads_is_sought_through_them(tmp_path, nav):
     """Full run 73: Sabrina's room in the Saffron Gym is joined to the others only by warp pads; the walk to her never
     crosses a warp ("no walkable route"), and ~4,500 steps went on the same pads. An unreachable person in a gym becomes
