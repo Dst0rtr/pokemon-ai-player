@@ -1297,6 +1297,7 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
                         "dialogue ended: Who wouldn't?")     # a dialogue: no map in the observation
     assert agent.s["reobserve"] == "Pokémon Mansion 1F"
     assert agent.s["floor_changed"] == ["Pokémon Mansion 2F"]                       # its doors changed too
+    assert agent.s["stairs_changed"] == []                    # (no stairs taken between other floors in this atlas yet)
     agent.s.setdefault("trod", {})["Pokémon Mansion 1F"] = [[1, 1], [1, 2], [3, 2], [4, 2]]   # this floor walked
     back = agent.floor_options(o, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
     assert any(x.label.startswith("go back to Pokémon Mansion 2F") for x in back)
@@ -1321,6 +1322,12 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     agent.nav_feedback(inside, stay[0], up, "")
     assert agent.nav.data["maps"][str(f1)]["arrivals"]["4,2"]["seen"]                     # taken: learned like any warp
     assert agent.puzzle_stay(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]) == []   # not again
+    agent.s["stairs_changed"] = [f"{f1}:4,2"]                 # a press elsewhere changed 2F since these stairs were taken
+    agent.s["trod"]["Pokémon Mansion 1F"] = [[x, y] for x in range(1, 6) for y in (1, 2)]
+    by = agent.floor_options(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
+    assert [x.label for x in by] == ["go back to Pokémon Mansion 2F by the warp at (4,2)"]
+    agent.nav_feedback(inside, by[0], up, "")
+    assert agent.s["stairs_changed"] == []                                            # taken: seen again
     T = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]
     mk = lambda *labels: [J.Option(lb, "walk", {"path": "up 1"}) for lb in labels]
     mixed = mk("walk to the warp at (4,2) → Pokémon Mansion 2F", "press the secret switch at (2,1) (from below)",

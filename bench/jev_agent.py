@@ -880,6 +880,19 @@ class Agent:
                 break
         new = [Option(f"explore the unvisited floor at ({x},{y})", "walk", {"path": f"to {x},{y}", "on_battle": "stop"},
                       "part of this floor never walked on: some ways on are not doors (a hole in the floor)") for x, y in out]
+        if not new:
+            near = {(h.x, h.y) for _, h, _ in self.nav.reach(cur, tuple(o.pos))[1] if h.kind == "warp"}
+            for key in self.s.get("stairs_changed", []):
+                k, w = key.split(":")
+                x, y = (int(v) for v in w.split(","))
+                if int(k) != cur or (x, y) not in near:
+                    continue
+                arr = self.nav.data["maps"][k]["arrivals"][w]
+                walk = self.hop_walk(cur, tuple(o.pos), x, y)
+                if walk:
+                    new.append(Option(f"go back to {D.map_name(arr['map'])} by the warp at ({x},{y})", "walk", walk[0],
+                                      "a switch pressed since you last went this way changed the doors over there",
+                                      then=walk[1]))
         for name in ([] if new else self.s.get("floor_changed", [])):   # this floor first (volcano-leg-9 pressed 3F's
             mid = map_id(name)                                             # switch and left by "go back to 2F" at once)
             if name not in targets or mid is None or mid == cur:
@@ -962,6 +975,18 @@ class Agent:
             mansion = name.startswith("Pokémon Mansion")
             if mansion:                                   # the other floors' doors changed too: worth seeing again
                 self.s["floor_changed"] = sorted({x for x in names if x.startswith("Pokémon Mansion")} - {name})
+                # ...each part of them: every staircase between the floors leads to its own part of the next floor
+                # (volcano-leg-16 went to 3F by the nearest stairs, into its small west part, ~15 times, and almost
+                # never by 2F's (6,1) to 3F's top left, the part with 3F's own switch)
+                stairs = []
+                for k, m in self.nav.data["maps"].items():
+                    if not D.map_name(int(k)).startswith("Pokémon Mansion"):
+                        continue
+                    for w, a in m.get("arrivals", {}).items():
+                        dest = D.map_name(a.get("map", -1)) if a.get("seen") else ""
+                        if dest.startswith("Pokémon Mansion") and dest not in (name, D.map_name(int(k))):
+                            stairs.append(f"{k}:{w}")
+                self.s["stairs_changed"] = sorted(set(stairs))
             for n in {name} | ({x for x in names if x.startswith("Pokémon Mansion")} if mansion else set()):
                 self.s.get("clues", {}).pop(n, None)
                 self.s.get("sealed", {}).pop(n, None)
@@ -1451,6 +1476,8 @@ class Agent:
         if m and after.map and after.map != o.map and cur is not None:
             key = f"{cur}:{m[1]},{m[2]}"
             self.s["nav_taken"][key] = self.s["nav_taken"].get(key, 0) + 1
+            if key in self.s.get("stairs_changed", []):
+                self.s["stairs_changed"].remove(key)       # seen again by these stairs
             if isinstance(self.nav, LearnedAtlas) and after.pos and map_id(after.map) is not None and "edge" not in opt.label:
                 self.nav.record_warp(cur, int(m[1]), int(m[2]), map_id(after.map), *after.pos)
         if m and isinstance(self.nav, LearnedAtlas) and cur is not None and after.map == o.map and after.pos \
