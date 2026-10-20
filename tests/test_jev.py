@@ -3537,3 +3537,22 @@ def test_entering_a_floor_again_takes_its_boulders_from_the_full_map_view(tmp_pa
     asyncio.run(agent.run())
     assert agent.s["boulders"]["Victory Road 2F"] == [[4, 1]]
     assert agent.nav.data["maps"][str(vr2)]["boulders"] == [[4, 1]]
+
+
+def test_healing_skips_a_poke_center_whose_way_is_blocked_lately(tmp_path):
+    """Codex review 17: the heal choice routed without the hops blocked lately, chose a blocked nearest Poké Center,
+    and the walk (which honours the blocks) found no route: neither Poké Center was offered."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    pal, vpc, cpc = map_id("Pallet Town"), map_id("Viridian Poké Center"), map_id("Cinnabar Poké Center")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(pal, _view("Pallet Town", ["#D#####D#", "#.......#", "#########"]),
+                      _warps_hex([(1, 0, 0, cpc), (7, 0, 0, vpc)]), [])
+    agent.s["step"] = 50
+    agent.s["nav_blocked"][f"{pal}:7,0"] = 350
+    o = J.parse("walked\nf1 Pallet Town (6,1) facing up | C L50 38/168 | ¥2543 | 8 badges")
+    opts, _ = agent.nav_options(o, ["Viridian Poké Center", "Cinnabar Poké Center"], SOLO.Facts(badges=8), why="heal")
+    assert any(x.label.startswith("follow the map route to Cinnabar Poké Center") for x in opts), [x.label for x in opts]
+    assert agent.s.get("heal_noroute_step", -1) != 50

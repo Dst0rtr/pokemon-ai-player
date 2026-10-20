@@ -1353,22 +1353,21 @@ class Agent:
         # healing: the targets list the nearest Poké Center first; otherwise the route ends at the last target
         order = targets if why == "heal" else list(reversed(targets))
         goal = next((map_id(t) for t in order if map_id(t) is not None), None)
-        if why == "heal" and len(targets) > 1:
-            # the nearest Poké Center the map knowledge can reach (the town's own can be behind a ledge)
-            best = None
+        if why == "heal":
+            # the nearest Poké Center the map knowledge can reach (the town's own can be behind a ledge), searched like
+            # the walk there: Surf and Cut (full run 90: every way back from Victory Road crosses Route 23's water) and
+            # the hops blocked lately (Codex review 17: a blocked nearest one was chosen and no route came of it)
+            blocked_heal, best = self.blocked_now(o), None
             for t in targets:
                 mid = map_id(t)
-                # with Surf and Cut like the route itself (full run 90: every way back from Victory Road crosses Route
-                # 23's water, so no Poké Center was "in reach" and the first target was taken as it came)
-                r = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut) if mid is not None else None
+                r = self.route_ok(cur, tuple(o.pos), mid, surf=surf, cut=cut, taken=self.s["nav_taken"],
+                                  blocked=blocked_heal) if mid is not None else None
                 if r is not None and (best is None or len(r) < best[0]):
                     best = (len(r), mid)
             goal = best[1] if best else goal
-        if why == "heal":
             # no Poké Center the map knowledge reaches from here: the director may carry on when the team can (full run 88
             # went up and down Victory Road's ladders at 57-66% HP with the heal objective and no way out from there)
-            if not any(self.nav.route(cur, tuple(o.pos), map_id(t), surf=surf, cut=cut) is not None
-                       for t in targets if map_id(t) is not None):
+            if best is None:
                 self.s["heal_noroute_step"] = self.s["step"]
         if why == "heal" and len(targets) == 1 and goal != cur and goal is not None and \
                 self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut) is None and "once" in (self.s.get("last_objective") or ""):
