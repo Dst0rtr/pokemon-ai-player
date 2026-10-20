@@ -803,14 +803,19 @@ class Agent:
         def ball(x: Option) -> bool:                      # one this part of the floor reaches (volcano-leg-15 tried 3F's
             m = re.search(r"at \((\d+),(\d+)\) \(an item ball", x.label)     # ball at (25,5) from the far side ~5 times)
             return bool(m) and (dist is None or any((int(m[1]) + dx, int(m[2]) + dy) in dist for dx, dy in MOVES.values()))
-        switch = lambda x: x.label.startswith("press the secret switch")
+        presses = [(steps[-1], k) for k, steps in self.s.get("switches", {}).items() if steps]
+        last = max(presses)[1] if presses else ""
+        same = lambda x: o is not None and x.label.startswith(f"press the secret switch at ({last.split(':')[-1]})") \
+            and last.startswith(f"{o.map}:")
+        # the switch pressed last waits until the floors it changed were seen (volcano-leg-14 pressed 1F's 11 times,
+        # flipping the doors back before anyone looked); another switch does not wait (volcano-leg-18 walked 3F's top
+        # left up to its switch, which opens the way to the holes, and left by "go back to 1F" without pressing it)
+        switch = lambda x: x.label.startswith("press the secret switch") and not (self.s.get("floor_changed") and same(x))
         floors = lambda x: x.label.startswith(("go back to", "take the stairs"))
-        # floors a press changed are seen before pressing again (volcano-leg-14 pressed 1F's switch 11 times, every
-        # time its rest ended, flipping the doors back before anyone looked)
-        pair = (floors, switch) if self.s.get("floor_changed") else (switch, floors)
         kinds = (lambda x: here(x) or ball(x),
                  lambda x: x.label.startswith("explore the unvisited floor"),
-                 *pair,
+                 switch, floors,
+                 lambda x: x.label.startswith("press the secret switch"),
                  # another floor's exits last: volcano-leg-14 went 1F <-> 2F ~20 times between "go to 1F (unexplored
                  # exits)" on 2F and "go back to 3F" (through 2F) on 1F
                  lambda x: x.label.startswith("explore the frontier"))

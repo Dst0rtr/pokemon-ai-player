@@ -1343,9 +1343,14 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
               "go back to Pokémon Mansion 3F: walk to the warp at (7,10) → Pokémon Mansion 3F")
     assert [x.label[:7] for x in agent.puzzle_order(away, T)] == ["go back"]
     agent.s["floor_changed"] = ["Pokémon Mansion 3F"]                     # a press changed 3F: look before pressing again
-    assert [x.label[:7] for x in agent.puzzle_order(away + mixed[1:2], T)] == ["go back"]
+    pressed = agent.s["switches"]
+    agent.s["switches"] = {"Pokémon Mansion 1F:2,1": [5]}                 # (this very switch was the last one pressed)
+    assert [x.label[:7] for x in agent.puzzle_order(away + mixed[1:2], T, inside)] == ["go back"]
+    agent.s["switches"] = {"Pokémon Mansion 1F:2,1": [5], "Pokémon Mansion 2F:2,11": [9]}   # another switch was last
+    assert [x.label[:5] for x in agent.puzzle_order(away + mixed[1:2], T, inside)] == ["press"]
     agent.s["floor_changed"] = []
-    assert [x.label[:5] for x in agent.puzzle_order(away + mixed[1:2], T)] == ["press"]
+    assert [x.label[:5] for x in agent.puzzle_order(away + mixed[1:2], T, inside)] == ["press"]
+    agent.s["switches"] = pressed
     assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 2F", "Pokémon Mansion 1F"]) == leave  # 1F is the goal floor
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
