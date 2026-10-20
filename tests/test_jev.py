@@ -1228,6 +1228,28 @@ def test_a_fainted_or_weak_strongest_pokemon_means_healing():
     assert d.objective(f, o)[2] == "plateau"
 
 
+def test_the_elite_four_is_one_room_at_a_time_and_a_loss_starts_over():
+    """plateau-leg-7 reached the Indigo Plateau and walked into Lorelei's closed exit ~15 times: the whole league was one
+    objective. The next member not beaten since the last black-out is now the objective's own map; the Lobby heals first."""
+    d = SOLO.SoloDirector({"visited": ["Indigo Plateau Lobby"]})
+    order = [n.id for n in SOLO.GRAPH]
+    f = SOLO.Facts(badges=8, levels=[72, 30], hp_ratio=1.0, carry_ratio=1.0, visited={"Indigo Plateau Lobby"},
+                   manual_done=set(order[:order.index("champion")]), milestones=["reached: Indigo Plateau Lobby"])
+    room = lambda m: J.parse(f"walked\nf1 {m} (4,5) facing up | C L72 200/234 | ¥3000 | 8 badges")   # noqa: E731
+    text, targets, why = d.objective(f, room("Lorelei's Room"))
+    assert why == "champion" and targets[-1] == "Lorelei's Room" and "Lorelei" in text
+    f.milestones += ["defeated: Lorelei", "defeated: Bruno"]
+    assert d.objective(f, room("Bruno's Room"))[1][-1] == "Agatha's Room"
+    f.hp_ratio = f.carry_ratio = 0.2
+    assert d.objective(f, room("Agatha's Room"))[2] == "champion"          # no Poké Center inside: items instead
+    f.milestones += ["blacked out (lost a battle)"]
+    f.hp_ratio = f.carry_ratio = 0.8
+    assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "heal"       # back in the Lobby: heal fully first
+    f.hp_ratio = f.carry_ratio = 1.0
+    d.s["healing"] = False
+    assert d.objective(f, room("Indigo Plateau Lobby"))[1][-1] == "Lorelei's Room"   # a loss starts over
+
+
 def test_the_poke_flute_is_played_at_a_sleeping_snorlax(tmp_path):
     """Full run 56: ~700 talks to the Route 12 Snorlax with the Poké Flute in the bag."""
     (tmp_path / "data").mkdir()

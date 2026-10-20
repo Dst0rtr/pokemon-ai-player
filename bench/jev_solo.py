@@ -31,6 +31,10 @@ STORY_RE = {"silph": re.compile(r"ruined\s+our\s+plans\s+for\s+SILPH", re.I),
             "snorlax": re.compile(r"SNORLAX\s+woke\s+up", re.I)}
 
 FIELD_MOVES = {"Cut": "HM01", "Fly": "HM02", "Surf": "HM03", "Strength": "HM04", "Flash": "HM05"}
+E4_ORDER = ["Lorelei", "Bruno", "Agatha", "Lance", "Champion"]
+E4_ROOM_OF = {"Lorelei": "Lorelei's Room", "Bruno": "Bruno's Room", "Agatha": "Agatha's Room", "Lance": "Lance's Room",
+              "Champion": "Champion's Room"}
+E4_ROOMS = set(E4_ROOM_OF.values())
 # gym/E4 level targets for the best party member (code-side numbers)
 LEVEL_TARGET = {0: 12, 1: 21, 2: 24, 3: 29, 4: 38, 5: 40, 6: 44, 7: 47, 8: 55}
 POKE_CENTERS = {"Viridian City": "Viridian Poké Center", "Pewter City": "Pewter Poké Center",
@@ -273,7 +277,12 @@ class SoloDirector:
         # the strongest Pokémon counts on its own: five healthy weak ones hid a fainted Charizard L70 (Codex review 4;
         # plateau-leg-6 blacked out on Victory Road 3F)
         weak_carry = len(f.levels) > 1 and f.carry_ratio < 0.35
-        if f.levels and (f.hp_ratio < 0.35 or no_pp or weak_carry or
+        league = o.map in E4_ROOMS                         # its doors lock behind you: items, not a Poké Center
+        if node.id == "champion" and o.map == "Indigo Plateau Lobby" and self.league_next(f) == "Lorelei" \
+                and f.levels and min(f.hp_ratio, f.carry_ratio) < 1:
+            return ("Heal fully at the Indigo Plateau Poké Center before the Elite Four (talk to the nurse, answer YES): "
+                    "there is no way back between their rooms.", ["Indigo Plateau Lobby"], "heal")
+        if f.levels and not league and (f.hp_ratio < 0.35 or no_pp or weak_carry or
                          self.s.get("healing") and min(f.hp_ratio, f.carry_ratio) < 0.9):   # hysteresis: heal fully
             self.s["healing"] = True
             here = [POKE_CENTERS[o.map]] if o.map in POKE_CENTERS else []
@@ -305,7 +314,20 @@ class SoloDirector:
         for cond, later in node.stages:
             if cond(f, o):
                 targets = list(later)
+        if node.id == "champion":
+            # one room at a time: the next member not beaten in this attempt is the objective's own map, so its trainer
+            # is talked to before the (locked) exit (plateau-leg-7 walked into Lorelei's closed exit ~15 times)
+            nxt = self.league_next(f)
+            targets = targets[:targets.index(E4_ROOM_OF[nxt]) + 1]
+            return f"Beat the Elite Four and the Champion: next, {nxt} in {E4_ROOM_OF[nxt]} (talk to them).", targets, node.id
         return node.objective, targets, node.id
+
+    def league_next(self, f: Facts) -> str:
+        """The next Elite Four member (or the Champion) not beaten since the last black-out (a loss resets them all)."""
+        ms = list(f.milestones)
+        last = max((i for i, m in enumerate(ms) if m.startswith("blacked out")), default=-1)
+        beaten = {m.split(": ", 1)[1] for m in ms[last + 1:] if m.startswith("defeated: ")}
+        return next((n for n in E4_ORDER if n not in beaten), "Champion")
 
     def check_questions(self, f: Facts) -> dict[str, str]:
         node = current_node(f)

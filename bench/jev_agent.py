@@ -49,7 +49,8 @@ NAV_BLOCK_STEPS = 300                           # a route hop that failed is avo
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?|"
                            r"the boulder is at \(|fell into the hole|pushed \w+ to \(\d+,\d+\), then stopped",
                            re.I)   # (a boulder on Victory Road's floor switch or in its hole opens a barrier)   # the floor changed in place ("Who wouldn't?": a Pokémon Mansion switch was pressed)
-GATE_MAPS = {"Cinnabar Gym"}                    # each trainer beaten there opens a gate in the floor (pokered CinnabarGym.asm)
+GATE_MAPS = {"Cinnabar Gym", "Lorelei's Room", "Bruno's Room", "Agatha's Room", "Lance's Room"}   # a trainer beaten there
+# opens a gate (pokered CinnabarGym.asm) or the room's exit (LoreleisRoom.asm and the others)
 CLUE_RE = re.compile(r"\bposter\b", re.I)                    # a person guarding something on the wall
 SPOT_STEPS = 1500                               # an item ball with no way to it from here is sought this long
 SCREEN_LOOP = 3                                 # a non-map screen seen this often without progress is a loop
