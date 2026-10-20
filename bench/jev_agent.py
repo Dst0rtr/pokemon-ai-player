@@ -1472,10 +1472,10 @@ class Agent:
         cur = map_id(o.map) if o.map else None
         if cur is None or not o.pos:
             return []
-        moves = set(facts.moves) if facts else set()
-        badges = facts.badges if facts else 0
-        caps = {"surf": "Surf" in moves and badges >= 5, "cut": "Cut" in moves and badges >= 2}   # (Route 23's grass is
-        try:                                                                   # across water: Codex review 5)
+        # walking only: training walks are plain hops that never surf or cut, so grass across water is out of reach
+        # (b39ac2c planned with Surf; league-leg-6 then walked at Route 23's water again and again: Codex review 7)
+        caps: dict = {}
+        try:
             m = self.nav.map(cur)
             dist, _ = self.nav.reach(cur, tuple(o.pos), **caps)
         except (KeyError, IndexError):
@@ -1499,7 +1499,8 @@ class Agent:
         for d, (gx, gy) in grass[:40]:
             for name, (dx, dy) in MOVES.items():
                 nb = (gx + dx, gy + dy)
-                if nb in dist and cells[nb[1]][nb[0]] == ",":
+                if nb in dist and cells[nb[1]][nb[0]] == "," and self.pace_ok(cur, cells, (gx, gy)) and \
+                        self.pace_ok(cur, cells, nb):
                     back = {"up": "down", "down": "up", "left": "right", "right": "left"}[name]
                     pace = [("walk", {"path": f"{name} 1", "on_battle": "stop"}), ("walk", {"path": f"{back} 1", "on_battle": "stop"})] * 4
                     first = {"path": f"to {gx},{gy}", "on_battle": "stop"} if (gx, gy) != tuple(o.pos) else pace[0][1]
@@ -1531,6 +1532,18 @@ class Agent:
         # every grass known is below half the best level: the strongest met so far still beats wandering (Codex review 5)
         return self.strong_wilds(o, cur, safari, caps, ratio=0)
 
+    def pace_ok(self, cur: int, cells, c: tuple[int, int]) -> bool:
+        """A pacing cell is not on a warp, next to one or on the map's border: pacing there leaves the map (league-leg-6
+        "trained" at the Power Plant's entrance (4,35) and walked out to Route 10 each time: Codex review 7)."""
+        x, y = c
+        if y <= 0 or x <= 0 or y >= len(cells) - 1 or x >= len(cells[y]) - 1:
+            return False
+        try:
+            warps = self.nav.map(cur).get("warps", [])
+        except (KeyError, IndexError):
+            warps = []
+        return not any(abs(w[0] - x) + abs(w[1] - y) <= 1 for w in warps)
+
     def strong_wilds(self, o: Obs, cur: int, safari, caps: Optional[dict] = None, ratio: float = 0.5) -> list[Option]:
         """Train where the wild Pokémon are strongest of those met (league-leg-2 trained Charizard L73 on Route 1's L3
         Rattata after losing to Lorelei): pace there, in grass if it has any (caves have encounters anywhere), or the
@@ -1556,7 +1569,8 @@ class Agent:
                 for _, (gx, gy) in spot[:40]:
                     for d, (dx, dy) in MOVES.items():
                         nb = (gx + dx, gy + dy)
-                        if nb in dist and cells[nb[1]][nb[0]] in ok:   # both ends of the pacing in grass
+                        if nb in dist and cells[nb[1]][nb[0]] in ok and self.pace_ok(cur, cells, (gx, gy)) and \
+                                self.pace_ok(cur, cells, nb):            # both ends of the pacing in grass, off exits
                             back = {"up": "down", "down": "up", "left": "right", "right": "left"}[d]
                             pace = [("walk", {"path": f"{d} 1", "on_battle": "stop"}), ("walk", {"path": f"{back} 1", "on_battle": "stop"})] * 4
                             first = {"path": f"to {gx},{gy}", "on_battle": "stop"} if (gx, gy) != tuple(o.pos) else pace[0][1]

@@ -1663,6 +1663,31 @@ def test_the_route_to_grass_for_training_leaves_out_blocked_hops(tmp_path):
     assert agent.train_options(J.parse("walked\nf1 Safari Zone Center (1,1) facing up | C L50 200/207 | ¥3000 | 5 badges"), None) == []
 
 
+def test_training_paces_away_from_exits_and_never_across_water(tmp_path):
+    """Codex review 7 on league-leg-6: "train here at (4,35)" paced on the Power Plant's entrance and walked out to
+    Route 10 each time; training walks to grass across Route 23's water never surfed. Pacing cells keep off warps and
+    the border, and training reach is walking only."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    pp, r10 = map_id("Power Plant"), map_id("Route 10")
+    agent.nav.observe(pp, _view("Power Plant", ["#######", "#.....#", "#.....#", "#..D..#"]), _warps_hex([(3, 3, 0, r10)]), [])
+    agent.party = [{"species": "Charizard", "level": 60, "hp": 200, "max_hp": 234, "moves": []}]
+    agent.s["wild_levels"] = {"Power Plant": 40}
+    at_door = J.parse("walked\nf1 Power Plant (3,2) facing up | C L60 200/234 | ¥3000 | 7 badges")
+    train = agent.train_options(at_door, None)
+    gx, gy = map(int, re.search(r"at \((\d+),(\d+)\)", train[0].label).groups())
+    assert abs(gx - 3) + abs(gy - 3) > 1 and 0 < gy < 3, train[0].label
+    r23 = map_id("Route 23")
+    agent.nav.observe(r23, _view("Route 23", ["######", "#P~~,,#", "######"]), _warps_hex([]), [])
+    agent.s["wild_levels"] = {}
+    f = SOLO.Facts(badges=8, moves={"Surf"})
+    there = J.parse("walked\nf1 Route 23 (1,1) facing up | C L60 200/234 | ¥3000 | 8 badges")
+    assert not [x for x in agent.train_options(there, f) if "tall grass at" in x.label]
+
+
 def test_a_door_that_will_not_let_you_through_is_a_failed_hop(tmp_path):
     """Plateau-leg experiment: Mansion 1F's back door pair (26,27)/(27,27): each walk moved one cell to the twin and
     failed to step down ("down 0/1"); the player had moved, so the hop never counted as failed (~60 tries)."""
