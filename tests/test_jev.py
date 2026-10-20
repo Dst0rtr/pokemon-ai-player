@@ -3376,3 +3376,30 @@ def test_waking_snorlax_forgets_the_refusals_on_its_route(tmp_path):
     agent.remember_door(o, flute, "AAAAAAA played the POKé FLUTE.\nbag: Poké Flute×1")
     assert not agent.nav.data["maps"][str(r12)].get("noroute")
     assert not agent.s["nav_noroute"] and agent.s["reobserve"] == "Route 12"
+
+
+def test_badge_guards_stopping_the_walk_further_on_are_no_failed_hop(tmp_path):
+    """Full run 90: Route 23's Marsh and Volcano guards each stopped the walk to Victory Road once, further on each time;
+    two such stops blocked the entrance 300 steps while the player stood one cell below it. Stopped at the same cell
+    again (a gate guard who never lets the player by) is still a failure."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r23 = map_id("Route 23")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    opt = J.Option("follow the map route to Victory Road 1F: walk to the warp at (4,31) → Victory Road 1F", "walk",
+                   {"path": "to 4,31"})
+    key = f"{r23}:4,31"
+    for step, frm, to in ((10, (9, 89), (7, 85)), (12, (7, 85), (11, 56))):
+        agent.s["step"] = step
+        o = J.parse(f"walked\nf1 Route 23 ({frm[0]},{frm[1]}) facing up | C L50 100/120 | ¥3000 | 8 badges")
+        agent.nav_feedback(o, opt, J.parse(f"went toward (4,31): up 4/17 — stopped: dialogue appeared\n"
+                                           f"f1 Route 23 ({to[0]},{to[1]}) facing up | C L50 100/120 | ¥3000 | 8 badges"), "")
+    assert key not in agent.s["nav_blocked"]
+    for step in (14, 16, 18):
+        agent.s["step"] = step
+        o = J.parse("walked\nf1 Route 23 (11,60) facing up | C L50 100/120 | ¥3000 | 8 badges")
+        agent.nav_feedback(o, opt, J.parse("went toward (4,31): up 4/17 — stopped: dialogue appeared\n"
+                                           "f1 Route 23 (11,56) facing up | C L50 100/120 | ¥3000 | 8 badges"), "")
+    assert key in agent.s["nav_blocked"]

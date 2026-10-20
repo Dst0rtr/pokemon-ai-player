@@ -2066,7 +2066,19 @@ class Agent:
             # Underground Path's entrance 300 steps, and the frontier tried Route 8's gate to Saffron instead)
             clearable = ("small tree" in after.head and self.can_clear("Cut", "HM01")) or \
                 ("water (~)" in after.head and self.can_clear("Surf", "HM03"))
-            if key and not clearable:
+            talk_stop = "stopped: dialogue appeared" in after.head and after.pos and after.pos != o.pos
+            if key and talk_stop:
+                # stopped by someone further on each time (Route 23's badge guards, one per gate: full run 90 was
+                # stopped by the Marsh and Volcano guards on the way to Victory Road and blocked its entrance 300 steps
+                # from one cell below it) is progress; stopped at the same cell again is a person in the way
+                stops = self.s.setdefault("nav_talk_stop", {})
+                moved_on = key in stops and stops[key] != list(after.pos)
+                stops[key] = list(after.pos)
+                if moved_on:                        # the earlier stop was someone else further back: not "again"
+                    self.s.setdefault("nav_fail_from", {}).pop(key, None)
+            else:
+                moved_on = False
+            if key and not clearable and not moved_on:
                 # failed again from the same part of the map, lately (full run 82: refusals from B1F's east part, then
                 # a trainer stopping the walk from (23,11) once, blocked the far ladder in the part that reaches it;
                 # each failure keeps its own step: Codex review 9)
