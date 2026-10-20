@@ -325,7 +325,9 @@ class SoloDirector:
             return ("Heal fully at the Indigo Plateau Poké Center before the Elite Four (talk to the nurse, answer YES): "
                     "there is no way back between their rooms.", ["Indigo Plateau Lobby"], "heal")
         if f.levels and not league and (f.hp_ratio < 0.35 or no_pp or weak_carry or
-                         self.s.get("healing") and min(f.hp_ratio, f.carry_ratio) < 0.9):   # hysteresis: heal fully
+                         self.s.get("healing") and min(f.hp_ratio, f.carry_ratio) < 0.9   # hysteresis: heal fully...
+                         and not (self.s.get("step", 0) - self.s.get("heal_noroute_step", -10**9) <= 20   # ...unless no PC can
+                                  and min(f.hp_ratio, f.carry_ratio) >= 0.5)):              # be reached and it can go on
             self.s["healing"] = True
             here = [POKE_CENTERS[o.map]] if o.map in POKE_CENTERS else []
             pcs = here + [POKE_CENTERS[m] for m in reversed(self.s["visited"]) if m in POKE_CENTERS and m != o.map]

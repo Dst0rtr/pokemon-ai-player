@@ -1321,6 +1321,11 @@ class Agent:
                 if r is not None and (best is None or len(r) < best[0]):
                     best = (len(r), mid)
             goal = best[1] if best else goal
+        if why == "heal":
+            # no Poké Center the map knowledge reaches from here: the director may carry on when the team can (full run 88
+            # went up and down Victory Road's ladders at 57-66% HP with the heal objective and no way out from there)
+            if not any(self.nav.route(cur, tuple(o.pos), map_id(t)) is not None for t in targets if map_id(t) is not None):
+                self.s["heal_noroute_step"] = self.s["step"]
         if why == "heal" and len(targets) == 1 and goal != cur and goal is not None and \
                 self.nav.route(cur, tuple(o.pos), goal) is None and "once" in (self.s.get("last_objective") or ""):
             # the one-off "use this town's Poké Center" visit has no known way there (Route 4's is behind a ledge)

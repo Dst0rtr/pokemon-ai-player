@@ -250,6 +250,22 @@ def test_solo_objective_progression_and_rules():
     assert "teach HM01 (Cut) to Charmeleon" in labels and "teach HM01 (Cut) to Butterfree" not in labels
 
 
+def test_with_no_poke_center_in_reach_a_half_healthy_team_goes_on():
+    """Full run 88 went up and down Victory Road's ladders at 57-66% HP: healing had begun (it heals to 90%), and no
+    Poké Center could be reached from there. With none in reach (the agent notes it) and at least half health left, the
+    objective goes on; below half it still heals (items, or the way back)."""
+    d = SOLO.SoloDirector({"visited": ["Viridian City"], "milestones": [], "step": 100, "healing": True})
+    order = [n.id for n in SOLO.GRAPH]
+    f = SOLO.Facts(badges=8, levels=[60], hp_ratio=0.66, carry_ratio=0.57, visited={"Viridian City"},
+                   manual_done=set(order[:order.index("plateau")]))
+    o = J.parse("walked\nf1 Victory Road 2F (0,8) facing up | C L60 100/170 | ¥3000 | 8 badges")
+    assert d.objective(f, o)[2] == "heal"
+    d.s["heal_noroute_step"] = 95
+    assert d.objective(f, o)[2] != "heal"
+    f.hp_ratio = 0.3                                                       # (below the threshold it heals anyway)
+    assert d.objective(f, o)[2] == "heal"
+
+
 def test_a_status_the_bag_can_cure_is_offered():
     """Codex review 12: run 85 walked a poisoned Charizard from the Safari Zone (HP 37 -> 28 -> 16) and blacked out with
     an Antidote in the bag: no cure was ever offered."""
