@@ -488,8 +488,18 @@ class SoloDirector:
         if r >= 45 and self.s.get("checkpoint_step") is not None and step - self.s.get("loaded_at", -999) > 100:
             self.s["loaded_at"] = step
             self.s["pos_repeat"] = 0
-            return Option("recovery: reload the last progress checkpoint", "load_state", {"slot": "jev-progress"})
+            return self.reload_option(step)
         return None
+
+    def reload_option(self, step: int) -> Option:
+        """The progress checkpoint, or after two reloads of it without progress the last one saved in a Poké Center
+        (Codex review 14: run 87's checkpoint lay inside a Safari Zone pocket and four reloads returned into it)."""
+        tries = [t for t in self.s.get("reload_steps", []) if t > self.s.get("last_progress_step", 0)]
+        self.s["reload_steps"] = tries + [step]
+        if len(tries) >= 2 and self.s.get("safe_step") is not None:
+            self.s["reload_steps"] = []
+            return Option("recovery: reload the last Poké Center checkpoint", "load_state", {"slot": "jev-safe"})
+        return Option("recovery: reload the last progress checkpoint", "load_state", {"slot": "jev-progress"})
 
     def want_checkpoint(self, step: int) -> bool:
         """Save a named checkpoint after progress (at most every 25 steps). Progress made too soon after the last one, or

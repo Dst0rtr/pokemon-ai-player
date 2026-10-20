@@ -1433,6 +1433,20 @@ def test_route_through_a_small_tree_offers_cut(tmp_path):
     assert not any("cut the tree" in x.label for x in opts)                # no Cut: no such option
 
 
+def test_a_checkpoint_that_keeps_failing_gives_way_to_the_poke_center_one():
+    """Codex review 14: run 87's progress checkpoint lay inside a Safari Zone pocket; four reloads returned into it. After
+    two reloads without progress the third loads the last checkpoint saved in a Poké Center (if there is one)."""
+    d = SOLO.SoloDirector({"visited": [], "milestones": [], "last_progress_step": 100})
+    assert d.reload_option(200).args["slot"] == "jev-progress"
+    assert d.reload_option(300).args["slot"] == "jev-progress"
+    assert d.reload_option(400).args["slot"] == "jev-progress"            # no safe checkpoint yet
+    d.s["safe_step"] = 50
+    assert d.reload_option(500).args["slot"] == "jev-safe"
+    assert d.reload_option(600).args["slot"] == "jev-progress"            # (counted afresh after the safe one)
+    d.s["last_progress_step"] = 650                                       # progress: earlier reloads no longer count
+    assert d.reload_option(700).args["slot"] == "jev-progress" and d.reload_option(800).args["slot"] == "jev-progress"
+
+
 def test_the_atlas_learns_elevation_steps_from_the_map_view(tmp_path):
     """Codex review 14: the learned atlas had no idea of cave/forest elevation steps (pokered TilePairCollisionsLand),
     so parts walled off by them looked reachable (run 87's Safari Zone West pocket). The server lists them with the map

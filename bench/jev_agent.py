@@ -463,6 +463,9 @@ class Agent:
             forced = self.director.bag_option(self.items, self.party) or self.director.flute_option(self.items)
         if self.director and kind == "overworld" and self.director.want_checkpoint(self.s["step"]):
             await self.tool("save_state", slot="jev-progress")
+        if kind == "overworld" and o.map.endswith("Poké Center") and self.s.pop("want_safe", False):
+            await self.tool("save_state", slot="jev-safe")   # healed here: a place a reload can always leave
+            self.s["safe_step"] = self.s["step"]
         if forced:
             opts = [forced]                              # code decides: logged as a forced decision
         loop_dropped = False
@@ -572,6 +575,7 @@ class Agent:
                 self.s["healed_at"].append(o.map)        # the black-out respawn point
         if "fighting fit" in reply:
             self.team_step = -10**9                      # healed at a Poké Center: re-read the party (heal rule)
+            self.s["want_safe"] = True                   # (a safe checkpoint: see reload_option)
         if opt.tool == "battle" and (opt.args.get("action") == "switch" or "fainted" in reply.lower()):
             self.s["refresh_party"] = True              # Gen 1 reorders the party on a switch; faints change the switch set
         line = (J.AUTO if dec.record.get("forced") else "") + f"{opt.label} -> {after.head[:90]}"
@@ -2076,6 +2080,8 @@ class Agent:
                 and self.s["step"] - self.s["last_reload_step"] >= IDLE_RELOAD:
             self.s["last_reload_step"] = self.s["step"]
             self.s["reloads"] += 1
+            if self.director:
+                return self.director.reload_option(self.s["step"])
             return Option("recovery: reload the last progress checkpoint", "load_state", {"slot": "jev-progress"})
         return None
 
