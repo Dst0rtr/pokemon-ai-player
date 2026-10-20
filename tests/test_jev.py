@@ -3643,5 +3643,73 @@ def test_training_leaves_out_strong_wilds_whose_grass_is_out_of_reach(tmp_path):
     train = agent.train_options(in_town, None)
     assert train and "Route 10" in train[0].label and "Route 12" not in train[0].label, train
     south = J.parse("walked\nf1 Route 12 (2,3) facing up | C L59 198/198 | ¥3000 | 5 badges")   # by the gate's far side
-    assert agent.train_options(south, None)[0].label.startswith("train in the tall grass at")
+    assert agent.train_options(south, None)[0].label.startswith(("train in the tall grass at", "train here at"))
     assert "Route 12" not in agent.s["no_grass"]
+
+
+def test_a_move_that_does_not_affect_a_species_is_not_offered_against_it(tmp_path):
+    """Codex review 18 on the Lavender segment: Jev chose 'use Slash' on Tower 6F's Haunter, "It doesn't affect Enemy
+    HAUNTER!", and auto-battle used it again. Learned from the reply, that move is left out against that species."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    moves = [{"name": "Slash", "pp": 20}, {"name": "Flamethrower", "pp": 0}, {"name": "Strength", "pp": 15}]
+    mine = {"species": "Charizard", "level": 60, "hp": 150, "max_hp": 200, "moves": moves}
+    b = {"kind": "wild", "mine": mine, "enemy": {"species": "Haunter", "level": 26, "hp": 59, "max_hp": 59}}
+    agent.remember_refusal(J.Option("use Slash", "battle", {"action": "fight", "target": "Slash"}),
+                           "It doesn't affect Enemy HAUNTER! | Enemy HAUNTER used NIGHT SHADE!")
+    labels = [x.label for x in J.battle_options(b, [], [], no_effect=agent.s["no_effect_moves"])]
+    assert "use Slash" not in labels and "use Strength" in labels and "run away" in labels, labels
+    b["enemy"]["species"] = "Rattata"
+    assert "use Slash" in [x.label for x in J.battle_options(b, [], [], no_effect=agent.s["no_effect_moves"])]
+
+
+def test_training_marks_grass_out_of_reach_by_reach_not_by_wild_levels_and_keeps_its_spot(tmp_path):
+    """Codex review 18 on 3509ac3: (1) weak grass (Route 4's L12 at L25) was marked 'out of reach' and then left out of
+    the last-resort strongest-wilds fallback too; (2) grass in reach with no cell pair to pace on was never marked, so
+    two maps could alternate as targets; (3) at L61 Tower 6F's L30 fell under the half-level cut while the director
+    still wanted L62: the spot strong wilds chose is kept."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    r4, r12, tower = map_id("Route 4"), map_id("Route 12"), map_id("Pokémon Tower 6F")
+    atlas.observe(r4, _view("Route 4", ["#######", "#,,,,,#", "#,,,,,#", "#######"]), _warps_hex([]), [])
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s["visited"] = ["Route 4"]
+    agent.party = [{"species": "Charmeleon", "level": 25, "hp": 70, "max_hp": 70, "moves": []}]
+    agent.s["wild_levels"] = {"Route 4": 12}
+    on4 = J.parse("walked\nf1 Route 4 (2,1) facing up | C L25 70/70 | ¥3000 | 1 badges")
+    train = agent.train_options(on4, None)
+    assert train and "Route 4" not in agent.s.get("no_grass", []), train      # weak, but in reach: the fallback
+    assert train[0].label.startswith("train here at"), train
+    # a lone grass cell in reach, nothing to pace on: as good as out of reach
+    atlas.observe(r12, _view("Route 12", ["#######", "#..,..#", "#.....#", "#######"]), _warps_hex([]), [])
+    agent.s["visited"].append("Route 12")
+    agent.s["wild_levels"] = {}
+    on12 = J.parse("walked\nf1 Route 12 (1,1) facing up | C L25 70/70 | ¥3000 | 1 badges")
+    agent.train_options(on12, None)
+    assert "Route 12" in agent.s["no_grass"]
+    # the spot strong wilds chose stays chosen past the half-level cut
+    atlas.observe(tower, _view("Pokémon Tower 6F", ["#######", "#.....#", "#.....#", "#######"]), _warps_hex([]), [])
+    agent.s["visited"].append("Pokémon Tower 6F")
+    agent.s["wild_levels"] = {"Pokémon Tower 6F": 30}
+    agent.party[0]["level"] = 60
+    there = J.parse("walked\nf1 Pokémon Tower 6F (2,1) facing up | C L60 70/70 | ¥3000 | 5 badges")
+    assert agent.train_options(there, None)[0].label.startswith("train here at")
+    agent.party[0]["level"] = 61
+    assert agent.train_options(there, None)[0].label.startswith("train here at")
+
+
+
+def test_a_strongest_pokemon_with_a_status_heals_before_a_gym_leader():
+    """Codex review 18 on the full benchmark: Charizard was paralysed in Silph Co. (step 5487), walked on to Sabrina still
+    paralysed ("fully paralyzed!" at 5535), lost, and the loss set a higher level target that stalled the run."""
+    d = SOLO.SoloDirector({"visited": ["Saffron City"]})
+    order = [n.id for n in SOLO.GRAPH]
+    done = set(order[:order.index("sabrina")])
+    f = SOLO.Facts(badges=5, levels=[59, 5], hp_ratio=0.95, carry_ratio=0.95, carry_status="PAR", manual_done=done)
+    o = J.parse("walked\nf1 Saffron City (9,30) facing down | C L59 190/198 | ¥3000 | 5 badges")
+    text, targets, why = d.objective(f, o)
+    assert why == "heal" and "PAR" in text and "Saffron Poké Center" in targets, (text, why)
+    d.s["healing"], f.carry_status, d.s["healed_at"] = False, "", ["Saffron Poké Center"]
+    assert d.objective(f, o)[2] != "heal"

@@ -253,7 +253,8 @@ class Agent:
         if o.mode == "dialogue":
             return [Option("continue the conversation", "talk", {})]
         if o.mode == "battle":
-            return battle_options(o.battle, self.party, self.items, allow_auto=True, run_note=self.run_note(o))
+            return battle_options(o.battle, self.party, self.items, allow_auto=True, run_note=self.run_note(o),
+                                  no_effect=self.s.get("no_effect_moves"))
         if o.mode == "faint_switch":
             return battle_options(o.battle, self.party, self.items, only_switch=True) or press_options()
         opts = overworld_options(o, ex, cn, targets, self.party, self.items, self.s["step"] - self.s["last_save_step"],
@@ -626,6 +627,11 @@ class Agent:
     def remember_refusal(self, opt: Option, reply: str) -> None:
         """'X is not compatible with CUT': this Pokémon cannot learn that HM, teach another one. Only that line counts:
         "can't learn more than 4 moves!" is the forget-a-move prompt (full run 45 marked Charizard refused on it)."""
+        hit = re.search(r"doesn't affect Enemy ([^!|]+)!", reply)
+        if opt.tool == "battle" and opt.args.get("action") == "fight" and opt.args.get("target") and hit:
+            key = f"{opt.args['target'].lower()}:{hit[1].strip().lower()}"
+            if key not in self.s.setdefault("no_effect_moves", []):
+                self.s["no_effect_moves"].append(key)
         if opt.tool == "manage" and opt.args.get("action") == "toss" and "threw away" not in reply:
             # only "too important to toss" is for good; a menu that did not work out is tried again later (full run 63:
             # seven "could not select TOSS" in a row marked every spare item, and the bag stayed full for good)
@@ -1638,6 +1644,24 @@ class Agent:
         cells = m["cells"]
         # the Safari Zone's battles give no experience (balls and bait only): full run 76 trained there ~2,000 steps
         safari = lambda name: name.startswith("Safari Zone")
+        # in reach and with a cell pair to pace on, whatever its wild Pokémon: out of reach means only that (Codex review
+        # 18: weak grass was marked out of reach, then left out of the last-resort strongest-wilds fallback as well; a lone
+        # grass cell in reach was never marked, and two maps could take turns as the target)
+        spot = None
+        for d, (gx, gy) in sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")[:40]:
+            for name, (dx, dy) in MOVES.items():
+                nb = (gx + dx, gy + dy)
+                if nb in dist and cells[nb[1]][nb[0]] == "," and self.pace_ok(cur, cells, (gx, gy)) and \
+                        self.pace_ok(cur, cells, nb):
+                    spot = (gx, gy, name)
+                    break
+            if spot:
+                break
+        no_grass = self.s.setdefault("no_grass", [])
+        if not spot and any("," in "".join(r) for r in cells) and o.map not in no_grass:
+            no_grass.append(o.map)                       # its grass is out of reach from where you arrive
+        elif spot and o.map in no_grass:
+            no_grass.remove(o.map)                       # arrived on the grass's side (Route 12 by its south gate)
         best = self.strong_wilds(o, cur, safari, caps)
         if best:
             return best
@@ -1647,23 +1671,14 @@ class Agent:
         # met there and not worth it, or paced there with no wild Pokémon at all (Pallet Town's two cells of Route 1's
         # grass: league-leg-4 paced there and back to Route 1): try grass not met yet
         weak = lambda name: (name in lv and lv[name] * 2 < top) or (name not in lv and paced.get(name, 0) >= 8)
-        grass = [] if safari(o.map) or weak(o.map) else sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
-        no_grass = self.s.setdefault("no_grass", [])
-        if not grass and any("," in "".join(r) for r in cells) and o.map not in no_grass:
-            no_grass.append(o.map)                       # its grass is out of reach from where you arrive
-        elif grass and o.map in no_grass:
-            no_grass.remove(o.map)                       # arrived on the grass's side (Route 12 by its south gate)
-        for d, (gx, gy) in grass[:40]:
-            for name, (dx, dy) in MOVES.items():
-                nb = (gx + dx, gy + dy)
-                if nb in dist and cells[nb[1]][nb[0]] == "," and self.pace_ok(cur, cells, (gx, gy)) and \
-                        self.pace_ok(cur, cells, nb):
-                    back = {"up": "down", "down": "up", "left": "right", "right": "left"}[name]
-                    pace = [("walk", {"path": f"{name} 1", "on_battle": "stop"}), ("walk", {"path": f"{back} 1", "on_battle": "stop"})] * 4
-                    first = {"path": f"to {gx},{gy}", "on_battle": "stop"} if (gx, gy) != tuple(o.pos) else pace[0][1]
-                    return [Option(f"train in the tall grass at ({gx},{gy})", "walk", first,
-                                   "pace back and forth in tall grass until a wild Pokémon appears, then fight it",
-                                   then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
+        if spot and not safari(o.map) and not weak(o.map):
+            gx, gy, name = spot
+            back = {"up": "down", "down": "up", "left": "right", "right": "left"}[name]
+            pace = [("walk", {"path": f"{name} 1", "on_battle": "stop"}), ("walk", {"path": f"{back} 1", "on_battle": "stop"})] * 4
+            first = {"path": f"to {gx},{gy}", "on_battle": "stop"} if (gx, gy) != tuple(o.pos) else pace[0][1]
+            return [Option(f"train in the tall grass at ({gx},{gy})", "walk", first,
+                           "pace back and forth in tall grass until a wild Pokémon appears, then fight it",
+                           then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
         best = None
         # hops that keep failing are left out, as for the objective's route (full run 76 trained by walking to Route 9's
         # grass through Rock Tunnel: B1F's far ladder had no walkable route from the arrival, ~400 steps up and down)
@@ -1714,7 +1729,10 @@ class Agent:
               if not safari(n) and map_id(n) is not None and n not in no_grass}
         top = max((p["level"] for p in self.party), default=0)
         caps = caps or {}
-        good = sorted((v, n) for n, v in lv.items() if v >= top * ratio and v > 0)
+        # the spot chosen stays good past the cut while training goes on (Codex review 18: Tower 6F's L30 fell under it at
+        # L61 while the director wanted L62, and the search for grass started over)
+        kept = self.s.get("train_spot")
+        good = sorted((v, n) for n, v in lv.items() if (v >= top * ratio or n == kept) and v > 0)
         if not good:
             return []
         blocked = self.blocked_now(o)
@@ -1741,6 +1759,7 @@ class Agent:
                             back = {"up": "down", "down": "up", "left": "right", "right": "left"}[d]
                             pace = [("walk", {"path": f"{d} 1", "on_battle": "stop"}), ("walk", {"path": f"{back} 1", "on_battle": "stop"})] * 4
                             first = {"path": f"to {gx},{gy}", "on_battle": "stop"} if (gx, gy) != tuple(o.pos) else pace[0][1]
+                            self.s["train_spot"] = name
                             return [Option(f"train here at ({gx},{gy}) (wild Pokémon up to L{v})", "walk", first,
                                            "pace back and forth until a wild Pokémon appears, then fight it",
                                            then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
@@ -1749,6 +1768,7 @@ class Agent:
             r = None if r and self.loops_back(cur, r) else r
             walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "") if r else None
             if walk:
+                self.s["train_spot"] = name
                 return [Option(f"follow the map route to train on {name} (wild Pokémon up to L{v}): {r[0].label()}", "walk",
                                walk[0], "the strongest wild Pokémon met so far", then=walk[1])]
         return []

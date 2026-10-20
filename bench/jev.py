@@ -421,7 +421,7 @@ BATTLE_CURES = {"PSN": ("Antidote",), "BRN": ("Burn Heal",), "PAR": ("Paralyze H
 
 
 def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], allow_auto: bool = True,
-                   only_switch: bool = False, run_note: str = "") -> list[Option]:
+                   only_switch: bool = False, run_note: str = "", no_effect: Optional[list] = None) -> list[Option]:
     """The legal battle actions. Switches name the species: Gen 1 reorders the party in battle, so slot numbers go
     stale ("PIDGEY is already out!"). The server's auto-battle scores moves with the damage formula (code, not Jev)."""
     mine, kind = b.get("mine") or {}, b.get("kind", "")
@@ -437,8 +437,11 @@ def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], all
             opts.append(Option("auto-battle", "battle", {"action": "auto"},
                                "the server picks the strongest move for this matchup each turn (Gen 1 damage formula, type "
                                "chart, accuracy) until the battle ends or HP is low; the usual choice when attacking"))
+        # nor a move the game said does not affect this species (Codex review 18: Slash on a Haunter)
+        foe = ((b.get("enemy") or {}).get("species") or "").lower()
+        immune = {m for m, _, s in (x.partition(":") for x in no_effect or []) if s == foe}
         for mv in mine.get("moves", []):
-            if mv["pp"] > 0 and not mv.get("disabled"):
+            if mv["pp"] > 0 and not mv.get("disabled") and mv["name"].lower() not in immune:
                 opts.append(Option(f"use {mv['name']}", "battle", {"action": "fight", "target": mv["name"]},
                                    f"attack with {mv['name']} ({mv['pp']} PP left)"))
     lead = mine.get("level") or 0

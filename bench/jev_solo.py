@@ -97,6 +97,7 @@ class Facts:
     hp_ratio: float = 1.0
     carry_ratio: float = 1.0                         # HP share of the strongest Pokémon (the one carrying the run)
     carry_pp: Optional[int] = None                   # PP left on its damaging moves (None: moves unknown)
+    carry_status: str = ""                           # its status (PAR, SLP, PSN, BRN, FRZ), "" when none
     attack_pp: Optional[int] = None      # PP left on damaging moves of the Pokémon that can still fight (None: unknown)
     manual_done: set = field(default_factory=set)
     explored: int = 0                    # learned atlas: warps and edges taken so far (exploring counts as progress)
@@ -309,6 +310,7 @@ class SoloDirector:
                      levels=[p["level"] for p in party], hp_ratio=(hp[0] / hp[1]) if hp[1] else 1.0,
                      carry_ratio=(carry["hp"] / carry["max_hp"]) if carry and carry["max_hp"] else 1.0,
                      carry_pp=attack_pp([carry]) if carry and carry["hp"] > 0 else None,
+                     carry_status=(carry.get("status") or "").split(" ")[0] if carry and carry["hp"] > 0 else "",
                      attack_pp=attack_pp(party),
                      manual_done=set(self.s["manual_done"]), came_from=self.s.get("came_from", ""),
                      elevator=self.s.get("elevator", ""), events=set(self.s.get("events", [])),
@@ -324,6 +326,10 @@ class SoloDirector:
         # plateau-leg-6 blacked out on Victory Road 3F)
         # (and its attacking PP: run 75's Charizard had Slash 0, Ember 0, Strength 0 with plenty in reserve: Codex 5)
         weak_carry = len(f.levels) > 1 and (f.carry_ratio < 0.35 or f.carry_pp is not None and f.carry_pp < LOW_PP)
+        # nor paralysed or asleep into a gym leader (Codex review 18: the full benchmark's Charizard, paralysed in Silph Co.,
+        # walked on to Sabrina, lost, and the loss raised the level target that stalled the run)
+        sick_carry = bool(f.carry_status) and node.id in ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine",
+                                                           "giovanni")
         league = o.map in E4_ROOMS                         # its doors lock behind you: items, not a Poké Center
         if league:
             self.s["lobby_fresh"] = False                  # an attempt began: the next one heals in the Lobby again
@@ -339,14 +345,15 @@ class SoloDirector:
         # (Codex review 15: run 88's Charizard ran out of attacking PP in Victory Road and "heal" came back regardless)
         stuck_heal = self.s.get("step", 0) - self.s.get("heal_noroute_step", -10**9) <= 20 and \
             min(f.hp_ratio, f.carry_ratio) >= 0.35
-        if f.levels and not league and not stuck_heal and (f.hp_ratio < 0.35 or no_pp or weak_carry or
+        if f.levels and not league and not stuck_heal and (f.hp_ratio < 0.35 or no_pp or weak_carry or sick_carry or
                          self.s.get("healing") and min(f.hp_ratio, f.carry_ratio) < 0.9):   # hysteresis: heal fully
             self.s["healing"] = True
             here = [POKE_CENTERS[o.map]] if o.map in POKE_CENTERS else []
             pcs = here + [POKE_CENTERS[m] for m in reversed(self.s["visited"]) if m in POKE_CENTERS and m != o.map]
             if pcs:
                 weak = f"{round(100 * f.hp_ratio)}% HP" + (f", {f.attack_pp} PP left on attacking moves" if no_pp else "") + \
-                    (f", your strongest Pokémon at {round(100 * f.carry_ratio)}%" if weak_carry else "")
+                    (f", your strongest Pokémon at {round(100 * f.carry_ratio)}%" if weak_carry else "") + \
+                    (f", your strongest Pokémon has {f.carry_status} before a gym leader" if sick_carry else "")
                 return (f"Your team is weak ({weak}): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
                         list(dict.fromkeys(pcs)), "heal")   # every one: the agent routes to the nearest
             # (the two last visited were Cinnabar's and Saffron's in full run 90: from Victory Road it went for Cinnabar
