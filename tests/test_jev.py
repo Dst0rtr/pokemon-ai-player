@@ -262,6 +262,8 @@ def test_with_no_poke_center_in_reach_a_half_healthy_team_goes_on():
     assert d.objective(f, o)[2] == "heal"
     d.s["heal_noroute_step"] = 95
     assert d.objective(f, o)[2] != "heal"
+    f.attack_pp = 0                                                        # no attacking PP left: still on (Codex 15)
+    assert d.objective(f, o)[2] != "heal"
     f.hp_ratio = 0.3                                                       # (below the threshold it heals anyway)
     assert d.objective(f, o)[2] == "heal"
 
