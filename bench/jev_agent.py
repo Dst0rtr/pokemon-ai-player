@@ -749,6 +749,10 @@ class Agent:
                               "the floor this side cannot reach", then=then))
         return out[:3]
 
+    def blocked_now(self) -> frozenset:
+        """Route hops that keep failing (the same set the objective's route leaves out)."""
+        return frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
+
     def puzzle_pending(self, targets: list[str]) -> bool:
         """One of the objective's maps has secret switches (S) and a warp not taken yet."""
         for name in targets:
@@ -776,7 +780,8 @@ class Agent:
         stairs = []
         for i, (x, y, _, _) in enumerate(warps):
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
-            if (x, y) not in near or not dests & set(targets) or dests == {o.map} or arr.get(f"{x},{y}", {}).get("seen"):
+            if (x, y) not in near or not dests & set(targets) or dests == {o.map} or arr.get(f"{x},{y}", {}).get("seen") \
+                    or f"{cur}:{x},{y}" in self.blocked_now():   # (Codex review 3: puzzle helpers bypassed blocked hops)
                 continue                                  # (stairs already taken: volcano-leg-12 went 2F <-> 3F ~70 times)
             walk = self.hop_walk(cur, tuple(o.pos), x, y)
             label = f"take the stairs: walk to the warp at ({x},{y}) → {sorted(dests & set(targets))[0]}"   # (nav_feedback learns it)
@@ -815,7 +820,10 @@ class Agent:
             return bool(m) and (dist is None or any((int(m[1]) + dx, int(m[2]) + dy) in dist for dx, dy in MOVES.values()))
         # a switch only once nothing is left to see in this door state (floor walked is kept per state: trod_key);
         # every switch flips the same doors, so pressing early only undoes the last press (volcano-leg-14 and -19)
-        kinds = (lambda x: x.label.startswith("follow the map route"),   # the objective's own route first
+        rv = self.s.get("revisit")
+        kinds = (lambda x: bool(rv) and x.label.startswith(f"go back to {rv}"),   # a revisit begun is finished first
+                 # (Codex review 3: "go back to 2F" from B1F went by 1F, where the route to B1F turned it round)
+                 lambda x: x.label.startswith("follow the map route"),   # the objective's own route first
                  # (volcano-leg-21 fell through 3F's hole next to 1F's stairs to B1F, and the order had no place for
                  # "follow the map route to Pokémon Mansion B1F": ~150 steps of floor walks around them instead)
                  lambda x: here(x) or ball(x),
@@ -846,7 +854,7 @@ class Agent:
             m = self.nav.data["maps"].get(str(mid)) if mid is not None else None
             if not m or not any("S" in row for row in m.get("cells", [])):
                 continue
-            r = self.nav.route(cur, tuple(o.pos), mid)
+            r = self.nav.route(cur, tuple(o.pos), mid, blocked=self.blocked_now())
             if r and (best is None or len(r) < len(best[1])):
                 best = (name, r)
         if not best:
@@ -871,6 +879,8 @@ class Agent:
         if o.mode == "overworld" and o.map and o.pos:
             if o.map in self.s.get("floor_changed", []):
                 self.s["floor_changed"].remove(o.map)     # seen again (the atlas re-reads it on entry)
+            if self.s.get("revisit") == o.map:
+                self.s.pop("revisit")
             t = self.s.setdefault("trod", {}).setdefault(self.trod_key(o.map), [])
             if list(o.pos) not in t and len(t) < 600:
                 t.append(list(o.pos))
@@ -892,9 +902,15 @@ class Agent:
         except (KeyError, IndexError, ValueError):
             return opts
         trod = [tuple(t) for t in self.s.get("trod", {}).get(self.trod_key(o.map), [])] + [tuple(o.pos)]
-        far = sorted((d, c) for c, d in dist.items() if 0 <= c[1] < len(cells) and 0 <= c[0] < len(cells[c[1]])
-                     and cells[c[1]][c[0]] in (".", ",")
-                     and all(abs(c[0] - t[0]) + abs(c[1] - t[1]) > TROD_RADIUS for t in trod))
+        floor = [(d, c) for c, d in dist.items() if 0 <= c[1] < len(cells) and 0 <= c[0] < len(cells[c[1]])
+                 and cells[c[1]][c[0]] in (".", ",")]
+        far = sorted((d, c) for d, c in floor if all(abs(c[0] - t[0]) + abs(c[1] - t[1]) > TROD_RADIUS for t in trod))
+        if not far:
+            # then every cell never stepped on: a hole is one cell, and near walked floor is not tested floor (Codex
+            # review 3: Mansion 3F's holes to 1F lay two and three cells from cells walked; stepping on one drops you,
+            # so a hole is never among the cells walked)
+            seen = set(trod)
+            far = sorted((d, c) for d, c in floor if c not in seen)
         out: list = []
         for _, (x, y) in far:
             if all(abs(x - a) + abs(y - b) > 2 * TROD_RADIUS for a, b in out):
@@ -903,12 +919,13 @@ class Agent:
                 break
         new = [Option(f"explore the unvisited floor at ({x},{y})", "walk", {"path": f"to {x},{y}", "on_battle": "stop"},
                       "part of this floor never walked on: some ways on are not doors (a hole in the floor)") for x, y in out]
-        if not new:
+        goal_floor = o.map == targets[-1]                 # (B1F works on its own floor: Codex review 3)
+        if not new and not goal_floor:
             near = {(h.x, h.y) for _, h, _ in self.nav.reach(cur, tuple(o.pos))[1] if h.kind == "warp"}
             for key in self.s.get("stairs_changed", []):
                 k, w = key.split(":")
                 x, y = (int(v) for v in w.split(","))
-                if int(k) != cur or (x, y) not in near:
+                if int(k) != cur or (x, y) not in near or key in self.blocked_now():
                     continue
                 arr = self.nav.data["maps"][k]["arrivals"][w]
                 walk = self.hop_walk(cur, tuple(o.pos), x, y)
@@ -916,11 +933,11 @@ class Agent:
                     new.append(Option(f"go back to {D.map_name(arr['map'])} by the warp at ({x},{y})", "walk", walk[0],
                                       "a switch pressed since you last went this way changed the doors over there",
                                       then=walk[1]))
-        for name in ([] if new else self.s.get("floor_changed", [])):   # this floor first (volcano-leg-9 pressed 3F's
-            mid = map_id(name)                                             # switch and left by "go back to 2F" at once)
+        for name in ([] if new or goal_floor else self.s.get("floor_changed", [])):   # this floor first (volcano-leg-9
+            mid = map_id(name)                                       # pressed 3F's switch and left by "go back to 2F")
             if name not in targets or mid is None or mid == cur:
                 continue
-            r = self.nav.route(cur, tuple(o.pos), mid)
+            r = self.nav.route(cur, tuple(o.pos), mid, blocked=self.blocked_now())
             walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "") if r else None
             if walk:
                 new.append(Option(f"go back to {name}: {r[0].label()}", "walk", walk[0],
@@ -996,9 +1013,12 @@ class Agent:
             # a Pokémon Mansion switch opens and shuts doors on every floor: all of them are forgotten, walks included
             names = [D.map_name(int(k)) for k in self.nav.data["maps"]] if isinstance(self.nav, LearnedAtlas) else []
             mansion = name.startswith("Pokémon Mansion")
-            if mansion and re.search(r"Who wouldn't\?", reply):
+            # one press, once: "Who wouldn't?" is both on the YES reply's screen and in the next talk's summary
+            # (Codex review 3: every press flipped the parity twice, so it never changed)
+            pressed = mansion and bool(re.search(r"Who wouldn't\?", reply)) and self.s.pop("switch_pending", False)
+            if pressed:
                 self.s["flips"] = self.s.get("flips", 0) + 1   # the doors' state (see trod_key)
-            if mansion:                                   # the other floors' doors changed too: worth seeing again
+            if pressed:                                   # the other floors' doors changed too: worth seeing again
                 self.s["floor_changed"] = sorted({x for x in names if x.startswith("Pokémon Mansion")} - {name})
                 # ...each part of them: every staircase between the floors leads to its own part of the next floor
                 # (volcano-leg-16 went to 3F by the nearest stairs, into its small west part, ~15 times, and almost
@@ -1022,6 +1042,11 @@ class Agent:
                 self.s.get("talk_noroute", {}).pop(n, None)
                 if isinstance(self.nav, LearnedAtlas) and cur is not None:
                     self.nav.forget_noroute(cur, walked=mansion)
+        if "A secret switch" in reply:
+            self.s["switch_pending"] = True               # the YES that follows is one press (see above)
+        gb = re.match(r"go back to (Pokémon Mansion \w+)", opt.label)
+        if gb:
+            self.s["revisit"] = gb[1]                     # kept until reached (see puzzle_order)
         sw = re.match(r"press the secret switch at \((\d+),(\d+)\)", opt.label)
         if sw and o.map:
             self.s.setdefault("switches", {}).setdefault(f"{o.map}:{sw[1]},{sw[2]}", []).append(self.s["step"])
@@ -1492,10 +1517,21 @@ class Agent:
         """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
         # warp options carry their coordinates in the label (a warp you stand on is taken by stepping off and back)
         m = re.search(r"warp at \((\d+),(\d+)\)", opt.label) or re.fullmatch(r"to (\d+),(\d+)", opt.args.get("path", ""))
+        if o.map and o.pos and after.map == o.map and o.mode == "overworld":
+            # every cell a walk stepped on counts as walked, not only where it ended ("left 3/3, up 2/2")
+            x, y = o.pos
+            t = self.s.setdefault("trod", {}).setdefault(self.trod_key(o.map), [])
+            for d, n in re.findall(r"\b(up|down|left|right) (\d+)/\d+", after.head):
+                dx, dy = MOVES[d]
+                for _ in range(int(n)):
+                    x, y = x + dx, y + dy
+                    if [x, y] not in t and len(t) < 900:
+                        t.append([x, y])
         if opt.label.startswith("explore the unvisited floor"):
             m = None                                     # a fall on the way is not a warp at the walk's target cell
             fx = re.search(r"\((\d+),(\d+)\)", opt.label)
-            if fx and o.map and "arrived" not in after.head and "battle" not in after.head:
+            if fx and o.map and ("no walkable route" in after.head or "could not get closer" in after.head):
+                # (not a walk cut short by a trainer or a battle: Codex review 3)
                 # not reached (a wall the view does not show, someone in the way): it counts as walked, or the strict
                 # puzzle order would offer it again and again
                 self.s.setdefault("trod", {}).setdefault(self.trod_key(o.map), []).append([int(fx[1]), int(fx[2])])

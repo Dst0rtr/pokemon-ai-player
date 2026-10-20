@@ -1293,8 +1293,10 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     agent.s["nav_noroute"][f"{f2}:3,1"] = agent.s["nav_blocked"][f"{f2}:3,1"] = agent.s["step"]
     agent.remember_door(o, opts[0], "said: A secret switch! | Press it?")
     agent.s["prev_map"] = "Pokémon Mansion 1F"
+    agent.remember_door(J.parse("choice:\n▶YES\nNO"), J.Option("choose YES", "press", {}),
+                        "pressed A\nscreen:\nWho wouldn't?")    # the YES reply shows the line...
     agent.remember_door(J.parse("choice:\n▶YES\nNO"), J.Option("continue the conversation", "talk", {}),
-                        "dialogue ended: Who wouldn't?")     # a dialogue: no map in the observation
+                        "dialogue ended: Who wouldn't?")     # ...and the next talk sums it up: still one press
     assert agent.s["reobserve"] == "Pokémon Mansion 1F"
     assert agent.s["floor_changed"] == ["Pokémon Mansion 2F"]                       # its doors changed too
     assert agent.s["stairs_changed"] == []                    # (no stairs taken between other floors in this atlas yet)
@@ -1327,6 +1329,10 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     agent.s["trod"]["Pokémon Mansion 1F#1"] = [[x, y] for x in range(1, 6) for y in (1, 2)]
     by = agent.floor_options(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
     assert [x.label for x in by] == ["go back to Pokémon Mansion 2F by the warp at (4,2)"]
+    assert agent.floor_options(inside, [], ["Pokémon Mansion 2F", "Pokémon Mansion 1F"]) == []   # 1F is the goal floor
+    agent.s["nav_blocked"][f"{f1}:4,2"] = agent.s["step"] + 300                      # blocked: not offered either
+    assert agent.floor_options(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]) == []
+    agent.s["nav_blocked"].pop(f"{f1}:4,2")
     agent.nav_feedback(inside, by[0], up, "")
     assert agent.s["stairs_changed"] == []                                            # taken: seen again
     T = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]
@@ -1348,6 +1354,10 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     agent.nav.data["maps"][str(f2)]["arrivals"]["3,1"] = {"map": f1, "x": 4, "y": 2, "seen": True}   # 2F's stairs land at (4,2)
     route = mk("follow the map route to Pokémon Mansion B1F: walk to the warp at (21,23) → Pokémon Mansion B1F")
     assert agent.puzzle_order(mixed + ball + route, T, inside) == route                  # the objective's route first
+    agent.s["revisit"] = "Pokémon Mansion 3F"                                            # ...unless a revisit is under way
+    assert agent.puzzle_order(route + away, T, inside) == away[1:]
+    agent.learn_trod(J.parse("walked\nf1 Pokémon Mansion 3F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges"))
+    assert "revisit" not in agent.s
     stairs_back = mk("explore the frontier: walk to the untaken warp at (4,2) → Pokémon Mansion 2F")
     assert agent.puzzle_order(stairs_back + mixed[2:3], T, inside) == mixed[2:3]        # the way back is not new
     assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 2F", "Pokémon Mansion 1F"]) == leave  # 1F is the goal floor
@@ -1409,7 +1419,10 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     assert not any(x.label.startswith("go back") for x in agent.floor_options(o, [], targets))
     del agent.nav.route
     agent.s["trod"]["Pokémon Mansion 3F#0"] += [[6, 1], [10, 1]]
-    assert [x.label for x in agent.floor_options(o, [], targets)] == []      # all walked (within 3 cells)
+    nxt = [x.label for x in agent.floor_options(o, [], targets)]            # nothing far left: cells never stepped on
+    assert nxt[:1] == ["explore the unvisited floor at (2,1)"]
+    agent.s["trod"]["Pokémon Mansion 3F#0"] += [[x, 1] for x in range(1, 13)]
+    assert [x.label for x in agent.floor_options(o, [], targets)] == []      # every cell stepped on
     agent.s["trod"]["Pokémon Mansion 3F#0"] = [[1, 1]]
     agent.nav.observe(map_id("Pokémon Mansion B1F"), _view("Pokémon Mansion B1F", ["###", "#P#", "###"]), _warps_hex([]), [])
     assert agent.floor_options(o, [], targets) == []                         # the last target is known: routes do it
@@ -1418,9 +1431,15 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
                    "f1 Pokémon Mansion 1F (16,14) facing right | C L60 200/207 | ¥3000 | 6 badges")
     agent.nav_feedback(o, J.Option("explore the unvisited floor at (12,1)", "walk", {"path": "to 12,1"}), fall, "")
     assert "12,1" not in agent.nav.data["maps"][str(f3)].get("arrivals", {})
+    agent.s["trod"]["Pokémon Mansion 3F#0"] = [[1, 1]]
     agent.nav_feedback(o, J.Option("explore the unvisited floor at (9,1)", "walk", {"path": "to 9,1"}),
                        J.parse("no walkable route from (1,1) to (9,1) on this map"), "")
     assert [9, 1] in agent.s["trod"]["Pokémon Mansion 3F#0"]                  # not reached: not offered again
+    talked = J.parse("went toward (12,1): right 3/11 — stopped: dialogue appeared\n"
+                     "f1 Pokémon Mansion 3F (4,1) facing right | C L60 200/207 | ¥3000 | 6 badges")
+    agent.nav_feedback(o, J.Option("explore the unvisited floor at (12,1)", "walk", {"path": "to 12,1"}), talked, "")
+    t = agent.s["trod"]["Pokémon Mansion 3F#0"]
+    assert [12, 1] not in t and [2, 1] in t and [4, 1] in t and [5, 1] not in t   # the cells stepped on, not the target
 
 
 def test_the_route_to_grass_for_training_leaves_out_blocked_hops(tmp_path):
