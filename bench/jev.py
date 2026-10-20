@@ -514,7 +514,7 @@ def overworld_options(o: Obs, exits: list[str], conns: list[tuple[str, str]], ta
                        + (f"; last time it said: {facing_said}" if facing_said else "")))
     names = {n for n, _ in items}
     lead = party[0] if party else None
-    if lead and lead["hp"] < lead["max_hp"] // 2:
+    if lead and 0 < lead["hp"] < lead["max_hp"] // 2:   # (a potion cannot revive: Codex review 5)
         heal = next((h for h in HEAL_ITEMS if h in names), None)
         if heal:
             opts.append(Option(f"use a {heal} on {lead['species']}", "manage",

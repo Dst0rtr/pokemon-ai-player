@@ -78,6 +78,7 @@ class Facts:
     levels: list = field(default_factory=list)
     hp_ratio: float = 1.0
     carry_ratio: float = 1.0                         # HP share of the strongest Pokémon (the one carrying the run)
+    carry_pp: Optional[int] = None                   # PP left on its damaging moves (None: moves unknown)
     attack_pp: Optional[int] = None      # PP left on damaging moves of the Pokémon that can still fight (None: unknown)
     manual_done: set = field(default_factory=set)
     explored: int = 0                    # learned atlas: warps and edges taken so far (exploring counts as progress)
@@ -212,7 +213,8 @@ GRAPH: list[Node] = [
     Node("blaine", "Beat Blaine in the Cinnabar Gym.", ("Cinnabar Gym",), _badge(7)),
     Node("giovanni", "Beat Giovanni in the Viridian Gym.", ("Viridian City", "Viridian Gym"), _badge(8)),
     Node("plateau", "Go west from Viridian City on Route 22 and north on Route 23 through Victory Road to Indigo Plateau.",
-         ("Route 22", "Route 23", "Victory Road 1F", "Indigo Plateau Lobby"), lambda f: f.reached("Indigo Plateau Lobby")),
+         ("Route 22", "Route 23", "Victory Road 1F", "Victory Road 2F", "Victory Road 3F", "Indigo Plateau Lobby"),
+         lambda f: f.reached("Indigo Plateau Lobby")),   # (all its floors: a side map is left, as in run 78: Codex 5)
     Node("champion", "Beat the Elite Four and the Champion.",
          ("Indigo Plateau Lobby", "Lorelei's Room", "Bruno's Room", "Agatha's Room", "Lance's Room", "Champion's Room"),
          lambda f: f.milestone("champion defeated")),
@@ -266,6 +268,7 @@ class SoloDirector:
                      moves=moves, visited=set(self.s["visited"]), milestones=list(self.s["milestones"]),
                      levels=[p["level"] for p in party], hp_ratio=(hp[0] / hp[1]) if hp[1] else 1.0,
                      carry_ratio=(carry["hp"] / carry["max_hp"]) if carry and carry["max_hp"] else 1.0,
+                     carry_pp=attack_pp([carry]) if carry and carry["hp"] > 0 else None,
                      attack_pp=attack_pp(party),
                      manual_done=set(self.s["manual_done"]), came_from=self.s.get("came_from", ""),
                      elevator=self.s.get("elevator", ""), events=set(self.s.get("events", [])),
@@ -279,7 +282,8 @@ class SoloDirector:
         no_pp = f.attack_pp is not None and f.attack_pp < LOW_PP
         # the strongest Pokémon counts on its own: five healthy weak ones hid a fainted Charizard L70 (Codex review 4;
         # plateau-leg-6 blacked out on Victory Road 3F)
-        weak_carry = len(f.levels) > 1 and f.carry_ratio < 0.35
+        # (and its attacking PP: run 75's Charizard had Slash 0, Ember 0, Strength 0 with plenty in reserve: Codex 5)
+        weak_carry = len(f.levels) > 1 and (f.carry_ratio < 0.35 or f.carry_pp is not None and f.carry_pp < LOW_PP)
         league = o.map in E4_ROOMS                         # its doors lock behind you: items, not a Poké Center
         if node.id == "champion" and o.map == "Indigo Plateau Lobby" and self.league_next(f) == "Lorelei" \
                 and f.levels and min(f.hp_ratio, f.carry_ratio) < 1:
@@ -304,7 +308,7 @@ class SoloDirector:
             # the last Poké Center used is where a black-out sends you: use each new town's once
             return (f"Heal at the {pc} once (walk in, talk to the nurse, answer YES): after a lost battle you wake up "
                     f"at the last Poké Center you used.", [pc], "heal")
-        target = LEVEL_TARGET.get(f.badges, 55) + self.s.get("level_bonus", {}).get(node.id, 0)
+        target = min(100, LEVEL_TARGET.get(f.badges, 55) + self.s.get("level_bonus", {}).get(node.id, 0))   # (L100 is the top)
         if node.id in ("brock", "misty", "surge", "erika", "koga", "sabrina", "blaine", "giovanni", "champion") and f.levels \
                 and max(f.levels) < target:
             return (f"Train before the next gym: walk through tall grass and win wild battles until your best Pokémon "
@@ -326,10 +330,10 @@ class SoloDirector:
         return node.objective, targets, node.id
 
     def league_next(self, f: Facts) -> str:
-        """The next Elite Four member (or the Champion) not beaten since the last black-out (a loss resets them all)."""
-        ms = list(f.milestones)
-        last = max((i for i, m in enumerate(ms) if m.startswith("blacked out")), default=-1)
-        beaten = {m.split(": ", 1)[1] for m in ms[last + 1:] if m.startswith("defeated: ")}
+        """The next Elite Four member (or the Champion) not beaten in this attempt: the agent keeps `league_beaten` and
+        clears it on a black-out (a loss resets them all). Milestones keep each text only once, so a second win over
+        Lorelei after a loss never showed there (Codex review 5)."""
+        beaten = set(self.s.get("league_beaten", []))
         return next((n for n in E4_ORDER if n not in beaten), "Champion")
 
     def check_questions(self, f: Facts) -> dict[str, str]:

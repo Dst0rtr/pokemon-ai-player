@@ -518,6 +518,53 @@ class PokemonGen1Profile(GameProfile):
             return "prompt"
         return None
 
+    def _learn_prompt(self, emu, learn: bool) -> str:
+        """battle('learn') / battle('skip') on a level-up move prompt: learn it and forget the weakest move (status
+        moves first, then the least power; HM moves stay), or keep the old moves (run 75: Charizard L36+ never learned
+        Flamethrower; generic cursor presses tried to delete Cut, an HM, and gave up)."""
+        seen: list[str] = []
+        idx = min(self._u8(D.PLAYER_MON_NUMBER), max(len(self.party()) - 1, 0))
+        for _ in range(16):
+            txt, d = self.screen_text() or "", (self.dialog_text() or "").lower()
+            if "▶YES" in txt or "▶NO" in txt:
+                self._collect(seen)
+                if "abandon" in d:
+                    emu.press("DOWN A" if learn else "A", settle=1)   # learn: do not abandon; skip: abandon
+                else:                                     # "Delete an older move to make room for X?"
+                    emu.press("A" if learn else "DOWN A", settle=1)
+                continue
+            if "▶" in txt and ("forgotten" in d or "which move" in d):
+                if not learn:
+                    emu.press("B", settle=1)
+                    continue
+                mon = self.party()[idx] if idx < len(self.party()) else None
+                if not mon:
+                    emu.press("B", settle=1)
+                    continue
+                table = self._load_move_data()
+                ids = {D.move_name(i): i for i in range(1, 166)}
+                keep = {self._norm(m) for m in D.FIELD_MOVES}
+                names = [self._norm(n) for n, _ in mon["moves"]]
+                ranked = sorted((table.get(ids.get(n, 0), (0, 0, 0, 0))[1], j) for j, (n, _) in enumerate(mon["moves"])
+                                if self._norm(n) not in keep)
+                if not ranked:
+                    emu.press("B", settle=1)              # every move is an HM: keep them
+                    learn = False
+                    continue
+                k = ranked[0][1]
+                seen.append(f"forgot {mon['moves'][k][0]}")
+                cur = self._list_cursor(txt, names) or 0
+                if k != cur:
+                    emu.press(("DOWN " if k > cur else "UP ") * abs(k - cur), settle=1)
+                emu.press("A", settle=1)
+                continue
+            if self.is_text_visible() and d.strip():
+                self._collect(seen)
+                emu.press("A", settle=1)
+                continue
+            break
+        return " | ".join(x for x in seen if x) or "no move prompt on screen"
+
     def _watch(self, emu, seen: list[str], max_frames: int = 420) -> Optional[str]:
         """Advance in small steps collecting message text until a menu/prompt shows or things go quiet."""
         quiet = 0
@@ -663,6 +710,8 @@ class PokemonGen1Profile(GameProfile):
         action = (action or "fight").lower().strip()
         if action == "auto":
             return self.battle_auto(emu, target)
+        if action in ("learn", "skip"):                   # the "Delete an older move to make room for X?" prompt
+            return self._learn_prompt(emu, action == "learn")
         if not self.in_battle():
             return "not in a battle"
         kind, prelog = self._wait_menu(emu)

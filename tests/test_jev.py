@@ -672,6 +672,9 @@ class LearnMoveServer(FakeServer):
         if self.at == "done":
             return await super().__call__(name, args) if name != "press" else "pressed\n" + \
                 "f1 Pallet Town (2,5) facing up | Butterfree L12 30/40 | ¥3000 | 0 badges"
+        if name == "battle" and args.get("action") in ("learn", "skip"):
+            self.at = "done"                               # (the server answers the whole prompt: battle('learn'/'skip'))
+            return await self("press", {"buttons": "A"})
         if name == "press":
             b = args["buttons"]
             if self.at == "teach":
@@ -1226,6 +1229,9 @@ def test_a_fainted_or_weak_strongest_pokemon_means_healing():
     assert d.objective(f, o)[2] == "heal"                                   # (hysteresis: heal fully)
     d.s["healing"], f.carry_ratio, f.hp_ratio = False, 0.95, 0.95
     assert d.objective(f, o)[2] == "plateau"
+    f.carry_pp = 0                                                          # healthy but out of attacking PP
+    assert d.objective(f, o)[2] == "heal"
+    assert "Victory Road 3F" in d.objective(SOLO.Facts(badges=8, levels=[70], manual_done=f.manual_done), o)[1]
 
 
 def test_the_elite_four_is_one_room_at_a_time_and_a_loss_starts_over():
@@ -1238,14 +1244,14 @@ def test_the_elite_four_is_one_room_at_a_time_and_a_loss_starts_over():
     room = lambda m: J.parse(f"walked\nf1 {m} (4,5) facing up | C L72 200/234 | ¥3000 | 8 badges")   # noqa: E731
     text, targets, why = d.objective(f, room("Lorelei's Room"))
     assert why == "champion" and targets[-1] == "Lorelei's Room" and "Lorelei" in text
-    f.milestones += ["defeated: Lorelei", "defeated: Bruno"]
+    d.s["league_beaten"] = ["Lorelei", "Bruno"]                              # (kept by the agent per attempt)
     assert d.objective(f, room("Bruno's Room"))[1][-1] == "Agatha's Room"
     f.hp_ratio = f.carry_ratio = 0.2
     assert d.objective(f, room("Agatha's Room"))[2] == "champion"          # no Poké Center inside: items instead
     d.s["gym_map_seen"] = "Agatha's Room"
     d.lost(f)                                                               # a league loss trains harder too
     assert d.s["level_bonus"]["champion"] >= 72 + 3 - SOLO.LEVEL_TARGET[8]
-    f.milestones += ["blacked out (lost a battle)"]
+    d.s.pop("league_beaten")                                                # the agent clears it on a black-out
     f.hp_ratio = f.carry_ratio = 0.8
     assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "heal"       # back in the Lobby: heal fully first
     f.hp_ratio = f.carry_ratio = 1.0
@@ -1263,6 +1269,33 @@ def test_rock_tunnel_b1f_is_part_of_the_way_to_lavender():
     f = SOLO.Facts(badges=3, levels=[35], manual_done=set(order[:order.index("lavender")]))
     o = J.parse("walked\nf1 Rock Tunnel B1F (33,25) facing up | C L35 100/110 | ¥3000 | 3 badges")
     assert "Rock Tunnel B1F" in d.objective(f, o)[1]
+
+
+def test_league_wins_count_per_attempt_and_a_loss_resets_them(tmp_path):
+    """Codex review 5: milestones keep each text once, so 'defeated: Lorelei' after a loss and a second win was dropped
+    and Lorelei stayed the next opponent. The agent keeps the attempt's wins itself and clears them on a black-out."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    for e in ("defeated: Lorelei", "defeated: Bruno"):
+        agent.s["milestones"].append(e)
+        agent.s.setdefault("league_beaten", []).append(e.split(": ")[1])
+    assert agent.director.league_next(SOLO.Facts()) == "Agatha"
+    agent.s.pop("league_beaten")                                           # (what a black-out does)
+    agent.s.setdefault("league_beaten", []).append("Lorelei")              # the second win, though the milestone exists
+    assert agent.director.league_next(SOLO.Facts()) == "Bruno"
+
+
+def test_a_level_up_move_prompt_is_decided_in_code(tmp_path):
+    """Run 75: Charizard's Flamethrower prompt got generic cursor presses (two tries to delete Cut, an HM), then
+    cancelled. A damaging move is learned over the weakest move (battle('learn'): never an HM); a status move is not."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    p = J.parse("needs a decision\nscreen:\nDelete an older move to make room for FLAMETHROWER?\n▶YES\nNO")
+    assert p.mode == "prompt"
+    opts = agent.options(p, [], [], [])
+    assert [(x.tool, x.args) for x in opts] == [("battle", {"action": "learn"})] and "Flamethrower" in opts[0].label
+    q = J.parse("needs a decision\nscreen:\nDelete an older move to make room for LEER?\n▶YES\nNO")
+    assert [(x.tool, x.args) for x in agent.options(q, [], [], [])] == [("battle", {"action": "skip"})]
 
 
 def test_the_poke_flute_is_played_at_a_sleeping_snorlax(tmp_path):
@@ -1535,15 +1568,20 @@ def test_the_route_to_grass_for_training_leaves_out_blocked_hops(tmp_path):
     o = J.parse("walked\nf1 Lavender Town (1,1) facing up | C L50 200/207 | ¥3000 | 6 badges")
     assert [x.label[:41] for x in agent.train_options(o, None)] == ["follow the map route to the tall grass on"]
     agent.party = [{"species": "Charizard", "level": 73, "hp": 200, "max_hp": 234, "moves": []}]
-    agent.s["wild_levels"] = {"Route 9": 3}                                  # Route 1-like: not worth it at L73
-    assert agent.train_options(o, None) == []                                # (the only grass known is too weak)
+    agent.s["wild_levels"] = {"Route 9": 3}                                  # Route 1-like: not worth it at L73...
+    assert agent.train_options(o, None)[0].label.startswith("follow the map route to train on Route 9 (wild Pokémon up to L3)")
+    # ...but with nothing better known the strongest met still beats wandering (Codex review 5)
     agent.s["wild_levels"] = {}
     assert agent.train_options(o, None)[0].label.startswith("follow the map route to the tall grass on Route 9")
     agent.s["train_paces"] = {"Route 9": 8}                                  # paced there, never a wild Pokémon
-    assert agent.train_options(o, None) == []
+    assert agent.train_options(o, None) == []                                # (and none met anywhere)
     agent.s.pop("train_paces")
     agent.s["wild_levels"] = {"Route 9": 40}                                 # league-leg-2: train where they are strong
     assert agent.train_options(o, None)[0].label.startswith("follow the map route to train on Route 9 (wild Pokémon up to L40)")
+    agent.s["wild_levels"] = {"Route 9": 40}
+    there = J.parse("walked\nf1 Route 9 (3,1) facing up | C L73 200/234 | ¥3000 | 6 badges")
+    train = agent.train_options(there, None)                                 # Codex review 5: this crashed on arrival
+    assert train[0].label == "train here at (2,1) (wild Pokémon up to L40)" and train[0].args["path"] == "to 2,1"
     agent.s.pop("wild_levels")
     agent.s["nav_blocked"][f"{lav}:3,1"] = agent.s["step"] + 300
     assert agent.train_options(o, None) == []                               # the only way there is blocked

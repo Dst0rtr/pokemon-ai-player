@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, ClaudePlanner, JevError, drop_repeats,  # noqa: E402
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
-from bench.jev_solo import GRAPH, GYM_NODES, STUCK_Q, SoloDirector  # noqa: E402
+from bench.jev_solo import GRAPH, GYM_NODES, STATUS_MOVES, STUCK_Q, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS  # noqa: E402
 from bench.jev_nav import MOVES, Hop, WorldNav, map_id  # noqa: E402
 from bench.jev_atlas import LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
@@ -229,6 +229,15 @@ class Agent:
     def options(self, o: Obs, ex, cn, targets) -> list[Option]:
         if o.mode in ("intro", "unknown"):
             return press_options(intro=True)
+        learn = re.search(r"make\s+room\s+for\s+([A-Z][A-Z\- ]+?)[?!.]", o.text) if o.mode == "prompt" else None
+        if learn or (o.mode == "prompt" and re.search(r"Which move should be forgotten|Abandon learning", o.text, re.I)):
+            # a level-up move: code decides (run 75's Charizard never learned Flamethrower: cursor presses tried to delete
+            # Cut, an HM). A damaging move is learned over the weakest one; a status move is not
+            new = (learn[1].strip().title() if learn else "")
+            if new and new in STATUS_MOVES:
+                return [Option(f"keep the old moves (do not learn {new})", "battle", {"action": "skip"}, "a status move")]
+            return [Option(f"learn {new or 'the new move'} and forget the weakest move (never an HM)", "battle",
+                           {"action": "learn"}, "a new damaging move replaces the weakest one")]
         if o.mode == "prompt":
             choices = J.choice_options(o)
             if "secret switch" in o.text.lower() and any(x.label == "choose YES" for x in choices):
@@ -286,6 +295,11 @@ class Agent:
         o = parse(self.reply)
         self.route_hint = ""
         self.s["milestones"] += [e for e in o.events if e not in self.s["milestones"]]
+        for e in o.events:                               # the league, per attempt (milestones keep each text once: a
+            if e.startswith("defeated: "):               # second win over Lorelei after a loss was lost; Codex review 5)
+                beaten = self.s.setdefault("league_beaten", [])
+                if e[len("defeated: "):] not in beaten:
+                    beaten.append(e[len("defeated: "):])
         if any(e.startswith("champion defeated") for e in o.events):
             self.stop = "champion"
             return
@@ -533,8 +547,11 @@ class Agent:
                 self.s["step"] - self.s.get("blackout_step", -10**9) > 5:
             self.s["blackout_step"] = self.s["step"]
             gym = self.director.s.get("gym_map_seen", "")
-            if gym.endswith("Gym"):
+            if gym.endswith("Gym") or gym in SOLO_E4_ROOMS:
                 self.s["said"].pop(gym, None)            # lost in a gym: its leader and trainers are to be faced again
+            if self.s.pop("league_beaten", None):        # a loss resets the league: every member again
+                for room in SOLO_E4_ROOMS:
+                    self.s["said"].pop(room, None)
             self.director.lost(facts)                    # the milestone event is not reliable; the battle text is
         if "fighting fit" in reply and o.map:
             self.s.setdefault("healed_at", [])
@@ -1451,15 +1468,18 @@ class Agent:
         cur = map_id(o.map) if o.map else None
         if cur is None or not o.pos:
             return []
-        try:
+        moves = set(facts.moves) if facts else set()
+        badges = facts.badges if facts else 0
+        caps = {"surf": "Surf" in moves and badges >= 5, "cut": "Cut" in moves and badges >= 2}   # (Route 23's grass is
+        try:                                                                   # across water: Codex review 5)
             m = self.nav.map(cur)
-            dist, _ = self.nav.reach(cur, tuple(o.pos))
+            dist, _ = self.nav.reach(cur, tuple(o.pos), **caps)
         except (KeyError, IndexError):
             return []
         cells = m["cells"]
         # the Safari Zone's battles give no experience (balls and bait only): full run 76 trained there ~2,000 steps
         safari = lambda name: name.startswith("Safari Zone")
-        best = self.strong_wilds(o, cur, safari)
+        best = self.strong_wilds(o, cur, safari, caps)
         if best:
             return best
         top = max((p["level"] for p in self.party), default=0)
@@ -1495,7 +1515,7 @@ class Agent:
                     continue
             except (KeyError, IndexError):
                 continue
-            r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked)
+            r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked, **caps)
             if r and (best is None or len(r) < len(best[1])):
                 best = (name, r)
         if best:
@@ -1504,15 +1524,17 @@ class Agent:
             if walk:
                 return [Option(f"follow the map route to the tall grass on {best[0]}: {h.label()}", "walk", walk[0],
                                "no tall grass on this map: the nearest visited map with grass to train in", then=walk[1])]
-        return []
+        # every grass known is below half the best level: the strongest met so far still beats wandering (Codex review 5)
+        return self.strong_wilds(o, cur, safari, caps, ratio=0)
 
-    def strong_wilds(self, o: Obs, cur: int, safari) -> list[Option]:
+    def strong_wilds(self, o: Obs, cur: int, safari, caps: Optional[dict] = None, ratio: float = 0.5) -> list[Option]:
         """Train where the wild Pokémon are strongest of those met (league-leg-2 trained Charizard L73 on Route 1's L3
         Rattata after losing to Lorelei): pace there, in grass if it has any (caves have encounters anywhere), or the
         map route there. Only once a map's wild Pokémon are worth it (at least half the strongest party level)."""
         lv = {n: v for n, v in self.s.get("wild_levels", {}).items() if not safari(n) and map_id(n) is not None}
         top = max((p["level"] for p in self.party), default=0)
-        good = sorted((v, n) for n, v in lv.items() if v * 2 >= top)
+        caps = caps or {}
+        good = sorted((v, n) for n, v in lv.items() if v >= top * ratio and v > 0)
         if not good:
             return []
         blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
@@ -1521,14 +1543,16 @@ class Agent:
             if mid == cur:
                 try:
                     cells = self.nav.map(cur)["cells"]
-                    dist, _ = self.nav.reach(cur, tuple(o.pos))
+                    dist, _ = self.nav.reach(cur, tuple(o.pos), **caps)
                 except (KeyError, IndexError):
                     return []
-                spot = sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] in ((",",) if "," in "".join(cells) else (".", ",")))
+                grassy = any("," in row for row in cells)     # (cells are rows of characters: Codex review 5's crash)
+                ok = (",",) if grassy else (".", ",", ":")
+                spot = sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] in ok)
                 for _, (gx, gy) in spot[:40]:
                     for d, (dx, dy) in MOVES.items():
                         nb = (gx + dx, gy + dy)
-                        if nb in dist:
+                        if nb in dist and cells[nb[1]][nb[0]] in ok:   # both ends of the pacing in grass
                             back = {"up": "down", "down": "up", "left": "right", "right": "left"}[d]
                             pace = [("walk", {"path": f"{d} 1", "on_battle": "stop"}), ("walk", {"path": f"{back} 1", "on_battle": "stop"})] * 4
                             first = {"path": f"to {gx},{gy}", "on_battle": "stop"} if (gx, gy) != tuple(o.pos) else pace[0][1]
@@ -1536,7 +1560,7 @@ class Agent:
                                            "pace back and forth until a wild Pokémon appears, then fight it",
                                            then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
                 return []
-            r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked)
+            r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked, **caps)
             walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "") if r else None
             if walk:
                 return [Option(f"follow the map route to train on {name} (wild Pokémon up to L{v}): {r[0].label()}", "walk",
