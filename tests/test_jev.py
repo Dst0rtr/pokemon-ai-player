@@ -1151,6 +1151,13 @@ def test_a_blocked_hop_stays_blocked_only_in_the_part_it_failed_from(tmp_path):
         agent.s["step"] = step
         agent.nav_feedback(who, opt, J.parse("no walkable route from (2,2) to (1,1) on this map"), "")
     assert key not in agent.s["nav_blocked"]
+    # Codex review 10: an expired part does not come back when another part renews the hop
+    for k in ("nav_blocked", "nav_block_from", "nav_fail_from", "nav_noroute"):
+        agent.s[k].clear()
+    for step, who in ((10, east), (11, east), (1000, west), (1001, west)):
+        agent.s["step"] = step
+        agent.nav_feedback(who, opt, J.parse("no walkable route from (2,2) to (1,1) on this map"), "")
+    assert agent.blocked_here(west, b1, 1, 1) and not agent.blocked_here(east, b1, 1, 1)
 
 
 def test_after_a_black_out_in_viridian_forest_the_route_goes_back_to_it(tmp_path):

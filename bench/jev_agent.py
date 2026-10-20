@@ -802,7 +802,11 @@ class Agent:
         hid it from (23,11), whose part does reach it (~1,700 steps). Every active key is kept; whoever asks about a
         concrete cell asks `at(key, (map, x, y))`, and a route search asks per arrival (Codex reviews 8, 9)."""
         frm = self.s.get("nav_block_from", {})
-        frm = {k: [f[:2] for f in (v if isinstance(v[0], list) else [v])] for k, v in frm.items() if v}
+        # each origin holds until its own step + NAV_BLOCK_STEPS (an expired part does not come back when another part
+        # renews the hop: Codex review 10); origins without a step (older state) last as long as the hop
+        frm = {k: [f[:2] for f in (v if isinstance(v[0], list) else [v])
+                   if len(f) < 3 or self.s["step"] - f[2] <= NAV_BLOCK_STEPS] for k, v in frm.items() if v}
+        frm = {k: v for k, v in frm.items() if v}
         linked = self.nav.linked if isinstance(self.nav, LearnedAtlas) else None
         return ScopedBlocks({k for k, until in self.s["nav_blocked"].items() if until > self.s["step"]}, frm, linked)
 
@@ -1891,9 +1895,9 @@ class Agent:
                     self.s["nav_blocked"][key] = self.s["step"] + NAV_BLOCK_STEPS   # failed again: try another way
                     if o.pos:                             # the parts of the map it is blocked in (Codex review 8)
                         fs = self.s.setdefault("nav_block_from", {}).get(key) or []
-                        fs = fs if not fs or isinstance(fs[0], list) else [fs]
-                        if list(o.pos) not in fs:
-                            self.s["nav_block_from"][key] = (fs + [list(o.pos)])[-8:]
+                        fs = [f for f in (fs if not fs or isinstance(fs[0], list) else [fs])
+                              if len(f) > 2 and self.s["step"] - f[2] <= NAV_BLOCK_STEPS and f[:2] != list(o.pos)]
+                        self.s["nav_block_from"][key] = (fs + [[o.pos[0], o.pos[1], self.s["step"]]])[-8:]
                 if o.pos:
                     self.s["nav_fail_from"][key] = ([f for f in fails if f[:2] != list(o.pos)]
                                                     + [[o.pos[0], o.pos[1], self.s["step"]]])[-8:]
