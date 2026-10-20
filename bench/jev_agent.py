@@ -327,6 +327,8 @@ class Agent:
                                         or self.team_step < self.s["battle_seen_step"] or self.s.get("refresh_items")):
             await self.refresh_team()
             self.s["refresh_items"] = False
+            if isinstance(self.nav, LearnedAtlas):
+                self.nav.set_card_key(any(n == "Card Key" for n, _ in self.items))
         ex, cn = await self.map_info(o) if o.mode == "overworld" else ([], [])
         if o.mode == "overworld" and o.map:
             # replies after a warp often carry no map rows: keep the last people seen on this map
@@ -785,10 +787,16 @@ class Agent:
             return []
         reach = None
         if self.nav is not None and map_id(o.map) is not None:
+            held = getattr(self.nav, "card_key", False)
             try:
+                if held:
+                    self.nav.set_card_key(False)         # (the doors as they are: walls until opened)
                 reach, _ = self.nav.reach(map_id(o.map), tuple(o.pos))
             except (KeyError, IndexError, ValueError):
                 reach = None
+            finally:
+                if held:
+                    self.nav.set_card_key(True)
         tried = self.s.get("card_tried", {}).get(o.map, {})
         out, done = [], set()
         px, py = o.pos

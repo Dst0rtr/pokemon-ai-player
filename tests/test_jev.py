@@ -1524,6 +1524,29 @@ def test_a_checkpoint_that_keeps_failing_gives_way_to_the_poke_center_one():
     assert d.reload_option(700).args["slot"] == "jev-progress" and d.reload_option(800).args["slot"] == "jev-progress"
 
 
+def test_with_the_card_key_locked_doors_are_routed_through(tmp_path):
+    """Full run 89 had the Card Key and every Silph Co. floor visited, but Giovanni's pad on 7F lay behind locked doors
+    (L): the atlas took them for walls, Silph looked explored from Saffron, and the frontier went elsewhere (~1,000
+    steps). With the Card Key the route goes through them (the door options open them on the floor)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3 = map_id("Silph Co. 3F")
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    atlas.observe(f3, _view("Silph Co. 3F", ["#######", "#P.L.D#", "#######"]), _warps_hex([(5, 1, 0, map_id("Silph Co. 7F"))]), [])
+    assert atlas.route(f3, (1, 1), map_id("Silph Co. 7F")) is None
+    atlas.set_card_key(True)
+    hops = atlas.route(f3, (1, 1), map_id("Silph Co. 7F"))
+    assert hops and hops[0].dest == map_id("Silph Co. 7F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.items = [("Card Key", 1)]
+    o = J.parse("walked\nf1 Silph Co. 3F (1,1) facing right | C L50 100/120 | ¥3000 | 5 badges\n"
+                + _view("Silph Co. 3F", ["#######", "#P.L.D#", "#######"]))
+    agent.s["grids"]["Silph Co. 3F"] = {f"{x},{y}": c for (x, y), c in o.grid.items()}
+    doors = agent.card_door_options(o)
+    assert doors and all("(4," not in x.args.get("path", "") for x in doors), [x.args for x in doors]   # this side only
+
+
 def test_the_atlas_learns_elevation_steps_from_the_map_view(tmp_path):
     """Codex review 14: the learned atlas had no idea of cave/forest elevation steps (pokered TilePairCollisionsLand),
     so parts walled off by them looked reachable (run 87's Safari Zone West pocket). The server lists them with the map

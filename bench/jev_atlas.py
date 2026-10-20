@@ -244,6 +244,13 @@ class LearnedAtlas(WorldNav):
         self.dirty = True
 
     # ---------------------------------------------------------------- WorldNav interface
+    card_key = False                                         # set by the agent while the Card Key is in the bag
+
+    def set_card_key(self, held: bool) -> None:
+        if held != self.card_key:
+            self.card_key = held
+            self._maps.clear()
+
     def map(self, mid: int) -> dict:
         if mid not in self._maps:
             m = self.data["maps"].get(str(mid))
@@ -254,6 +261,9 @@ class LearnedAtlas(WorldNav):
                 if 0 <= w[1] < len(cells) and 0 <= w[0] < len(cells[0]) and cells[w[1]][w[0]] == "D":
                     cells[w[1]][w[0]] = "."
             cells = [[("." if c == "D" else c) for c in r] for r in cells]
+            if self.card_key:                                # with the Card Key a locked door is a door to open, not a
+                cells = [[("." if c == "L" else c) for c in r] for r in cells]   # wall (full run 89: Silph Co. looked
+                                                             # explored from Saffron, Giovanni's pad behind locked doors)
             self._maps[mid] = {"tileset": None, "tiles": None, "cells": cells,
                                "warps": [tuple(w) for w in m.get("warps", [])],
                                "conns": [(side, dm, None, None) for side, dm in m.get("conns", [])],
