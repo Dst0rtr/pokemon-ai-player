@@ -3403,3 +3403,52 @@ def test_badge_guards_stopping_the_walk_further_on_are_no_failed_hop(tmp_path):
         agent.nav_feedback(o, opt, J.parse("went toward (4,31): up 4/17 — stopped: dialogue appeared\n"
                                            "f1 Route 23 (11,56) facing up | C L50 100/120 | ¥3000 | 8 badges"), "")
     assert key in agent.s["nav_blocked"]
+
+
+def test_a_far_weaker_teammate_is_no_switch_for_a_fighter_still_standing():
+    """Full run 90: Jev swapped L70 Charizard (110/227) for L15 Lapras twice against a Cooltrainer's Ivysaur; Lapras
+    fainted and the team blacked out in Victory Road. Nearly fainted, or fainted, any teammate may still come in."""
+    lapras = {"species": "Lapras", "level": 15, "hp": 50, "max_hp": 50, "moves": [{"name": "Surf", "pp": 15}]}
+    char = {"species": "Charizard", "level": 70, "hp": 110, "max_hp": 227, "moves": [{"name": "Flamethrower", "pp": 15}]}
+    b = {"kind": "trainer", "menu": "", "mine": dict(char), "enemy": {"species": "Ivysaur", "level": 40, "hp": 90, "max_hp": 120}}
+    labels = [x.label for x in J.battle_options(b, [char, lapras], [])]
+    assert "switch to Lapras" not in labels and "auto-battle" in labels
+    b["mine"] = dict(char, hp=30)
+    assert "switch to Lapras" in [x.label for x in J.battle_options(b, [char, lapras], [])]
+    b["mine"] = dict(char, hp=0)
+    assert "switch to Lapras" in [x.label for x in J.battle_options(b, [char, lapras], [], only_switch=True)]
+    b["mine"] = dict(lapras)                                   # the weak one out: the strong one is offered
+    assert "switch to Charizard" in [x.label for x in J.battle_options(b, [char, lapras], [])]
+
+
+def test_healing_offers_every_poke_center_known_not_just_the_last_two():
+    """Full run 90 was hurt in Victory Road; the heal targets were the last two visited (Cinnabar's, Saffron's) and the
+    route went for Cinnabar across Route 21's water, not Viridian's one map away: it blacked out on the way."""
+    towns = ["Viridian City", "Pewter City", "Cerulean City", "Saffron City", "Cinnabar Island"]
+    d = SOLO.SoloDirector({"visited": towns + ["Route 23"], "milestones": [], "step": 100})
+    order = [n.id for n in SOLO.GRAPH]
+    f = SOLO.Facts(badges=8, levels=[70], hp_ratio=0.3, carry_ratio=0.3, visited=set(towns),
+                   manual_done=set(order[:order.index("plateau")]))
+    o = J.parse("walked\nf1 Victory Road 2F (10,8) facing up | C L70 60/227 | ¥3000 | 8 badges")
+    text, targets, why = d.objective(f, o)
+    assert why == "heal" and "Viridian Poké Center" in targets and targets[0] == "Cinnabar Poké Center"
+    assert len(targets) == len(set(targets)) == 5
+
+
+def test_the_nearest_poke_center_is_found_across_water_with_surf(tmp_path):
+    """Full run 90: the heal choice routed without Surf, so from Victory Road (every way back crosses Route 23's water)
+    no Poké Center was in reach, the agent noted "no route" and took the first target as it came (Cinnabar's)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    pal, vpc = map_id("Pallet Town"), map_id("Viridian Poké Center")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.items = [("HM03", 1)]
+    agent.nav.observe(pal, _view("Pallet Town", ["#########", "#P..~~.D#", "#########"]), _warps_hex([(7, 1, 0, vpc)]), [])
+    agent.s["step"] = 50
+    o = J.parse("walked\nf1 Pallet Town (1,1) facing right | C L50 38/168 | ¥2543 | 8 badges")
+    opts, _ = agent.nav_options(o, ["Cinnabar Poké Center", "Viridian Poké Center"],
+                                SOLO.Facts(badges=8, moves={"Surf"}), why="heal")
+    assert agent.s.get("heal_noroute_step", -1) != 50
+    assert any(x.label.startswith("follow the map route to Viridian Poké Center") for x in opts), [x.label for x in opts]

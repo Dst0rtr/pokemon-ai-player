@@ -1329,6 +1329,9 @@ class Agent:
         self.edge_opts = {}
         self.clear_for = {}
         self.exploring = False
+        moves = set(facts.moves) if facts else set()
+        surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
+        cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
         # healing: the targets list the nearest Poké Center first; otherwise the route ends at the last target
         order = targets if why == "heal" else list(reversed(targets))
         goal = next((map_id(t) for t in order if map_id(t) is not None), None)
@@ -1337,17 +1340,20 @@ class Agent:
             best = None
             for t in targets:
                 mid = map_id(t)
-                r = self.nav.route(cur, tuple(o.pos), mid) if mid is not None else None
+                # with Surf and Cut like the route itself (full run 90: every way back from Victory Road crosses Route
+                # 23's water, so no Poké Center was "in reach" and the first target was taken as it came)
+                r = self.nav.route(cur, tuple(o.pos), mid, surf=surf, cut=cut) if mid is not None else None
                 if r is not None and (best is None or len(r) < best[0]):
                     best = (len(r), mid)
             goal = best[1] if best else goal
         if why == "heal":
             # no Poké Center the map knowledge reaches from here: the director may carry on when the team can (full run 88
             # went up and down Victory Road's ladders at 57-66% HP with the heal objective and no way out from there)
-            if not any(self.nav.route(cur, tuple(o.pos), map_id(t)) is not None for t in targets if map_id(t) is not None):
+            if not any(self.nav.route(cur, tuple(o.pos), map_id(t), surf=surf, cut=cut) is not None
+                       for t in targets if map_id(t) is not None):
                 self.s["heal_noroute_step"] = self.s["step"]
         if why == "heal" and len(targets) == 1 and goal != cur and goal is not None and \
-                self.nav.route(cur, tuple(o.pos), goal) is None and "once" in (self.s.get("last_objective") or ""):
+                self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut) is None and "once" in (self.s.get("last_objective") or ""):
             # the one-off "use this town's Poké Center" visit has no known way there (Route 4's is behind a ledge)
             self.s.setdefault("pc_unreachable", []).append(targets[0])
         # a map that counts only when entered from one other map (Silph Co. 11F from 7F's warp pad): standing on it
@@ -1364,9 +1370,6 @@ class Agent:
         cells = self.spot_cells(o, cur, goal)
         if cells is not None:
             self.entry_pending = True
-        moves = set(facts.moves) if facts else set()
-        surf = "Surf" in moves and (facts.badges if facts else 0) >= 5
-        cut = "Cut" in moves and (facts.badges if facts else 0) >= 2
         # the Pokémon Tower's top floor is walled off by the ghost Marowak until the Silph Scope: exploring towards it
         # only replays an unwinnable battle (full run 53, ~2,000 steps on 6F)
         closed = {"Pokémon Tower 7F"} if not (facts and facts.has("Silph Scope")) else set()

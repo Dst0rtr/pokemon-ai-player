@@ -340,7 +340,9 @@ class SoloDirector:
                 weak = f"{round(100 * f.hp_ratio)}% HP" + (f", {f.attack_pp} PP left on attacking moves" if no_pp else "") + \
                     (f", your strongest Pokémon at {round(100 * f.carry_ratio)}%" if weak_carry else "")
                 return (f"Your team is weak ({weak}): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
-                        pcs[:2], "heal")
+                        list(dict.fromkeys(pcs)), "heal")   # every one: the agent routes to the nearest
+            # (the two last visited were Cinnabar's and Saffron's in full run 90: from Victory Road it went for Cinnabar
+            # through Route 21's water, not Viridian's one map away, and blacked out on the way)
         self.s["healing"] = False
         town = o.map.endswith(("City", "Town", "Island"))  # route Poké Centers (Mt. Moon's, Rock Tunnel's) are not homes
         pc = (POKE_CENTERS.get(o.map) if town else None) or \
