@@ -1044,6 +1044,30 @@ def test_a_refusal_before_any_step_is_the_terrain_even_with_people_on_the_path(t
     assert agent.nav.unreachable(b1, (4, 1), (1, 1))
 
 
+def test_a_boulder_or_a_door_change_keeps_a_refusal_from_being_a_lasting_wall(tmp_path):
+    """Codex 6: a refusal before any step on a map with boulders may be where a boulder stands now (the server routes
+    around boulders), so a boulder on the path is moved, not learned as a wall; and a terrain refusal is scoped to where
+    it was refused from and forgotten when the map changes under the player."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    vr = map_id("Victory Road 1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(vr, _view("Victory Road 1F", ["#######", "#D.B.P#", "#######"]), _warps_hex([(1, 1, 0, 34)]), [])
+    o = J.parse("walked\nf1 Victory Road 1F (5,1) facing left | C L60 180/190 | ¥2543 | 7 badges")
+    o.grid = {(3, 1): "B"}
+    opt = J.Option("walk to the warp at (1,1) → Route 23", "walk", {"path": "to 1,1"})
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (5,1) to (1,1) on this map"), "")
+    assert not agent.s.get("terrain_noroute")
+    agent.learn_noroute(o)
+    assert not agent.nav.unreachable(vr, (5, 1), (1, 1))
+    # a terrain refusal elsewhere: recorded with its origin, and dropped when the map changes
+    o.grid = {}
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (5,1) to (1,1) on this map"), "")
+    assert agent.s["terrain_noroute"][f"{vr}:1,1"][1:] == [5, 1]
+
+
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
     from bench.jev_atlas import LearnedAtlas
     from bench.jev_nav import map_id

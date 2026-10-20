@@ -1116,8 +1116,8 @@ class Agent:
                 self.s.get("clues", {}).pop(n, None)
                 self.s.get("sealed", {}).pop(n, None)
                 cur = map_id(n)
-                for k in ("nav_noroute", "nav_blocked"):
-                    for key in [key for key in self.s[k] if key.startswith(f"{cur}:")]:
+                for k in ("nav_noroute", "nav_blocked", "terrain_noroute"):
+                    for key in [key for key in self.s.get(k, {}) if key.startswith(f"{cur}:")]:
                         del self.s[k][key]
                 self.s.get("talk_noroute", {}).pop(n, None)
                 if isinstance(self.nav, LearnedAtlas) and cur is not None:
@@ -1587,7 +1587,8 @@ class Agent:
                 continue
             cur, frm, to = p[0], (p[1], p[2]), (p[3], p[4])
             try:
-                on_path = set(self.nav.path_cells(cur, frm, to)) & set(o.npcs)
+                stones = {c for c, ch in (o.grid or {}).items() if ch == "B"}   # a boulder is moved, not a wall
+                on_path = set(self.nav.path_cells(cur, frm, to)) & (set(o.npcs) | stones)
                 cells = self.nav.map(cur)["cells"]
                 tree = any(0 <= y < len(cells) and 0 <= x < len(cells[y]) and cells[y][x] in ("T", "~")
                            for x, y in self.nav.path_cells(cur, frm, to, cut=True, surf=True))
@@ -1610,7 +1611,9 @@ class Agent:
         path = set(self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=cut))
         tried = self.s.setdefault("clear_tries", {})
         blockers = [n for n in o.npcs if n in path and tried.get(f"{h.map}:{n[0]},{n[1]}", 0) < 2]   # 2 tries: it stays
-        if self.s["step"] - self.s.get("terrain_noroute", {}).get(key, -10**9) <= NAV_BLOCK_STEPS:
+        tn = self.s.get("terrain_noroute", {}).get(key)
+        if isinstance(tn, list) and self.s["step"] - tn[0] <= NAV_BLOCK_STEPS and \
+                self.nav.linked(cur, (tn[1], tn[2]), tuple(o.pos)):
             blockers = []                                 # refused for the terrain: no one to talk out of the way
         if surf and blockers:
             # the first obstacle along the way decides: water before anyone standing further on is Surf's job (plateau-
@@ -1729,10 +1732,14 @@ class Agent:
             # before any step (no "— up 0/2" report) is the terrain itself: the server's pathfinder walks past people
             # (they only cost more), so no one standing there is the reason (full runs 78-79: Rock Tunnel B1F's far
             # ladder, refused again and again while trainers on the agent's path made it "a blocker to clear")
-            terrain = not re.search(r"on this map — (?:up|down|left|right) \d+/\d+", after.head)
+            # Boulders are the exception: the server routes around them, so a map with one may refuse for where they
+            # stand now, not for the terrain (Codex 6)
+            terrain = not re.search(r"on this map — (?:up|down|left|right) \d+/\d+", after.head) and \
+                "B" not in (o.grid or {}).values()
             self.s["pending_noroute"] = [[cur, int(nr[1]), int(nr[2]), int(nr[3]), int(nr[4]), int(terrain)]]
-            if terrain:
-                self.s.setdefault("terrain_noroute", {})[f"{cur}:{nr[3]},{nr[4]}"] = self.s["step"]
+            if terrain:     # with where it was refused from: elsewhere on the map the way may be someone to clear
+                self.s.setdefault("terrain_noroute", {})[f"{cur}:{nr[3]},{nr[4]}"] = \
+                    [self.s["step"], int(nr[1]), int(nr[2])]
         elif m and "could not get closer" in after.head and "slid" not in after.head and after.map == o.map and \
                 after.pos and abs(after.pos[0] - int(m[1])) + abs(after.pos[1] - int(m[2])) <= 1 and \
                 isinstance(self.nav, LearnedAtlas) and cur is not None:
