@@ -68,6 +68,8 @@ JUNK = ("Moon Stone", "Fire Stone", "Water Stone", "Thunder Stone", "Leaf Stone"
 # beat a team with one fighter and no coverage). A TM is used up when taught, so the strongest Pokémon gets it first.
 KEEP_TMS = {"TM24": "Thunderbolt", "TM13": "Ice Beam", "TM26": "Earthquake", "TM29": "Psychic", "TM38": "Fire Blast",
             "TM14": "Blizzard", "TM25": "Thunder", "TM15": "Hyper Beam"}
+STATUS_CURES = {"PSN": ("Antidote",), "BRN": ("Burn Heal",), "PAR": ("Paralyze Heal",), "FRZ": ("Ice Heal",),
+                "SLP": ("Awakening",)}
 TOSS_RETRY_STEPS = 50                                # a toss whose menu failed waits this long
 NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
 NURSE_SPOTS = {"Indigo Plateau Lobby": (7, 7)}       # elsewhere: the Lobby's nurse stands at (7,5) (ROM object list)
@@ -611,6 +613,16 @@ class SoloDirector:
             opts.append(Option("press B to close menus", "press", {"buttons": "B B B"}, "clear a stuck menu or text box"))
             opts.append(Option("open and close the START menu", "press", {"buttons": "START W10 B W10 B"},
                                "resets a player who cannot move after a scripted scene"))
+        if party and o.mode == "overworld":
+            # a status the bag can cure, on a Pokémon still standing (Codex review 12: run 85 walked a poisoned Charizard
+            # from the Safari Zone, HP 37 -> 28 -> 16, and blacked out with an Antidote in the bag)
+            for p in sorted(party, key=lambda p: -p["level"]):
+                cure = next((c for c in (STATUS_CURES.get(p.get("status", "").split(" ")[0], ()) + ("Full Heal",))
+                             if c in f.items), None)
+                if p["hp"] > 0 and p.get("status") and cure:
+                    opts.append(Option(f"cure {p['species']} ({p['status']}) with {cure}", "manage",
+                                       {"action": "use", "target": cure, "target2": p["species"]}, "cure its status"))
+                    break
         if (f.hp_ratio < 0.5 or f.carry_ratio < 0.5) and party and o.mode == "overworld":
             heal = next((h for h in HEAL_ITEMS if h in f.items), None)
             # the strongest Pokémon first when it is hurt, never a fainted one (a potion cannot revive: Codex review 4)

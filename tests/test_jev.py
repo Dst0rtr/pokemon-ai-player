@@ -250,6 +250,18 @@ def test_solo_objective_progression_and_rules():
     assert "teach HM01 (Cut) to Charmeleon" in labels and "teach HM01 (Cut) to Butterfree" not in labels
 
 
+def test_a_status_the_bag_can_cure_is_offered():
+    """Codex review 12: run 85 walked a poisoned Charizard from the Safari Zone (HP 37 -> 28 -> 16) and blacked out with
+    an Antidote in the bag: no cure was ever offered."""
+    d = SOLO.SoloDirector({"visited": [], "milestones": [], "step": 1, "recovery": 0})
+    o = J.parse(PEWTER)
+    party = J.parse_party(PARTY)                                           # Charmeleon is PSN
+    f = SOLO.Facts(items={"Antidote"}, hp_ratio=0.9, carry_ratio=0.9)
+    cure = [x for x in d.extra_options(o, f, party, [], [], "") if x.label.startswith("cure Charmeleon (PSN) with Antidote")]
+    assert cure and cure[0].args == {"action": "use", "target": "Antidote", "target2": "Charmeleon"}
+    assert not [x for x in d.extra_options(o, SOLO.Facts(items={"Burn Heal"}), party, [], [], "") if "Burn Heal" in x.label]
+
+
 def test_coverage_tms_are_kept_and_taught_to_the_strongest_pokemon():
     """Codex 6: runs 73 and 75 tossed TM24 (Thunderbolt) first to free a bag slot, and the Elite Four beat a team with
     one fighter. A kept TM is never tossed; it is taught to the highest level Pokémon that has not refused it."""
