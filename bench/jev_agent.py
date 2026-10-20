@@ -46,6 +46,7 @@ TROD_RADIUS = 3                                 # floor within this many steps o
 SWITCH_REST_STEPS = 15                          # a Mansion switch just pressed is not offered again this long
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
+FACING_STEP = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?|"
                            r"the boulder is at \(|fell into the hole|pushed \w+ to \(\d+,\d+\), then stopped",
                            re.I)   # (a boulder on Victory Road's floor switch or in its hole opens a barrier)   # the floor changed in place ("Who wouldn't?": a Pokémon Mansion switch was pressed)
@@ -1241,6 +1242,9 @@ class Agent:
         if goal == cur and goal in entry and self.s.get("came_from") == D.map_name(entry[goal]):
             entry = {}
         self.entry_pending = goal in entry
+        sl = self.s.get("sleeper", {}).get(o.map)
+        if sl and facts and facts.has("Poké Flute") and "snorlax" not in facts.events:
+            self.s["spot_goal"] = [o.map, sl[0], sl[1], self.s["step"], "person"]   # the route goes to its side
         cells = self.spot_cells(o, cur, goal)
         if cells is not None:
             self.entry_pending = True
@@ -1670,6 +1674,11 @@ class Agent:
         """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
         # warp options carry their coordinates in the label (a warp you stand on is taken by stepping off and back)
         m = re.search(r"warp at \((\d+),(\d+)\)", opt.label) or re.fullmatch(r"to (\d+),(\d+)", opt.args.get("path", ""))
+        if "sleeping POK" in after.head + "\n" + after.text and after.map and after.pos and after.facing in FACING_STEP:
+            # where the sleeping Snorlax lies: with the flute, that cell is the goal (full run 80 met it before the flute,
+            # then went back and forth across Lavender's south edge: Route 12's north part is walled off from it)
+            dx, dy = FACING_STEP[after.facing]
+            self.s.setdefault("sleeper", {})[after.map] = [after.pos[0] + dx, after.pos[1] + dy]
         if o.map and o.pos and after.map == o.map and o.mode == "overworld":
             # every cell a walk stepped on counts as walked, not only where it ended ("left 3/3, up 2/2")
             x, y = o.pos

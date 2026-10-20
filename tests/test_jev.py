@@ -2368,6 +2368,34 @@ def test_an_item_ball_out_of_reach_is_sought_from_another_arrival(tmp_path, nav)
     assert agent.spot_cells(gone, f5, f5) is None and "spot_goal" not in agent.s
 
 
+def test_with_the_flute_the_route_goes_to_where_snorlax_sleeps(tmp_path, nav):
+    """Full run 80 met Route 12's Snorlax before it had the flute; with the flute it went back and forth across
+    Lavender's south edge ~1,500 steps: Route 12's north part is walled off from the Snorlax (the gate joins them), and
+    standing on Route 12 counted as being there. Where it sleeps is remembered and becomes the route's goal."""
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    agent.nav = nav
+    r12 = map_id("Route 12")
+    o = J.parse("walked\nf1 Route 12 (10,61) facing down | C L40 100/120 | ¥3000 | 4 badges")
+    talk = J.Option("talk to the person or object at (10,62)", "walk", {"path": "to 10,61"})
+    agent.nav_feedback(o, talk, J.parse("dialogue ended: A sleeping POKéMON blocks the way!\n"
+                                        "f1 Route 12 (10,61) facing down | C L40 100/120 | ¥3000 | 4 badges"), "")
+    assert agent.s["sleeper"] == {"Route 12": [10, 62]}
+    north = J.parse("walked\nf1 Route 12 (9,0) facing down | C L40 100/120 | ¥3000 | 4 badges")
+    north.npcs = [(10, 62)]
+    f = SOLO.Facts(badges=4, items={"Poké Flute"})
+    agent.nav_options(north, ["Lavender Town", "Route 12"], f, "fuchsia")
+    assert agent.s["spot_goal"][:3] == ["Route 12", 10, 62]
+    cells = agent.spot_cells(north, r12, r12)
+    hops = agent.nav.route(r12, (9, 0), r12, goal_cells=cells)
+    assert hops and any(h.dest == map_id("Route 12 Gate 1F") for h in hops), hops
+    f.events = {"snorlax"}
+    agent.s.pop("spot_goal")
+    agent.nav_options(north, ["Lavender Town", "Route 12"], f, "fuchsia")
+    assert "spot_goal" not in agent.s                                      # awake: no goal
+
+
 def test_a_gym_leader_behind_warp_pads_is_sought_through_them(tmp_path, nav):
     """Full run 73: Sabrina's room in the Saffron Gym is joined to the others only by warp pads; the walk to her never
     crosses a warp ("no walkable route"), and ~4,500 steps went on the same pads. An unreachable person in a gym becomes
