@@ -142,16 +142,19 @@ GRAPH: list[Node] = [
     Node("brock", "Beat Brock in the Pewter Gym.", ("Pewter Gym",), _badge(1)),
     Node("mtmoon", "Go east along Route 3 to Mt. Moon (the 'follow the map route' option knows the way).",
          ("Route 3", "Route 4", "Mt. Moon 1F"), lambda f: f.reached("Mt. Moon 1F")),
+    # every objective names the maps its way passes through: the furthest-known-map fallback can only aim at a map the
+    # objective names (full run 82 left Viridian Forest out of the Pewter objective; Codex review 9 listed the others)
     Node("cerulean", "Get through Mt. Moon to Cerulean City: on every floor take the 'follow the map route' option (it knows "
                      "which ladder leads on); beat trainers who block the way.",
-         ("Mt. Moon B1F", "Mt. Moon B2F", "Route 4", "Cerulean City"), lambda f: f.reached("Cerulean City")),
+         ("Mt. Moon 1F", "Mt. Moon B1F", "Mt. Moon B2F", "Route 4", "Cerulean City"), lambda f: f.reached("Cerulean City")),
     Node("misty", "Beat Misty in the Cerulean Gym.", ("Cerulean Gym",), _badge(2)),
     Node("ticket", "Go north over Nugget Bridge (Route 24) and east on Route 25 to Bill's house; help Bill to get the S.S. Ticket: "
                    "talk to Bill (he looks like a Pokémon), then use the computer at the right end of the room (stand below it, "
                    "face up, talk), then talk to Bill again when he comes out.",
          ("Route 24", "Route 25", "Bill's House"), lambda f: f.has("S.S. Ticket") or f.reached("S.S. Anne 1F")),
     Node("vermilion", "Go south through Route 5, the Underground Path and Route 6 to Vermilion City.",
-         ("Route 5", "Route 6", "Vermilion City"), lambda f: f.reached("Vermilion City")),
+         ("Route 5", "Underground Path (Route 5)", "Underground Path N-S", "Underground Path (Route 6)", "Route 6",
+          "Vermilion City"), lambda f: f.reached("Vermilion City")),
     Node("cut", "Board the S.S. Anne in Vermilion harbor and talk to the captain on the top deck to get HM01 (Cut).",
          ("Vermilion Dock", "S.S. Anne 1F", "S.S. Anne 2F", "S.S. Anne Captain's Room"), lambda f: f.has("HM01")),
     Node("surge", "Cut the small tree in front of the Vermilion Gym and beat Lt. Surge.", ("Vermilion Gym",), _badge(3)),
@@ -161,7 +164,8 @@ GRAPH: list[Node] = [
                      "(its ladders lead between 1F and B1F several times before the exit south).",
          ("Route 9", "Route 10", "Rock Tunnel 1F", "Rock Tunnel B1F", "Lavender Town"), lambda f: f.reached("Lavender Town")),
     Node("celadon", "Go west from Lavender via Route 8 and the Underground Path to Route 7 and Celadon City.",
-         ("Route 8", "Route 7", "Celadon City"), lambda f: f.reached("Celadon City")),
+         ("Route 8", "Underground Path (Route 8)", "Underground Path W-E", "Underground Path (Route 7)", "Route 7",
+          "Celadon City"), lambda f: f.reached("Celadon City")),
     Node("erika", "Beat Erika in the Celadon Gym (cut the tree in front of it).", ("Celadon Gym",), _badge(4)),
     Node("scope", "Find the Rocket Hideout under the Celadon Game Corner (a switch behind a poster opens the stairs), "
                   "go down to B4F (a Rocket there drops the Lift Key for the elevator), beat Giovanni and take the Silph Scope. "
@@ -181,21 +185,24 @@ GRAPH: list[Node] = [
          # answers from then hid Mr. Fuji after the rescue, ~2,000 steps in and out of the house)
          stages=((lambda f, o: "fuji" in f.events, ("Lavender Town", "Mr. Fuji's House")),)),
     Node("fuchsia", "Wake the sleeping Snorlax with the Poké Flute and travel south to Fuchsia City.",
-         ("Route 12", "Route 13", "Fuchsia City"), lambda f: f.reached("Fuchsia City"),
+         ("Route 12", "Route 13", "Route 14", "Route 15", "Route 15 Gate 1F", "Fuchsia City"), lambda f: f.reached("Fuchsia City"),
          # with the flute, Route 12 (the Snorlax's map) is the place until it woke: the furthest-known-map route wants
          # something left to explore past it, and the Snorlax walls that off (full run 77: ~1,100 steps of blind walks
          # around Celadon and Route 8 with the flute in the bag)
          stages=((lambda f, o: f.has("Poké Flute") and "snorlax" not in f.events, ("Lavender Town", "Route 12")),)),
     Node("koga", "Beat Koga in the Fuchsia Gym.", ("Fuchsia Gym",), _badge(5)),
     Node("surf", "Enter the Safari Zone and find the Secret House in its west area to get HM03 (Surf).",
-         ("Safari Zone Gate", "Safari Zone Center", "Safari Zone West", "Safari Zone Secret House"), lambda f: f.has("HM03")),
+         ("Safari Zone Gate", "Safari Zone Center", "Safari Zone East", "Safari Zone North", "Safari Zone West",
+          "Safari Zone Secret House"), lambda f: f.has("HM03")),
     Node("strength", "Find the Safari Zone's Gold Teeth and give them to the Warden in Fuchsia for HM04 (Strength).",
-         ("Safari Zone Gate", "Safari Zone Center", "Safari Zone West"), lambda f: f.has("HM04"),
+         ("Safari Zone Gate", "Safari Zone Center", "Safari Zone East", "Safari Zone North", "Safari Zone West"),
+         lambda f: f.has("HM04"),
          stages=((lambda f, o: f.has("Gold Teeth"), ("Fuchsia City", "Warden's House")),)),
     # Red/Blue have no Tea (that is FireRed): the thirsty Saffron gate guards take any drink
     Node("drink", "Buy a drink (Fresh Water, Soda Pop or Lemonade) from a vending machine on the Celadon Mart roof, "
                   "then walk into a Saffron gate: the thirsty guard takes it and lets you through.",
-         ("Celadon City", "Celadon Mart 1F", "Celadon Mart Roof"),
+         ("Celadon City", "Celadon Mart 1F", "Celadon Mart 2F", "Celadon Mart 3F", "Celadon Mart 4F", "Celadon Mart 5F",
+          "Celadon Mart Roof"),
          lambda f: any(f.has(d) for d in ("Fresh Water", "Soda Pop", "Lemonade")) or f.reached("Saffron City")),
     # the Card Key (5F) opens the locked doors (L); Giovanni's room on 11F is reached only by the warp pads (3F -> 7F
     # -> 11F), the stairs and the elevator open onto a corridor walled off from it (SoloDirector.entry_rule)

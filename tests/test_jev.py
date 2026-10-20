@@ -1384,6 +1384,19 @@ def test_a_team_out_of_attack_pp_goes_to_heal():
     assert SOLO.attack_pp([dict(tired[0], hp=0)]) == 0 and SOLO.attack_pp([{"hp": 5}]) is None
 
 
+def test_objectives_name_the_maps_their_way_passes_through():
+    """Full run 82 / Codex review 9: the furthest-known-map fallback only aims at maps the objective names, so each
+    names its transit maps (Viridian Forest was missing; so were Mt. Moon 1F, the Underground Paths, Routes 14-15, the
+    Safari Zone's east and north areas and the Celadon Mart's middle floors)."""
+    t = {n.id: set(n.targets) for n in SOLO.GRAPH}
+    assert "Viridian Forest" in t["pewter"] and "Mt. Moon 1F" in t["cerulean"]
+    assert {"Underground Path N-S", "Underground Path (Route 5)", "Underground Path (Route 6)"} <= t["vermilion"]
+    assert {"Underground Path W-E", "Underground Path (Route 8)", "Underground Path (Route 7)"} <= t["celadon"]
+    assert {"Route 14", "Route 15", "Route 15 Gate 1F"} <= t["fuchsia"]
+    assert {"Safari Zone East", "Safari Zone North"} <= t["surf"] & t["strength"]
+    assert {"Celadon Mart 2F", "Celadon Mart 5F"} <= t["drink"]
+
+
 def test_with_the_flute_route_12_is_the_place_until_snorlax_woke():
     """Full run 77: ~1,100 steps of blind walks around Celadon and Route 8 with the Poké Flute in the bag: Fuchsia was
     unknown, and the furthest known target, Route 12, had nothing left to explore past the sleeping Snorlax."""
@@ -1392,12 +1405,12 @@ def test_with_the_flute_route_12_is_the_place_until_snorlax_woke():
     f = SOLO.Facts(badges=4, levels=[45], visited={"Celadon City", "Lavender Town"},
                    manual_done=set(order[:order.index("fuchsia")]))
     o = J.parse("walked\nf1 Route 8 (28,15) facing up | C L45 160/170 | ¥3000 | 4 badges")
-    assert d.objective(f, o)[1:] == (["Route 12", "Route 13", "Fuchsia City"], "fuchsia")   # no flute yet
+    assert d.objective(f, o)[1:] == (["Route 12", "Route 13", "Route 14", "Route 15", "Route 15 Gate 1F", "Fuchsia City"], "fuchsia")   # no flute yet
     f.items, f.ever_items = {"Poké Flute"}, {"Poké Flute"}
     assert d.objective(f, o)[1] == ["Lavender Town", "Route 12"]
     d.heard("SNORLAX woke up! | It attacked in a grumpy rage!")
     f.events = set(d.s["events"])
-    assert d.objective(f, o)[1] == ["Route 12", "Route 13", "Fuchsia City"]
+    assert d.objective(f, o)[1] == ["Route 12", "Route 13", "Route 14", "Route 15", "Route 15 Gate 1F", "Fuchsia City"]
     for line in ("Enemy SNORLAX fainted! | AAAA gained 660 EXP. Points!",
                  "dialogue ended: SNORLAX calmed down! With a big | down! With a big yawn, it returned"):
         d2 = SOLO.SoloDirector({})
