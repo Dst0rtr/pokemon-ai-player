@@ -1277,6 +1277,22 @@ def test_a_fall_through_the_mansion_floor_is_learned_one_way(tmp_path):
     hops = agent.nav.route(f3, (2, 1), map_id("Pokémon Mansion B1F"))
     assert hops and (hops[0].x, hops[0].y, hops[0].dest) == (4, 1, f1), hops
     assert agent.nav.route(f1, (1, 1), f3) is None                          # no way back up the hole
+    # Codex review 13: a route that comes back to 1F through the hole is kept by route_ok (the landing is known)...
+    f2 = map_id("Pokémon Mansion 2F")
+    agent.nav.observe(f2, _view("Pokémon Mansion 2F", ["#####", "#.D.#", "#####"]), _warps_hex([(2, 1, 0, f3)]), [])
+    agent.nav.record_warp(f2, 2, 1, f3, 2, 1)
+    agent.nav.observe(f1, _view("Pokémon Mansion 1F", ["######", "#..D.#", "#D####"]),
+                      _warps_hex([(3, 1, 0, map_id("Pokémon Mansion B1F")), (1, 2, 0, f2)]), [])
+    agent.nav.record_warp(f1, 1, 2, f2, 1, 1)
+    hops = agent.route_ok(f1, (1, 1), map_id("Pokémon Mansion B1F"))
+    assert hops and hops[0].dest == map_id("Pokémon Mansion B1F")          # (direct here; and through the hole:)
+    long = agent.route_ok(f2, (1, 1), map_id("Pokémon Mansion B1F"))
+    assert long and [h.dest for h in long] == [f3, f1, map_id("Pokémon Mansion B1F")] and not agent.loops_back(f2, long)
+    # ...and a hole is never walked across: stairs beyond it are out of reach on foot
+    agent.nav.observe(f3, _view("Pokémon Mansion 3F", ["#######", "#D..:D#", "#######"]),
+                      _warps_hex([(1, 1, 0, f2), (5, 1, 1, f2)]), [])
+    dist, trans = agent.nav.reach(f3, (2, 1))
+    assert (5, 1) not in {(h.x, h.y) for _, h, _ in trans if h.dest == f2} and (4, 1) in {(h.x, h.y) for _, h, _ in trans}
     agent.s["step"] = 30                                                    # a reload between floors is no fall
     agent.learn_walked(J.parse("loaded state 'jev-progress'\nf1 Pokémon Mansion 3F (2,1) facing down | C L60 100/120 | ¥3000 | 7 badges"))
     assert len(agent.nav.data["maps"][str(f1)].get("falls", [])) == 0

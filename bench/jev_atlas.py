@@ -305,13 +305,19 @@ class LearnedAtlas(WorldNav):
             for side, dm, _, _ in m["conns"]:
                 trans.append((UNKNOWN_COST, Hop(mid, "edge", -1, -1, dm, side=side, steps=UNKNOWN_COST), (dm, *UNKNOWN)))
             return {}, trans
-        dist, trans = super().reach(mid, start, surf=surf, cut=cut, avoid=avoid, parents=parents)
+        # holes the player has fallen through: one way down, walked onto like a warp, never walked across (stepping on
+        # one drops you: Codex review 13) (Codex review 12: run 85's way to Mansion B1F is 3F's collapsed floor into
+        # 1F's south part; unlearned, a return after healing had no route)
+        falls = (self.data["maps"].get(str(mid)) or {}).get("falls", [])
+        holes = frozenset((f[0], f[1]) for f in falls if (f[0], f[1]) != tuple(start))
+        dist, trans = super().reach(mid, start, surf=surf, cut=cut, avoid=frozenset(avoid) | holes, parents=parents)
         out = [t for t in trans if t[1].kind == "warp" and not self.unreachable(mid, start, (t[1].x, t[1].y))]
-        # holes the player has fallen through: one way down, walked onto like a warp (Codex review 12: run 85's way to
-        # Mansion B1F is 3F's collapsed floor into 1F's south part; unlearned, a return after healing had no route)
-        for fx, fy, dm, ax, ay in (self.data["maps"].get(str(mid)) or {}).get("falls", []):
-            if (fx, fy) in dist:
-                out.append((dist[(fx, fy)], Hop(mid, "warp", fx, fy, dm, steps=dist[(fx, fy)]), (dm, ax, ay)))
+        for fx, fy, dm, ax, ay in falls:
+            d = min((dist[(fx + dx, fy + dy)] + 1 for dx, dy in MOVES.values() if (fx + dx, fy + dy) in dist), default=None)
+            if (fx, fy) == tuple(start):
+                d = 0
+            if d is not None:
+                out.append((d, Hop(mid, "warp", fx, fy, dm, steps=d), (dm, ax, ay)))
         cells = m["cells"]
         h, w = len(cells), len(cells[0]) if cells else 0
         for side, dm, _, _ in m["conns"]:
@@ -337,6 +343,9 @@ class LearnedAtlas(WorldNav):
             if hop.kind == "edge":
                 e = self.data["edges"].get(f"{hop.map}:{hop.side}")
                 return hop.x >= 0 and bool(e) and e.get("map") == hop.dest
+            if any((f[0], f[1], f[2]) == (hop.x, hop.y, hop.dest)
+                   for f in (self.data["maps"].get(str(hop.map)) or {}).get("falls", [])):
+                return True                                  # a learned fall: its landing is known (Codex review 13)
             m = self.map(hop.map)
             i = next(i for i, w in enumerate(m["warps"]) if (w[0], w[1]) == (hop.x, hop.y))
             return all(a[1:] != UNKNOWN for a in self.warp_dest(hop.map, i))
