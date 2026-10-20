@@ -1177,7 +1177,10 @@ class Agent:
     def remember_door(self, o: Obs, opt: Option, reply: str) -> None:
         """A door that did not open (blocked on the way, wrong side) is not offered again for a while."""
         m = re.match(r"open the locked door at \((\d+),(\d+)\)", opt.label)
-        if m and o.map and not MAP_CHANGE_RE.search(reply):
+        # (a walk there cut short by a trainer or a battle is no try: full run 90's approach to Silph Co. 11F's door was
+        # stopped by a Rocket, the door was skipped 300 steps and the player shuttled between the 7F and 11F pads)
+        interrupted = bool(re.search(r"stopped: (?:dialogue appeared|battle started)", reply))
+        if m and o.map and not MAP_CHANGE_RE.search(reply) and not interrupted:
             self.s.setdefault("card_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}"] = self.s["step"]
         elif (o.map or self.s.get("prev_map")) and (MAP_CHANGE_RE.search(reply) or (
                 (o.map or self.s.get("prev_map")) in GATE_MAPS and re.search(r"\bdefeated [A-Z]", reply))):
