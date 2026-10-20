@@ -1623,9 +1623,26 @@ class Agent:
         report = re.findall(r"\b(?:up|down|left|right) (\d+)/\d+", o.head)   # (a reply after a chain of walks has none)
         steps = sum(int(n) for n in report)
         jumped = bool(report) and last and abs(o.pos[0] - last[1]) + abs(o.pos[1] - last[2]) > 2 * steps + 1   # (ledges: 2)
-        moved = jumped or re.search(r"\bentered\b|\bslid\b|loaded state|blacked out", o.head, re.I)
+        moved = jumped or re.search(r"\bentered\b|\bslid\b|loaded state|blacked out", o.head, re.I) or \
+            self.pad_landing(map_id(o.map), tuple(o.pos))
         if last and last[0] == o.map and self.s["step"] - last[3] <= 40 and not moved:
             self.nav.record_walk(map_id(o.map), (last[1], last[2]), tuple(o.pos))
+
+    def pad_landing(self, mid: int, pos: tuple) -> bool:
+        """Whether `pos` is where (or next to where) a warp pad of this map lands on this same map: a walk ending there
+        may have been teleported, however few cells apart (Codex review 9: run 75's step 9,655, right 4/4 and six cells
+        between the Saffron Gym's rooms)."""
+        try:
+            m = self.nav.map(mid)
+            for i, (_, _, _, dm) in enumerate(m["warps"]):
+                if dm != mid:
+                    continue
+                for d in self.nav.warp_dest(mid, i):
+                    if d[0] == mid and d[1] >= 0 and abs(d[1] - pos[0]) + abs(d[2] - pos[1]) <= 1:
+                        return True
+        except (KeyError, IndexError, ValueError):
+            pass
+        return False
 
     def sleeper_gone(self, o: Obs, after: Obs) -> None:
         """A Snorlax woken (or beaten, or caught; the reply comes from a battle or its dialogue) on the map the player is

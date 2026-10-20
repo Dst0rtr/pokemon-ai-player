@@ -2597,6 +2597,15 @@ def test_a_pad_trip_or_a_window_does_not_corrupt_what_the_atlas_knows(tmp_path):
     agent.s["step"] += 1
     agent.learn_walked(J.parse("went toward (8,1): right 1/1\nf1 Saffron Gym (8,1) facing right | C L50 200/207 | ¥3000 | 6 badges"))
     assert agent.nav.linked(gym, (7, 1), (8, 1))                           # an ordinary walk still links
+    # Codex review 9: a pad landing few cells away (fewer than the steps reported) is no walk either
+    agent.nav.observe(gym, _view("Saffron Gym", ["##########", "#..D#D...#", "##########"]),
+                      _warps_hex([(3, 1, 1, gym), (5, 1, 0, gym)]), [])
+    agent.s["step"] += 1
+    agent.learn_walked(J.parse("walked\nf1 Saffron Gym (2,1) facing up | C L50 200/207 | ¥3000 | 6 badges"))
+    agent.s["step"] += 1
+    agent.learn_walked(J.parse("went toward (3,1): right 4/4 — could not get closer\n"
+                               "f1 Saffron Gym (6,1) facing right | C L50 200/207 | ¥3000 | 6 badges"))
+    assert not agent.nav.linked(gym, (2, 1), (6, 1))
     vr = J.parse("walked\nf1 Victory Road 1F (5,1) facing up | C L60 180/190 | ¥2543 | 7 badges")
     vr.grid = {(3, 1): "B", (4, 1): "."}
     agent.boulders(map_id("Victory Road 1F"), vr)
