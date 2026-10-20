@@ -355,7 +355,9 @@ class SoloDirector:
     def lost(self, f: Facts) -> None:
         """A black-out. In the gym the objective names (leader or its trainers): train harder before the next try."""
         node = current_node(f)
-        if node.id in GYM_NODES and self.s.get("gym_map_seen", "").endswith("Gym"):
+        # (the league too: league-leg lost to Lorelei with Charizard L72 and walked straight back; the table asks L55)
+        seen = self.s.get("gym_map_seen", "")
+        if (node.id in GYM_NODES and seen.endswith("Gym")) or (node.id == "champion" and seen in E4_ROOMS):
             bonus = self.s.setdefault("level_bonus", {})
             # at least three levels above the team that just lost (iteration 38: Charmeleon L25 lost to Misty, and the
             # table's 21 + 3 asked for no training at all)
@@ -379,7 +381,7 @@ class SoloDirector:
             f.came_from, f.elevator = self.s["came_from"], self.s.get("elevator", "")
         if o.map:
             self.s["prev_map"] = o.map
-        if o.map.endswith("Gym"):
+        if o.map.endswith("Gym") or o.map in E4_ROOMS:
             self.s["gym_map_seen"] = o.map
         elif o.map:
             self.s["gym_map_seen"] = ""

@@ -1660,7 +1660,8 @@ class Agent:
             pass
         elif "no walkable route" in after.head or (after.mode == "overworld" and after.map == o.map and after.pos == o.pos
                                                     and "already at" not in after.head) \
-                or (m and after.mode == "overworld" and after.map == o.map and after.pos and re.search(r" 0/1$", after.head)
+                or (m and after.mode == "overworld" and after.map == o.map and after.pos
+                    and re.search(r" 0/1(?: — could not get closer)?$", after.head)
                     and abs(after.pos[0] - int(m[1])) + abs(after.pos[1] - int(m[2])) <= 2) \
                 or ("stopped: dialogue appeared" in after.head and after.map in ("", o.map)):
             # (a person who stops the walk every time, e.g. Saffron's thirsty gate guards, blocks the hop like a wall;

@@ -1242,11 +1242,16 @@ def test_the_elite_four_is_one_room_at_a_time_and_a_loss_starts_over():
     assert d.objective(f, room("Bruno's Room"))[1][-1] == "Agatha's Room"
     f.hp_ratio = f.carry_ratio = 0.2
     assert d.objective(f, room("Agatha's Room"))[2] == "champion"          # no Poké Center inside: items instead
+    d.s["gym_map_seen"] = "Agatha's Room"
+    d.lost(f)                                                               # a league loss trains harder too
+    assert d.s["level_bonus"]["champion"] >= 72 + 3 - SOLO.LEVEL_TARGET[8]
     f.milestones += ["blacked out (lost a battle)"]
     f.hp_ratio = f.carry_ratio = 0.8
     assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "heal"       # back in the Lobby: heal fully first
     f.hp_ratio = f.carry_ratio = 1.0
     d.s["healing"] = False
+    assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "train"     # L72 is not enough after that loss
+    f.levels = [80, 30]
     assert d.objective(f, room("Indigo Plateau Lobby"))[1][-1] == "Lorelei's Room"   # a loss starts over
 
 
@@ -1544,6 +1549,11 @@ def test_a_door_that_will_not_let_you_through_is_a_failed_hop(tmp_path):
     assert f"{f1}:26,27" in agent.s["nav_noroute"]
     agent.nav_feedback(o, opt, after, "")
     assert f"{f1}:26,27" in agent.s["nav_blocked"]                          # twice: left out for a while
+    closer = J.parse("went toward (27,27): right 1/1, down 0/1, down 0/1, down 0/1, down 0/1 — could not get closer\n"
+                     "f1 Pokémon Mansion 1F (27,26) facing down | C L60 200/207 | ¥3000 | 8 badges")
+    twin = J.Option("walk to the warp at (27,27) → Cinnabar Island", "walk", {"path": "to 27,27"})
+    agent.nav_feedback(o, twin, closer, "")
+    assert f"{f1}:27,27" in agent.s["nav_noroute"]                          # (league-leg's wording of the same)
 
 
 def test_a_boulder_is_offered_for_each_floor_switch_with_strength(tmp_path):
