@@ -817,10 +817,8 @@ def test_victory_road_boulder_is_pushed_onto_its_floor_switch(emu):
     assert p.position() == (108, 8, 17) and sorted(p.boulders()) == [(2, 10), (5, 15), (14, 2)]
     view = emu.state("map")
     assert "B=boulder" in view and "X=floor switch" in view and p.full_map_cells()[13][17] == "X"
-    assert "Strength is not active" in emu.walk("push 5,15 to 17,13")
     assert len(p.push_plan((5, 15), (17, 13))) == 18 and p.push_plan((14, 2), (17, 13)) is None
-    before = p.full_map_cells()
-    emu.manage("field", "Strength")
+    before = p.full_map_cells()                        # (the push turns Strength on itself)
     b = (5, 15)
     for _ in range(12):
         r = emu.walk(f"push {b[0]},{b[1]} to 17,13")

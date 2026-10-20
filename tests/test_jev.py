@@ -1505,8 +1505,9 @@ def test_a_boulder_is_offered_for_each_floor_switch_with_strength(tmp_path):
     assert (3, 1) in o.grid and o.grid[(3, 1)] == "B" and o.grid[(5, 1)] == "X"
     rest = [J.Option("walk down 4 tiles", "walk", {"path": "down 4"})]
     opts = agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), rest)
-    assert opts[0].label == "push the boulder at (3,1) onto the switch at (5,1)" and opts[0].args["target"] == "Strength"
-    assert opts[0].then == [("walk", {"path": "push 3,1 to 5,1", "on_battle": "stop"})]
+    assert opts[0].label == "push the boulder at (3,1) onto the switch at (5,1)"
+    assert opts[0].args == {"path": "push 3,1 to 5,1", "on_battle": "stop"}          # (the server turns Strength on)
+    assert [x.label for x in opts] == [opts[0].label]                               # blind walks give way
     assert agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Surf"}), rest) == rest          # no Strength
     agent.remember_push(o, opts[0], "no way to push the boulder at (3,1) to (5,1)")
     assert agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), rest) == rest      # refused: not again

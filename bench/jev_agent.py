@@ -983,11 +983,19 @@ class Agent:
                 key = f"{bx},{by}>{sx},{sy}"
                 if self.s["step"] - tried.get(key, -10**9) <= NAV_BLOCK_STEPS:
                     continue
-                out.append(Option(f"push the boulder at ({bx},{by}) onto the switch at ({sx},{sy})", "manage",
-                                  {"action": "field", "target": "Strength"},
-                                  "a boulder on the floor switch opens the way on (Strength, then push)",
-                                  then=[("walk", {"path": f"push {bx},{by} to {sx},{sy}", "on_battle": "stop"})]))
-        return out + opts
+                out.append(Option(f"push the boulder at ({bx},{by}) onto the switch at ({sx},{sy})", "walk",
+                                  {"path": f"push {bx},{by} to {sx},{sy}", "on_battle": "stop"},
+                                  "a boulder on the floor switch opens the way on (the push uses Strength)"))
+        if not out:
+            return opts
+        # blind walks, staring at walls and stairs back the way you came only dilute them (plateau-leg-3: ~0.1 for the
+        # pushes against walks and Route 23's stairs)
+        arr = self.nav.data["maps"].get(str(map_id(o.map)), {}).get("arrivals", {}) if isinstance(self.nav, LearnedAtlas) else {}
+        taken = {k for k, a in arr.items() if a.get("seen")}
+        keep = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))
+                and x.label != "talk to what you are facing"
+                and not (x.label.startswith("walk to the warp") and any(f"({k})" in x.label for k in taken))]
+        return out + keep
 
     def remember_push(self, o: Obs, opt: Option, reply: str) -> None:
         """A boulder that cannot go onto that switch (no way, did not move) is not offered for it again for a while."""

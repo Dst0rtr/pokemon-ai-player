@@ -1486,7 +1486,9 @@ class PokemonGen1Profile(GameProfile):
         """walk('push bx,by to tx,ty'): plan the pushes, walk behind the boulder and push, one cell at a time, checking
         that it moved and re-planning when something got in the way (Victory Road's floor switches)."""
         if self._u8(0xD728) & 1 == 0:                       # wd728 bit 0: Strength is active on this map
-            return "Strength is not active: manage('field', 'Strength') first"
+            r = self.manage(emu, "field", "Strength")       # (turned on here: one tool call for the whole push)
+            if self._u8(0xD728) & 1 == 0:
+                return f"Strength is not active: {r}"
         notes = []
         for _ in range(60):
             if b == t:
