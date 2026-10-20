@@ -1492,6 +1492,28 @@ def test_a_door_that_will_not_let_you_through_is_a_failed_hop(tmp_path):
     assert f"{f1}:26,27" in agent.s["nav_blocked"]                          # twice: left out for a while
 
 
+def test_a_boulder_is_offered_for_each_floor_switch_with_strength(tmp_path):
+    """Plateau-leg experiment: Victory Road 1F's barrier opens with a boulder on its floor switch. With Strength known,
+    each boulder (B) / uncovered switch (X) pair is offered as 'use Strength, then push'; a pair the server finds no way
+    for is left out for a while; a boulder on the switch re-reads the floor."""
+    from bench.jev_atlas import LearnedAtlas
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    o = J.parse("walked\nf1 Victory Road 1F (1,1) facing up | C L70 200/234 | ¥3000 | 8 badges\n"
+                "Victory Road 1F 7x3, you at (1,1) facing up.\n 0 #######\n 1 #P.B.X#\n 2 #######")
+    assert (3, 1) in o.grid and o.grid[(3, 1)] == "B" and o.grid[(5, 1)] == "X"
+    rest = [J.Option("walk down 4 tiles", "walk", {"path": "down 4"})]
+    opts = agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), rest)
+    assert opts[0].label == "push the boulder at (3,1) onto the switch at (5,1)" and opts[0].args["target"] == "Strength"
+    assert opts[0].then == [("walk", {"path": "push 3,1 to 5,1", "on_battle": "stop"})]
+    assert agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Surf"}), rest) == rest          # no Strength
+    agent.remember_push(o, opts[0], "no way to push the boulder at (3,1) to (5,1)")
+    assert agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), rest) == rest      # refused: not again
+    agent.remember_door(o, opts[0], "the boulder is at (5,1) — pushed right to (4,1), pushed right to (5,1)")
+    assert agent.s["reobserve"] == "Victory Road 1F"
+
+
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):
     """it75 end-state experiment: with a carried atlas but fresh agent memory, every map looked first reached during
     the objective, so the frontier beat the route to Pallet Town. A blank atlas (goal runs) leaves visited empty."""

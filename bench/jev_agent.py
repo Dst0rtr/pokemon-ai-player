@@ -46,8 +46,8 @@ TROD_RADIUS = 3                                 # floor within this many steps o
 SWITCH_REST_STEPS = 15                          # a Mansion switch just pressed is not offered again this long
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
-MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?",
-                           re.I)   # the floor changed in place ("Who wouldn't?": a Pokémon Mansion switch was pressed)
+MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?|"
+                           r"the boulder is at \(", re.I)   # (a boulder on Victory Road's floor switch opens a barrier)   # the floor changed in place ("Who wouldn't?": a Pokémon Mansion switch was pressed)
 GATE_MAPS = {"Cinnabar Gym"}                    # each trainer beaten there opens a gate in the floor (pokered CinnabarGym.asm)
 CLUE_RE = re.compile(r"\bposter\b", re.I)                    # a person guarding something on the wall
 SPOT_STEPS = 1500                               # an item ball with no way to it from here is sought this long
@@ -177,7 +177,7 @@ class Agent:
     def free_neighbour(self, o: Obs) -> bool:
         g = self.grid(o.map)
         x, y = o.pos
-        return any(g.get((x + dx, y + dy)) in (".", ",", ":") for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)))
+        return any(g.get((x + dx, y + dy)) in (".", ",", ":", "X") for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)))
 
     def grid(self, name: str) -> dict:
         return {tuple(int(v) for v in k.split(",")): c for k, c in self.s["grids"].get(name, {}).items()}
@@ -393,6 +393,7 @@ class Agent:
                 opts = doors + opts
             opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
             opts = self.switch_options(o, opts)           # the Pokémon Mansion: secret switches open and shut doors
+            opts = self.boulder_options(o, facts, opts)   # Victory Road: a boulder onto each floor switch (Strength)
             if o.map in targets and why not in ("heal", "train"):
                 before = opts
                 opts = self.floor_options(o, opts, targets)   # floor never walked on (a hole drops to the floor below)
@@ -503,6 +504,7 @@ class Agent:
         self.remember_talk(o, opt, after)
         self.remember_tree(o, after, reply)
         self.remember_door(o, opt, reply)
+        self.remember_push(o, opt, reply)
         if self.director:
             self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
             self.director.heard(reply)
@@ -737,7 +739,7 @@ class Agent:
             if any(self.s["step"] - tried.get(f"{x},{y}", -10**9) <= NAV_BLOCK_STEPS for x, y in pair):
                 continue
             stands = [((x + dx, y + dy), face, (x, y)) for x, y in pair for (dx, dy), face in J.STEP_TOWARD.items()
-                      if grid.get((x + dx, y + dy)) in (".", ",", ":") and (x + dx, y + dy) not in o.npcs
+                      if grid.get((x + dx, y + dy)) in (".", ",", ":", "X") and (x + dx, y + dy) not in o.npcs
                       and (reach is None or (x + dx, y + dy) in reach or (x + dx, y + dy) == (px, py))]
             if not stands:
                 continue
@@ -908,7 +910,7 @@ class Agent:
             return opts
         trod = [tuple(t) for t in self.s.get("trod", {}).get(self.trod_key(o.map), [])] + [tuple(o.pos)]
         floor = [(d, c) for c, d in dist.items() if 0 <= c[1] < len(cells) and 0 <= c[0] < len(cells[c[1]])
-                 and cells[c[1]][c[0]] in (".", ",", ":")]
+                 and cells[c[1]][c[0]] in (".", ",", ":", "X")]
         far = sorted((d, c) for d, c in floor if all(abs(c[0] - t[0]) + abs(c[1] - t[1]) > TROD_RADIUS for t in trod))
         exact = not far
         if exact:
@@ -961,6 +963,37 @@ class Agent:
                 f"({k})" in x.label for k in taken))]
         onward = any(x.label.startswith("explore the frontier") and any(t in x.label for t in targets) for x in opts)
         return opts + new if onward else new + opts
+
+    def boulder_options(self, o: Obs, facts, opts: list[Option]) -> list[Option]:
+        """A floor switch (X) with no boulder on it, boulders (B) and Strength: 'push the boulder at .. onto the switch
+        at ..' for each pair not refused lately (use Strength, then the server plans and makes the pushes). First: the
+        barrier it opens is the way on (plateau-leg experiment: Victory Road 1F's switch, walks back and forth to
+        Route 23 for ~700 steps)."""
+        if not o.pos or not facts or "Strength" not in facts.moves:
+            return opts
+        grid = o.grid or {}
+        plates = [c for c, ch in grid.items() if ch == "X"]
+        stones = [c for c, ch in grid.items() if ch == "B"]
+        if not plates or not stones:
+            return opts
+        tried = self.s.setdefault("push_tried", {}).setdefault(o.map, {})
+        out = []
+        for sx, sy in plates:
+            for bx, by in stones:
+                key = f"{bx},{by}>{sx},{sy}"
+                if self.s["step"] - tried.get(key, -10**9) <= NAV_BLOCK_STEPS:
+                    continue
+                out.append(Option(f"push the boulder at ({bx},{by}) onto the switch at ({sx},{sy})", "manage",
+                                  {"action": "field", "target": "Strength"},
+                                  "a boulder on the floor switch opens the way on (Strength, then push)",
+                                  then=[("walk", {"path": f"push {bx},{by} to {sx},{sy}", "on_battle": "stop"})]))
+        return out + opts
+
+    def remember_push(self, o: Obs, opt: Option, reply: str) -> None:
+        """A boulder that cannot go onto that switch (no way, did not move) is not offered for it again for a while."""
+        m = re.match(r"push the boulder at \((\d+),(\d+)\) onto the switch at \((\d+),(\d+)\)", opt.label)
+        if m and o.map and re.search(r"no way to push|did not move|no boulder at|could not get behind", reply):
+            self.s.setdefault("push_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}>{m[3]},{m[4]}"] = self.s["step"]
 
     def switch_options(self, o: Obs, opts: list[Option]) -> list[Option]:
         """The Pokémon Mansion's secret switches (S in the map view) this part of the floor reaches: stand below, face
@@ -1363,7 +1396,7 @@ class Agent:
         # the side and bottom borders are walls, not objects (the Rocket Hideout Elevator's view has them: 14 wall cells
         # touched the floor, over the cap, and its panel at (1,1) was never offered; full run 52, ~3,000 steps)
         objs = [(x, y) for y in range(top, h - 1) for x in range(1, w - 1) if cells[y][x] == "#" and any(
-            0 <= x + dx < w and 0 <= y + dy < h and cells[y + dy][x + dx] in (".", ",", ":") for dx, dy in MOVES.values())]
+            0 <= x + dx < w and 0 <= y + dy < h and cells[y + dy][x + dx] in (".", ",", ":", "X") for dx, dy in MOVES.values())]
         if not objs or len(objs) > 12:
             return []
         said = self.s["said"].get(o.map, {})
@@ -1373,7 +1406,7 @@ class Agent:
         for x, y in objs:                                  # machines and PCs are used from below first
             for rank, (side, (dx, dy), face) in enumerate(sides):
                 sx, sy = x + dx, y + dy
-                if not (0 <= sx < w and 0 <= sy < h) or cells[sy][sx] not in (".", ",", ":"):
+                if not (0 <= sx < w and 0 <= sy < h) or cells[sy][sx] not in (".", ",", ":", "X"):
                     continue
                 key = f"{x},{y} {side}"
                 first = ({"path": f"{face} 1", "on_battle": "stop"} if (sx, sy) == (px, py)
@@ -1641,7 +1674,7 @@ class Agent:
         back = {"up": "down", "down": "up", "left": "right", "right": "left"}
         for d, (dx, dy) in MOVES.items():
             nx, ny = x + dx, y + dy
-            if 0 <= ny < len(cells) and 0 <= nx < len(cells[0]) and cells[ny][nx] in (".", ",", ":") and (nx, ny) not in warps:
+            if 0 <= ny < len(cells) and 0 <= nx < len(cells[0]) and cells[ny][nx] in (".", ",", ":", "X") and (nx, ny) not in warps:
                 return {"path": f"{d} 1", "on_battle": "stop"}, [("walk", {"path": f"{back[d]} 1", "on_battle": "stop"})]
         return None
 

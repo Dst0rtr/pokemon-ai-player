@@ -112,7 +112,7 @@ class WorldNav:
         pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(m["tileset"], ()))
         if surf:
             pairs |= set(D.TILE_PAIR_COLLISIONS_WATER.get(m["tileset"], ()))
-        passable = {".", ",", ":"} | ({"~"} if surf else set()) | ({"T"} if cut else set())
+        passable = {".", ",", ":", "X"} | ({"~"} if surf else set()) | ({"T"} if cut else set())
         dist = {start: 0}
         q = [start]
         trans: list = []
@@ -164,7 +164,7 @@ class WorldNav:
         return dist, trans
 
     def _edge_arrival(self, side: str, dm: int, ya: int, xa: int, x: int, y: int,
-                      passable: frozenset | set = frozenset({".", ",", ":"})) -> Optional[tuple[int, int, int]]:
+                      passable: frozenset | set = frozenset({".", ",", ":", "X"})) -> Optional[tuple[int, int, int]]:
         sb = lambda v: v - 256 if v > 127 else v               # noqa: E731 (signed byte)
         if side in ("north", "south"):
             ax, ay = x + sb(xa), ya

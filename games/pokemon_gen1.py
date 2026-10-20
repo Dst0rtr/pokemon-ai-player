@@ -287,12 +287,18 @@ class PokemonGen1Profile(GameProfile):
         return out
 
     def _draw_sprites(self, cells: list[list[str]]) -> None:
-        """People as N, item balls as o (both are on screen; the ball's picture is the Poké Ball sprite)."""
+        """People as N, item balls as o, boulders as B (all on screen; each has its own sprite picture)."""
         h, w = len(cells), len(cells[0]) if cells else 0
-        for mark, balls in (("N", False), ("o", True)):
-            for nx, ny in self.npcs(balls):
+        for mark, spots in (("N", self.npcs(False)), ("o", self.npcs(True)), ("B", self.boulders())):
+            for nx, ny in spots:
                 if 0 <= nx < w and 0 <= ny < h:
                     cells[ny][nx] = mark
+
+    def boulders(self) -> list[tuple[int, int]]:
+        """Map cells of the boulders (Strength pushes them)."""
+        hidden = self.hidden_slots()
+        return [(self._u8(D.SPRITE_STATE_2 + 16 * i + 5) - 4, self._u8(D.SPRITE_STATE_2 + 16 * i + 4) - 4)
+                for i in range(1, 16) if self._u8(D.SPRITE_STATE_1 + 16 * i) == D.SPRITE_BOULDER and i not in hidden]
 
     def facing(self) -> str:
         return D.FACING.get(self._u8(D.SPRITE_STATE_1 + 9), "?")
@@ -1364,10 +1370,11 @@ class PokemonGen1Profile(GameProfile):
             tiles.append(row)
         return tiles
 
-    def switch_cells(self, quad: tuple = D.MANSION_SWITCH_QUAD) -> set[tuple[int, int]]:
+    def switch_cells(self, quad: tuple = D.MANSION_SWITCH_QUAD, where: str = "Pokémon Mansion",
+                     tileset: int = 22) -> set[tuple[int, int]]:
         """The Pokémon Mansion's secret switches: the statue drawn with its own four tiles (examine it from below); with
-        `quad`, the cells drawn with another four tiles (its broken floor)."""
-        if not D.map_name(self._u8(D.CUR_MAP)).startswith("Pokémon Mansion") or self._u8(D.CUR_TILESET) != 22:
+        `quad`, the cells drawn with another four tiles (its broken floor, Victory Road's floor switches)."""
+        if not D.map_name(self._u8(D.CUR_MAP)).startswith(where) or (tileset is not None and self._u8(D.CUR_TILESET) != tileset):
             return set()
         bw = self._u8(D.MAP_WIDTH) + 6
         blocks = self.mem[D.OVERWORLD_MAP:D.OVERWORLD_MAP + bw * (self._u8(D.MAP_HEIGHT) + 6)]
@@ -1390,6 +1397,7 @@ class PokemonGen1Profile(GameProfile):
         doors = D.CARD_KEY_DOOR_TILES if D.map_name(self._u8(D.CUR_MAP)).startswith("Silph Co.") else ()
         switches = self.switch_cells()
         broken = self.switch_cells(D.MANSION_BROKEN_QUAD) if switches else set()
+        plates = self.switch_cells(D.VICTORY_SWITCH_QUAD, "Victory Road", None)
         cells = []
         for y, trow in enumerate(self.full_map_tiles()):
             row = []
@@ -1400,6 +1408,8 @@ class PokemonGen1Profile(GameProfile):
                     row.append(",")
                 elif tile in ledges:
                     row.append(D.LEDGE_CHAR[ledges[tile]])
+                elif (x, y) in plates:
+                    row.append("X")                         # a floor switch (walkable; a boulder on it opens a way)
                 elif tile in walkable:
                     row.append(":" if (x, y) in broken else ".")
                 elif tile == water:
@@ -1412,6 +1422,107 @@ class PokemonGen1Profile(GameProfile):
                     row.append("#")
             cells.append(row)
         return cells
+
+    def push_plan(self, b: tuple[int, int], t: tuple[int, int]) -> Optional[list[tuple[tuple[int, int], str]]]:
+        """Pushes that bring the boulder at b to t: [(cell to stand on, direction to push), ...], or None. A push moves
+        the boulder one cell; it needs the player behind it and the cell ahead walkable, free of other sprites and not
+        across a cave elevation step (the same tile-pair rule as walking)."""
+        cells = self.full_map_cells()
+        h, w = len(cells), len(cells[0]) if cells else 0
+        solid = {"#", "T", "L", "S", "~"} | set(D.LEDGE_DIR)
+        pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(self._u8(D.CUR_TILESET), ()))
+        tiles = self.full_map_tiles() if pairs else None
+        # a warp on the map's border (a cave exit) only takes you away when you step off the edge: standing on it is
+        # fine (Victory Road 1F's boulder goes up past the entrance, pushed from it)
+        warps = {(wx, wy) for wx, wy, _ in self.warps() if 0 < wx < w - 1 and 0 < wy < h - 1}
+        others = (set(self.boulders()) | set(self.npcs(False)) | set(self.npcs(True))) - {b}
+        moves = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
+
+        def ok(a, c) -> bool:
+            return (0 <= c[0] < w and 0 <= c[1] < h and cells[c[1]][c[0]] not in solid and c not in others
+                    and not (tiles is not None and frozenset((tiles[a[1]][a[0]], tiles[c[1]][c[0]])) in pairs))
+
+        def region(start, boulder) -> set:
+            seen, todo = {start}, [start]
+            while todo:
+                x, y = todo.pop()
+                for dx, dy in moves.values():
+                    c = (x + dx, y + dy)
+                    if c not in seen and c != boulder and c not in warps and ok((x, y), c):
+                        seen.add(c)
+                        todo.append(c)
+            return seen
+
+        _, px, py = self.position()
+        start = (b, (px, py))
+        parent: dict = {(b, min(region((px, py), b))): None}
+        todo = [start]
+        while todo:
+            nxt = []
+            for bpos, ppos in todo:
+                reach = region(ppos, bpos)
+                for d, (dx, dy) in moves.items():
+                    stand, dest = (bpos[0] - dx, bpos[1] - dy), (bpos[0] + dx, bpos[1] + dy)
+                    if stand not in reach or dest in warps or not ok(bpos, dest):
+                        continue
+                    key = (dest, min(region(bpos, dest)))
+                    if key in parent:
+                        continue
+                    parent[key] = ((bpos, min(reach)), stand, d)
+                    if dest == t:
+                        plan, k = [], key
+                        while parent[k] is not None:
+                            prev, s_, d_ = parent[k]
+                            plan.append((s_, d_))
+                            k = prev
+                        return plan[::-1]
+                    nxt.append((dest, bpos))
+            todo = nxt
+            if len(parent) > 20000:
+                break
+        return None
+
+    def push_boulder(self, emu, b: tuple[int, int], t: tuple[int, int]) -> str:
+        """walk('push bx,by to tx,ty'): plan the pushes, walk behind the boulder and push, one cell at a time, checking
+        that it moved and re-planning when something got in the way (Victory Road's floor switches)."""
+        if self._u8(0xD728) & 1 == 0:                       # wd728 bit 0: Strength is active on this map
+            return "Strength is not active: manage('field', 'Strength') first"
+        notes = []
+        for _ in range(60):
+            if b == t:
+                return f"the boulder is at ({t[0]},{t[1]}) — " + ", ".join(notes[-6:])
+            if b not in self.boulders():
+                return f"no boulder at ({b[0]},{b[1]})"
+            plan = self.push_plan(b, t)
+            if not plan:
+                return f"no way to push the boulder at ({b[0]},{b[1]}) to ({t[0]},{t[1]})" + (" — " + ", ".join(notes[-6:]) if notes else "")
+            (sx, sy), d = plan[0]
+            r = emu._goto(sx, sy, through=False)          # (behind the boulder may be a cave exit: stay on it)
+            if self.position()[1:] != (sx, sy):
+                return f"could not get behind the boulder at ({b[0]},{b[1]}): {r}"
+            dx, dy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}[d]
+            moved = False
+            for _try in range(3):                           # the first press may only turn the player
+                emu._walk_segment(d, 1)
+                for _ in range(8):                          # the boulder slides for a while: wait until it stands
+                    emu.tick(8)
+                    if (b[0] + dx, b[1] + dy) in self.boulders() or b not in self.boulders():
+                        break
+                emu._settle()
+                if (b[0] + dx, b[1] + dy) in self.boulders():
+                    moved = True
+                    break
+                if b not in self.boulders():                # it went somewhere else (two cells?): re-plan from there
+                    return f"the boulder at ({b[0]},{b[1]}) moved unexpectedly: now at {self.boulders()}"
+                if self.in_battle() or self.is_text_visible():
+                    return f"pushing stopped: {self.status_line()}"
+            if not moved:
+                return f"the boulder at ({b[0]},{b[1]}) did not move {d}"
+            if self.in_battle() or self.is_text_visible():  # (pushed, then a wild battle)
+                return f"pushed {d} to ({b[0] + dx},{b[1] + dy}), then stopped: {self.status_line()}"
+            b = (b[0] + dx, b[1] + dy)
+            notes.append(f"pushed {d} to ({b[0]},{b[1]})")
+        return "too many pushes; stopped"
 
     def find_path(self, tx: int, ty: int, avoid=frozenset()) -> Optional[list[tuple[str, int]]]:
         """Dijkstra over the decoded map. NPC sprites are expensive rather than solid (some are hidden
@@ -1426,7 +1537,7 @@ class PokemonGen1Profile(GameProfile):
         if not (0 <= tx < w and 0 <= ty < h):
             return None
         npc_cells = {(nx, ny) for nx, ny in self.npcs()}
-        blocked = set(avoid)
+        blocked = set(avoid) | (set(self.boulders()) - {(tx, ty)})   # a boulder never moves by walking past it
         # Never cross another warp on the way (stairs, ladders, teleport pads would whisk the player away).
         blocked |= {(wx, wy) for wx, wy, _ in self.warps() if (wx, wy) != (tx, ty)}
         if 0 <= tx < w and 0 <= ty < h and cells[ty][tx] in ("#",) and any((wx, wy) == (tx, ty) for wx, wy, _ in self.warps()):
@@ -1727,7 +1838,9 @@ class PokemonGen1Profile(GameProfile):
                 "x→ right, y↓ down. P=you N=npc D=door/warp #=blocked .=walkable ,=tall grass v<>=one-way ledge "
                 "~=water (Surf) T=small tree (Cut)" + (" L=locked door (Card Key)" if any("L" in r for r in cells) else "") + \
                 (" S=secret switch (examine it from below)" if any("S" in r for r in cells) else "") + \
-                (" :=broken floor (a hole can drop you a floor)" if any(":" in r for r in cells) else "")
+                (" :=broken floor (a hole can drop you a floor)" if any(":" in r for r in cells) else "") + \
+                (" B=boulder (Strength pushes it)" if any("B" in r for r in cells) else "") + \
+                (" X=floor switch (push a boulder onto it)" if any("X" in r for r in cells) else "")
                 + (" o=item ball" if any("o" in r for r in cells) else ""))
         ruler = "   " + "".join(str(x % 10) for x in range(w))
         body = "\n".join(f"{y:2d} " + "".join(row) for y, row in enumerate(cells))

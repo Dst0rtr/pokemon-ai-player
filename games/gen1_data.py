@@ -339,6 +339,10 @@ MANSION_BROKEN_QUAD = (0x11, 0x11, 0x11, 0x11)
 MISSABLE_LIST = 0xD5CE      # wMissableObjectList: (sprite slot, global missable index) pairs, 0xFF-terminated
 MISSABLE_FLAGS = 0xD5A6     # wMissableObjectFlags: bit set = object hidden (a taken item ball, a person gone)
 SPRITE_POKE_BALL = 0x3D     # picture id of an item ball lying on the map (wSpriteStateData1 +0)
+SPRITE_BOULDER = 0x3F       # picture id of a boulder (Strength pushes it; Victory Road's switches want one on them)
+# Victory Road's floor switch (cavern tileset): its own four tiles; a boulder on it opens a barrier (pokered
+# VictoryRoad1F.asm: 1F's at (17,13))
+VICTORY_SWITCH_QUAD = (0x2B, 0x2C, 0x2D, 0x2E)
 # pokered TilePairCollisionsLand / Water: in these tilesets you cannot step between the two tiles of a pair
 # (either direction). They model elevation changes in caves and the forest edges.
 TILE_PAIR_COLLISIONS_LAND = {

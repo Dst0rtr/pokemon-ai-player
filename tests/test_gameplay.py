@@ -800,6 +800,39 @@ def test_mansion_broken_floor_is_drawn_and_walkable(emu):
     assert ":=broken floor" in emu.state("map")
 
 
+def test_victory_road_boulder_is_pushed_onto_its_floor_switch(emu):
+    """Victory Road 1F: boulders are drawn B, the floor switch X; walk('push bx,by to tx,ty') plans the pushes (the
+    player may stand on a cave exit on the map's border) and makes them one cell at a time, waiting for each slide;
+    the boulder on the switch opens the barrier. Needs a local saves/<rom>/victory-road-1f.state (1F at (8,17))."""
+    import pytest
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "victory-road-1f.state"
+    if not state.exists():
+        pytest.skip("no local victory-road-1f.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    p = emu.profile
+    assert p.position() == (108, 8, 17) and sorted(p.boulders()) == [(2, 10), (5, 15), (14, 2)]
+    view = emu.state("map")
+    assert "B=boulder" in view and "X=floor switch" in view and p.full_map_cells()[13][17] == "X"
+    assert "Strength is not active" in emu.walk("push 5,15 to 17,13")
+    assert len(p.push_plan((5, 15), (17, 13))) == 18 and p.push_plan((14, 2), (17, 13)) is None
+    before = p.full_map_cells()
+    emu.manage("field", "Strength")
+    b = (5, 15)
+    for _ in range(12):
+        r = emu.walk(f"push {b[0]},{b[1]} to 17,13")
+        while p.in_battle():
+            emu.battle("auto")
+        if "is at (17,13)" in r:
+            break
+        b = next(x for x in p.boulders() if x not in ((2, 10), (14, 2)))
+    assert (17, 13) in p.boulders(), r
+    assert before[12][9] == "#" and p.full_map_cells()[12][9] == "."       # the barrier opened
+
+
 def test_walk_learns_spinners_and_plans_with_them(emu):
     """Rocket Hideout B2F is a spinner maze: the server's route crossed spinner tiles it knew nothing about and every
     walk ended where a spinner dropped it (full run 47: 2,000 decisions there). Each slide is now remembered (spinner

@@ -46,6 +46,7 @@ _WALK = re.compile(r"^(?P<dir>UP|DOWN|LEFT|RIGHT|U|D|L|R)(?P<n>\d+)?$", re.I)
 MAX_PRESSES = 100
 _GOTO = re.compile(r"^(?:to|goto)\s*\(?\s*(?P<x>\d+)\s*[, ]\s*(?P<y>\d+)\s*\)?$", re.I)
 _GOTO_NAME = re.compile(r"^(?:to|goto)\s+(?P<name>[^\d].*)$", re.I)
+_PUSH = re.compile(r"^push\s*\(?\s*(\d+)\s*[, ]\s*(\d+)\s*\)?\s+to\s*\(?\s*(\d+)\s*[, ]\s*(\d+)\s*\)?$", re.I)
 MAX_HOLD = 600
 MAX_STEPS = 60
 MAX_WAIT = 3600
@@ -285,6 +286,13 @@ class Emulator:
 
     def _walk_once(self, path: str) -> str:
         self._ensure()
+        push = _PUSH.match(path.strip())
+        if push and hasattr(self.profile, "push_boulder"):
+            if getattr(self.profile, "in_battle", lambda: 0)() or self.profile.is_text_visible():
+                return "cannot push now: a battle, text box or menu is open"
+            out = self.profile.push_boulder(self, (int(push[1]), int(push[2])), (int(push[3]), int(push[4])))
+            self._after_action()
+            return out
         goto = _GOTO.match(path.strip())
         named = None if goto else _GOTO_NAME.match(path.strip())
         segs = None if (goto or named) else self._parse_walk(path)
@@ -364,7 +372,7 @@ class Emulator:
             out += f" — stopped: {stop_reason}"
         return out
 
-    def _goto(self, tx: int, ty: int, _retry: bool = True) -> str:
+    def _goto(self, tx: int, ty: int, _retry: bool = True, through: bool = True) -> str:
         """Plan a route on the decoded map and walk it, re-planning if something gets in the way."""
         prof = self.profile
         report: list[str] = []
@@ -414,7 +422,7 @@ class Emulator:
             # Refused to step onto the door tile itself: try its twin (two-wide doorways).
             for ax, ay in getattr(prof, "alternate_warps", lambda x, y: [])(tx, ty):
                 return self._goto(ax, ay, _retry=False)
-        if (stop_reason is None and pos is not None and (pos[1], pos[2]) == (tx, ty)
+        if (through and stop_reason is None and pos is not None and (pos[1], pos[2]) == (tx, ty)
                 and any((wx, wy) == (tx, ty) for wx, wy, _ in getattr(prof, "warps", list)())):
             # Standing on a door/warp tile: step through it (off the map edge for exits).
             walked = [r.split()[0] for r in report if not r.startswith("slid")]
