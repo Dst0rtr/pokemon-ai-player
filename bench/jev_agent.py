@@ -302,6 +302,11 @@ class Agent:
             self.s["refresh_party"] = False
         if o.mode in ("battle", "battle_start", "faint_switch"):
             self.s["battle_seen_step"] = self.s["step"]
+            enemy = (o.battle or {}).get("enemy") or {}
+            where = self.s.get("prev_map", "")
+            if (o.battle or {}).get("kind", "").startswith("wild") and enemy.get("level") and where:
+                lv = self.s.setdefault("wild_levels", {})       # the strongest wild Pokémon met on each map (training)
+                lv[where] = max(lv.get(where, 0), enemy["level"])
         elif o.mode == "overworld" and (self.team_step < 0 or self.s["step"] - self.team_step >= 30
                                         or self.team_step < self.s["battle_seen_step"] or self.s.get("refresh_items")):
             await self.refresh_team()
@@ -1451,6 +1456,9 @@ class Agent:
         cells = m["cells"]
         # the Safari Zone's battles give no experience (balls and bait only): full run 76 trained there ~2,000 steps
         safari = lambda name: name.startswith("Safari Zone")
+        best = self.strong_wilds(o, cur, safari)
+        if best:
+            return best
         grass = [] if safari(o.map) else sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
         no_grass = self.s.setdefault("no_grass", [])
         if not grass and any("," in "".join(r) for r in cells) and o.map not in no_grass:
@@ -1487,6 +1495,43 @@ class Agent:
             if walk:
                 return [Option(f"follow the map route to the tall grass on {best[0]}: {h.label()}", "walk", walk[0],
                                "no tall grass on this map: the nearest visited map with grass to train in", then=walk[1])]
+        return []
+
+    def strong_wilds(self, o: Obs, cur: int, safari) -> list[Option]:
+        """Train where the wild Pokémon are strongest of those met (league-leg-2 trained Charizard L73 on Route 1's L3
+        Rattata after losing to Lorelei): pace there, in grass if it has any (caves have encounters anywhere), or the
+        map route there. Only once a map's wild Pokémon are worth it (at least half the strongest party level)."""
+        lv = {n: v for n, v in self.s.get("wild_levels", {}).items() if not safari(n) and map_id(n) is not None}
+        top = max((p["level"] for p in self.party), default=0)
+        good = sorted((v, n) for n, v in lv.items() if v * 2 >= top)
+        if not good:
+            return []
+        blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
+        for v, name in reversed(good):
+            mid = map_id(name)
+            if mid == cur:
+                try:
+                    cells = self.nav.map(cur)["cells"]
+                    dist, _ = self.nav.reach(cur, tuple(o.pos))
+                except (KeyError, IndexError):
+                    return []
+                spot = sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] in ((",",) if "," in "".join(cells) else (".", ",")))
+                for _, (gx, gy) in spot[:40]:
+                    for d, (dx, dy) in MOVES.items():
+                        nb = (gx + dx, gy + dy)
+                        if nb in dist:
+                            back = {"up": "down", "down": "up", "left": "right", "right": "left"}[d]
+                            pace = [("walk", {"path": f"{d} 1", "on_battle": "stop"}), ("walk", {"path": f"{back} 1", "on_battle": "stop"})] * 4
+                            first = {"path": f"to {gx},{gy}", "on_battle": "stop"} if (gx, gy) != tuple(o.pos) else pace[0][1]
+                            return [Option(f"train here at ({gx},{gy}) (wild Pokémon up to L{v})", "walk", first,
+                                           "pace back and forth until a wild Pokémon appears, then fight it",
+                                           then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
+                return []
+            r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked)
+            walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "") if r else None
+            if walk:
+                return [Option(f"follow the map route to train on {name} (wild Pokémon up to L{v}): {r[0].label()}", "walk",
+                               walk[0], "the strongest wild Pokémon met so far", then=walk[1])]
         return []
 
     def learn_walked(self, o: Obs) -> None:

@@ -1524,6 +1524,12 @@ def test_the_route_to_grass_for_training_leaves_out_blocked_hops(tmp_path):
     agent.s["visited"] = ["Lavender Town", "Route 9"]
     o = J.parse("walked\nf1 Lavender Town (1,1) facing up | C L50 200/207 | ¥3000 | 6 badges")
     assert [x.label[:41] for x in agent.train_options(o, None)] == ["follow the map route to the tall grass on"]
+    agent.party = [{"species": "Charizard", "level": 73, "hp": 200, "max_hp": 234, "moves": []}]
+    agent.s["wild_levels"] = {"Route 9": 3}                                  # Route 1-like: not worth it at L73
+    assert agent.train_options(o, None)[0].label.startswith("follow the map route to the tall grass on Route 9")
+    agent.s["wild_levels"] = {"Route 9": 40}                                 # league-leg-2: train where they are strong
+    assert agent.train_options(o, None)[0].label.startswith("follow the map route to train on Route 9 (wild Pokémon up to L40)")
+    agent.s.pop("wild_levels")
     agent.s["nav_blocked"][f"{lav}:3,1"] = agent.s["step"] + 300
     assert agent.train_options(o, None) == []                               # the only way there is blocked
     # full run 76: the Safari Zone's grass gives no experience (its battles are balls and bait)
