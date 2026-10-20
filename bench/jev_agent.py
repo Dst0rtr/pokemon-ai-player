@@ -371,6 +371,11 @@ class Agent:
             if self.nav and not o.npcs and any(self.s["step"] - v <= 3 for v in self.s["nav_noroute"].values()):
                 m = parse(await self.tool("state", section="map"))   # who stands in the way (no view in a refusal)
                 o.npcs, o.balls = m.npcs, m.balls
+            if "X" in self.grid(o.map).values() and facts and "Strength" in facts.moves:
+                # a floor switch here: where the boulders stand now (a push cut short moved one: plateau-leg-5 offered
+                # the boulder where it had been)
+                m = parse(await self.tool("state", section="map"))
+                o.grid.update(m.grid)
             self.learn_walked(o)
             self.learn_trod(o)
             self.learn_noroute(o)
@@ -990,11 +995,9 @@ class Agent:
             return opts
         # blind walks, staring at walls and stairs back the way you came only dilute them (plateau-leg-3: ~0.1 for the
         # pushes against walks and Route 23's stairs)
-        arr = self.nav.data["maps"].get(str(map_id(o.map)), {}).get("arrivals", {}) if isinstance(self.nav, LearnedAtlas) else {}
-        taken = {k for k, a in arr.items() if a.get("seen")}
-        keep = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))
-                and x.label != "talk to what you are facing"
-                and not (x.label.startswith("walk to the warp") and any(f"({k})" in x.label for k in taken))]
+        # the pushes, the objective's own route and people (trainers) only (plateau-leg-5: "walk to outside", named
+        # walks and a frontier to another map at 0.2-0.6, the pushes at 0.06)
+        keep = [x for x in opts if x.label.startswith(("follow the map route", "talk to the person"))]
         return out + keep
 
     def remember_push(self, o: Obs, opt: Option, reply: str) -> None:

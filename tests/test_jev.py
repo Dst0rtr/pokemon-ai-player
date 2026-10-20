@@ -1504,6 +1504,10 @@ def test_a_boulder_is_offered_for_each_floor_switch_with_strength(tmp_path):
                 "Victory Road 1F 7x3, you at (1,1) facing up.\n 0 #######\n 1 #P.B.X#\n 2 #######")
     assert (3, 1) in o.grid and o.grid[(3, 1)] == "B" and o.grid[(5, 1)] == "X"
     rest = [J.Option("walk down 4 tiles", "walk", {"path": "down 4"})]
+    others = rest + [J.Option("walk to outside", "walk", {"path": "to outside"}),
+                     J.Option("follow the map route to Victory Road 2F: walk to the warp at (1,1)", "walk", {"path": "to 1,1"})]
+    assert [x.label[:9] for x in agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), others)] == \
+        ["push the ", "follow th"]                                       # the pushes and the route only
     opts = agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), rest)
     assert opts[0].label == "push the boulder at (3,1) onto the switch at (5,1)"
     assert opts[0].args == {"path": "push 3,1 to 5,1", "on_battle": "stop"}          # (the server turns Strength on)
