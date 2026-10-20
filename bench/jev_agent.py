@@ -1124,6 +1124,17 @@ class Agent:
         keep = [x for x in opts if x.label.startswith(("follow the map route", "talk to the person"))]
         return out + keep
 
+    def puzzle_left(self, mid: int, facts) -> bool:
+        """A known map with a floor switch (X) or a hole (H) and a boulder not pushed there lately (boulder_options would
+        offer the push on arrival)."""
+        if not facts or "Strength" not in facts.moves or not isinstance(self.nav, LearnedAtlas):
+            return False
+        m = self.nav.data["maps"].get(str(mid)) or {}
+        plates = [(x, y) for y, row in enumerate(m.get("cells") or []) for x, ch in enumerate(row) if ch in ("X", "H")]
+        tried = self.s.get("push_tried", {}).get(D.map_name(mid), {})
+        return any(self.s["step"] - tried.get(f"{b[0]},{b[1]}>{x},{y}", -10**9) > NAV_BLOCK_STEPS
+                   for x, y in plates for b in m.get("boulders") or [])
+
     def remember_push(self, o: Obs, opt: Option, reply: str) -> None:
         """A boulder that cannot go onto that switch (no way, did not move) is not offered for it again for a while."""
         m = re.match(r"push the boulder at \((\d+),(\d+)\) (?:onto the switch|into the hole) at \((\d+),(\d+)\)", opt.label)
@@ -1417,7 +1428,10 @@ class Agent:
                     # ~11,000 steps)
                     try:
                         # (a target map with a clue not followed yet is somewhere to go too: the Game Corner's poster)
-                        open_ = bool(found and found[0]) and (found[1][1] < 0 or t in self.s.get("clues", {}) or bool([
+                        # (and one with a boulder puzzle left: full run 90, back on Route 23 after a black-out, had all
+                        # of Victory Road explored but 3F's hole and 2F's second switch, and explored towards the Mansion)
+                        open_ = bool(found and found[0]) and (found[1][1] < 0 or t in self.s.get("clues", {}) or
+                                                              self.puzzle_left(mid, facts) or bool([
                             h for h in self.nav.frontier(mid, (found[1][1], found[1][2]), set(self.s["visited"]),
                                                          surf=surf, cut=cut, blocked=blocked) if h.dest_name not in closed]))
                     except (KeyError, IndexError, ValueError):

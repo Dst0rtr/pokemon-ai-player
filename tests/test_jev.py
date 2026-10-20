@@ -3452,3 +3452,31 @@ def test_the_nearest_poke_center_is_found_across_water_with_surf(tmp_path):
                                 SOLO.Facts(badges=8, moves={"Surf"}), why="heal")
     assert agent.s.get("heal_noroute_step", -1) != 50
     assert any(x.label.startswith("follow the map route to Viridian Poké Center") for x in opts), [x.label for x in opts]
+
+
+def test_a_target_map_with_a_boulder_puzzle_left_is_somewhere_to_go(tmp_path):
+    """Full run 90 blacked out after Victory Road 3F and came back: every exit of Victory Road taken, the way to the
+    Plateau behind 3F's hole and 2F's second switch. With no frontier left there, the frontier sent the player towards
+    the Pokémon Mansion. A target map with a switch or a hole and a boulder not tried there lately is where to go."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r23, vr1 = map_id("Route 23"), map_id("Victory Road 1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(r23, _view("Route 23", ["###D###", "#.....#", "#######"]), _warps_hex([(3, 0, 0, vr1)]), [])
+    agent.nav.observe(vr1, _view("Victory Road 1F", ["#######", "#..B.X#", "###D###"]), _warps_hex([(3, 2, 0, 0xFF)]), [])
+    agent.nav.record_warp(r23, 3, 0, vr1, 3, 2)
+    agent.nav.record_warp(vr1, 3, 2, r23, 3, 0)                                   # every exit taken
+    agent.nav.data["maps"][str(vr1)]["boulders"] = [[3, 1]]
+    agent.s["visited"] = ["Route 23", "Victory Road 1F"]
+    agent.s["step"] = 100
+    o = J.parse("walked\nf1 Route 23 (3,1) facing up | C L70 200/227 | ¥3000 | 8 badges")
+    targets = ["Route 23", "Victory Road 1F", "Indigo Plateau Lobby"]
+    opts, _ = agent.nav_options(o, targets, SOLO.Facts(badges=8, moves={"Strength", "Surf"}), why="plateau")
+    assert any(x.label.startswith("follow the map route to Victory Road 1F") for x in opts), [x.label for x in opts]
+    opts, _ = agent.nav_options(o, targets, SOLO.Facts(badges=8, moves={"Surf"}), why="plateau")   # no Strength
+    assert not any(x.label.startswith("follow the map route to Victory Road 1F") for x in opts)
+    agent.s["push_tried"] = {"Victory Road 1F": {"3,1>5,1": 90}}                   # refused lately: not again
+    opts, _ = agent.nav_options(o, targets, SOLO.Facts(badges=8, moves={"Strength", "Surf"}), why="plateau")
+    assert not any(x.label.startswith("follow the map route to Victory Road 1F") for x in opts)
