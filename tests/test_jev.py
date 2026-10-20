@@ -1196,6 +1196,22 @@ def test_a_team_out_of_attack_pp_goes_to_heal():
     assert SOLO.attack_pp([dict(tired[0], hp=0)]) == 0 and SOLO.attack_pp([{"hp": 5}]) is None
 
 
+def test_with_the_flute_route_12_is_the_place_until_snorlax_woke():
+    """Full run 77: ~1,100 steps of blind walks around Celadon and Route 8 with the Poké Flute in the bag: Fuchsia was
+    unknown, and the furthest known target, Route 12, had nothing left to explore past the sleeping Snorlax."""
+    d = SOLO.SoloDirector({})
+    order = [n.id for n in SOLO.GRAPH]
+    f = SOLO.Facts(badges=4, levels=[45], visited={"Celadon City", "Lavender Town"},
+                   manual_done=set(order[:order.index("fuchsia")]))
+    o = J.parse("walked\nf1 Route 8 (28,15) facing up | C L45 160/170 | ¥3000 | 4 badges")
+    assert d.objective(f, o)[1:] == (["Route 12", "Route 13", "Fuchsia City"], "fuchsia")   # no flute yet
+    f.items, f.ever_items = {"Poké Flute"}, {"Poké Flute"}
+    assert d.objective(f, o)[1] == ["Lavender Town", "Route 12"]
+    d.heard("SNORLAX woke up! | It attacked in a grumpy rage!")
+    f.events = set(d.s["events"])
+    assert d.objective(f, o)[1] == ["Route 12", "Route 13", "Fuchsia City"]
+
+
 def test_the_poke_flute_is_played_at_a_sleeping_snorlax(tmp_path):
     """Full run 56: ~700 talks to the Route 12 Snorlax with the Poké Flute in the bag."""
     (tmp_path / "data").mkdir()

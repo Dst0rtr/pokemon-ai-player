@@ -27,7 +27,8 @@ from typing import Callable, Optional
 from bench.jev import HEAL_ITEMS, Obs, Option
 
 # Giovanni's line after losing on Silph Co. 11F (the dialogue box can break it across lines)
-STORY_RE = {"silph": re.compile(r"ruined\s+our\s+plans\s+for\s+SILPH", re.I)}
+STORY_RE = {"silph": re.compile(r"ruined\s+our\s+plans\s+for\s+SILPH", re.I),
+            "snorlax": re.compile(r"SNORLAX\s+woke\s+up", re.I)}
 
 FIELD_MOVES = {"Cut": "HM01", "Fly": "HM02", "Surf": "HM03", "Strength": "HM04", "Flash": "HM05"}
 # gym/E4 level targets for the best party member (code-side numbers)
@@ -161,7 +162,11 @@ GRAPH: list[Node] = [
          # answers from then hid Mr. Fuji after the rescue, ~2,000 steps in and out of the house)
          stages=((lambda f, o: "fuji" in f.events, ("Lavender Town", "Mr. Fuji's House")),)),
     Node("fuchsia", "Wake the sleeping Snorlax with the Poké Flute and travel south to Fuchsia City.",
-         ("Route 12", "Route 13", "Fuchsia City"), lambda f: f.reached("Fuchsia City")),
+         ("Route 12", "Route 13", "Fuchsia City"), lambda f: f.reached("Fuchsia City"),
+         # with the flute, Route 12 (the Snorlax's map) is the place until it woke: the furthest-known-map route wants
+         # something left to explore past it, and the Snorlax walls that off (full run 77: ~1,100 steps of blind walks
+         # around Celadon and Route 8 with the flute in the bag)
+         stages=((lambda f, o: f.has("Poké Flute") and "snorlax" not in f.events, ("Lavender Town", "Route 12")),)),
     Node("koga", "Beat Koga in the Fuchsia Gym.", ("Fuchsia Gym",), _badge(5)),
     Node("surf", "Enter the Safari Zone and find the Secret House in its west area to get HM03 (Surf).",
          ("Safari Zone Gate", "Safari Zone Center", "Safari Zone West", "Safari Zone Secret House"), lambda f: f.has("HM03")),
