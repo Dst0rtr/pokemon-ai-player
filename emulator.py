@@ -421,7 +421,7 @@ class Emulator:
                 and abs(pos[1] - tx) + abs(pos[2] - ty) == 1):
             # Refused to step onto the door tile itself: try its twin (two-wide doorways).
             for ax, ay in getattr(prof, "alternate_warps", lambda x, y: [])(tx, ty):
-                return self._goto(ax, ay, _retry=False)
+                return self._goto(ax, ay, _retry=False, through=through)   # (Codex review 4)
         if (through and stop_reason is None and pos is not None and (pos[1], pos[2]) == (tx, ty)
                 and any((wx, wy) == (tx, ty) for wx, wy, _ in getattr(prof, "warps", list)())):
             # Standing on a door/warp tile: step through it (off the map edge for exits).

@@ -773,9 +773,11 @@ def test_mansion_switch_is_drawn_and_toggles_doors(emu):
     assert "S=secret switch" in emu.state("map")
     assert emu.profile.find_path(2, 5) is None                         # solid
     emu.walk("up 1")
+    flag = emu.profile._u8(0xD796) & 1                                         # EVENT_MANSION_SWITCH_ON (wEventFlags 0xD747)
     assert "A secret switch" in emu.talk()
     emu.press("A")                                                     # YES
     assert "Who wouldn't?" in emu.talk()
+    assert emu.profile._u8(0xD796) & 1 != flag                                 # (the event flag addresses are right)
     after = emu.profile.full_map_cells()
     assert before[13][24] == "." and after[13][24] == "#"              # a door shut...
     assert before[7][16] == "#" and after[7][16] == "."                # ...and another opened
@@ -828,7 +830,9 @@ def test_victory_road_boulder_is_pushed_onto_its_floor_switch(emu):
             break
         b = next(x for x in p.boulders() if x not in ((2, 10), (14, 2)))
     assert (17, 13) in p.boulders(), r
-    assert before[12][9] == "#" and p.full_map_cells()[12][9] == "."       # the barrier opened
+    after = p.full_map_cells()
+    assert before[12][9] == "#" and after[12][9] == "."                    # the barrier opened
+    assert after[13][17] == "." and emu.profile._u8(0xD869) >> 7 & 1               # an activated switch is drawn as floor
 
 
 def test_walk_learns_spinners_and_plans_with_them(emu):

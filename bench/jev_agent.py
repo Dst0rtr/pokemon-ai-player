@@ -47,7 +47,8 @@ SWITCH_REST_STEPS = 15                          # a Mansion switch just pressed 
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?|"
-                           r"the boulder is at \(", re.I)   # (a boulder on Victory Road's floor switch opens a barrier)   # the floor changed in place ("Who wouldn't?": a Pokémon Mansion switch was pressed)
+                           r"the boulder is at \(|fell into the hole|pushed \w+ to \(\d+,\d+\), then stopped",
+                           re.I)   # (a boulder on Victory Road's floor switch or in its hole opens a barrier)   # the floor changed in place ("Who wouldn't?": a Pokémon Mansion switch was pressed)
 GATE_MAPS = {"Cinnabar Gym"}                    # each trainer beaten there opens a gate in the floor (pokered CinnabarGym.asm)
 CLUE_RE = re.compile(r"\bposter\b", re.I)                    # a person guarding something on the wall
 SPOT_STEPS = 1500                               # an item ball with no way to it from here is sought this long
@@ -329,6 +330,8 @@ class Agent:
             last = await self.tool("memory", address="D365", length=1)        # wLastMap: where "outside" warps lead
             self.nav.observe(map_id(o.map), view, warps, cn, last_map_text=last)
         if o.mode == "overworld" and o.map:
+            if self.s.get("atlas_map") != o.map:
+                self.s.get("push_tried", {}).pop(o.map, None)   # a push refused from one side may work from another
             self.s["atlas_map"] = o.map
             if again:
                 self.s.pop("reobserve", None)
@@ -398,7 +401,8 @@ class Agent:
                 opts = doors + opts
             opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
             opts = self.switch_options(o, opts)           # the Pokémon Mansion: secret switches open and shut doors
-            opts = self.boulder_options(o, facts, opts)   # Victory Road: a boulder onto each floor switch (Strength)
+            if why not in ("heal", "train"):              # (healing first: Codex review 4)
+                opts = self.boulder_options(o, facts, opts)   # Victory Road: a boulder onto each floor switch (Strength)
             if o.map in targets and why not in ("heal", "train"):
                 before = opts
                 opts = self.floor_options(o, opts, targets)   # floor never walked on (a hole drops to the floor below)
@@ -977,7 +981,7 @@ class Agent:
         if not o.pos or not facts or "Strength" not in facts.moves:
             return opts
         grid = o.grid or {}
-        plates = [c for c, ch in grid.items() if ch == "X"]
+        plates = [c for c, ch in grid.items() if ch in ("X", "H")]   # an activated switch is drawn as floor
         stones = [c for c, ch in grid.items() if ch == "B"]
         if not plates or not stones:
             return opts
@@ -988,7 +992,8 @@ class Agent:
                 key = f"{bx},{by}>{sx},{sy}"
                 if self.s["step"] - tried.get(key, -10**9) <= NAV_BLOCK_STEPS:
                     continue
-                out.append(Option(f"push the boulder at ({bx},{by}) onto the switch at ({sx},{sy})", "walk",
+                where = "into the hole" if grid.get((sx, sy)) == "H" else "onto the switch"
+                out.append(Option(f"push the boulder at ({bx},{by}) {where} at ({sx},{sy})", "walk",
                                   {"path": f"push {bx},{by} to {sx},{sy}", "on_battle": "stop"},
                                   "a boulder on the floor switch opens the way on (the push uses Strength)"))
         if not out:
@@ -1002,7 +1007,7 @@ class Agent:
 
     def remember_push(self, o: Obs, opt: Option, reply: str) -> None:
         """A boulder that cannot go onto that switch (no way, did not move) is not offered for it again for a while."""
-        m = re.match(r"push the boulder at \((\d+),(\d+)\) onto the switch at \((\d+),(\d+)\)", opt.label)
+        m = re.match(r"push the boulder at \((\d+),(\d+)\) (?:onto the switch|into the hole) at \((\d+),(\d+)\)", opt.label)
         if m and o.map and re.search(r"no way to push|did not move|no boulder at|could not get behind", reply) \
                 and not re.search(r"battle started|dialogue appeared|stopped: BATTLE", reply):   # (an interruption is not a no)
             self.s.setdefault("push_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}>{m[3]},{m[4]}"] = self.s["step"]

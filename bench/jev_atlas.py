@@ -33,7 +33,7 @@ from games import gen1_data as D
 UNKNOWN = (-1, -1)                    # arrival point not known yet: "somewhere on that map"
 UNKNOWN_COST = 30                     # steps assumed from an unknown arrival point to any warp/edge of that map
 NOROUTE_NEAR = 6                      # a "no walkable route" learned from a cell applies to starts this close to it
-ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS:BX]+)$")
+ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS:BXH]+)$")
 HEX_RE = re.compile(r"^([0-9A-F]{4}): ((?:[0-9A-F]{2} ?)+)$", re.M)
 SIDES = ("north", "south", "west", "east")
 OPPOSITE = {"north": "south", "south": "north", "west": "east", "east": "west"}

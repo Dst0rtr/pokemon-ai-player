@@ -1398,6 +1398,10 @@ class PokemonGen1Profile(GameProfile):
         switches = self.switch_cells()
         broken = self.switch_cells(D.MANSION_BROKEN_QUAD) if switches else set()
         plates = self.switch_cells(D.VICTORY_SWITCH_QUAD, "Victory Road", None)
+        puzzle = D.VICTORY_ROAD_PUZZLE.get(D.map_name(self._u8(D.CUR_MAP)), {})
+        done = {c for c, (addr, bit, _) in puzzle.items() if self._u8(addr) >> bit & 1}   # activated: plain floor
+        plates = (plates | {c for c, (_, _, k) in puzzle.items() if k == "X"}) - done
+        holes = {c for c, (_, _, k) in puzzle.items() if k == "H"} - done
         cells = []
         for y, trow in enumerate(self.full_map_tiles()):
             row = []
@@ -1410,6 +1414,8 @@ class PokemonGen1Profile(GameProfile):
                     row.append(D.LEDGE_CHAR[ledges[tile]])
                 elif (x, y) in plates:
                     row.append("X")                         # a floor switch (walkable; a boulder on it opens a way)
+                elif (x, y) in holes:
+                    row.append("H")                         # a hole a boulder can be pushed into (it lands below)
                 elif tile in walkable:
                     row.append(":" if (x, y) in broken else ".")
                 elif tile == water:
@@ -1438,7 +1444,9 @@ class PokemonGen1Profile(GameProfile):
         others = (set(self.boulders()) | set(self.npcs(False)) | set(self.npcs(True))) - {b}
         moves = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 
-        def ok(a, c) -> bool:
+        def ok(a, c) -> bool:                                # (H, a hole, takes a boulder: only as the target)
+            if 0 <= c[0] < w and 0 <= c[1] < h and cells[c[1]][c[0]] == "H" and c != t:
+                return False
             return (0 <= c[0] < w and 0 <= c[1] < h and cells[c[1]][c[0]] not in solid and c not in others
                     and not (tiles is not None and frozenset((tiles[a[1]][a[0]], tiles[c[1]][c[0]])) in pairs))
 
@@ -1448,7 +1456,7 @@ class PokemonGen1Profile(GameProfile):
                 x, y = todo.pop()
                 for dx, dy in moves.values():
                     c = (x + dx, y + dy)
-                    if c not in seen and c != boulder and c not in warps and ok((x, y), c):
+                    if c not in seen and c != boulder and c not in warps and ok((x, y), c) and cells[c[1]][c[0]] != "H":
                         seen.add(c)
                         todo.append(c)
             return seen
@@ -1515,6 +1523,8 @@ class PokemonGen1Profile(GameProfile):
                     moved = True
                     break
                 if b not in self.boulders():                # it went somewhere else (two cells?): re-plan from there
+                    if (b[0] + dx, b[1] + dy) == t:
+                        return f"the boulder fell into the hole at ({t[0]},{t[1]})"   # (Victory Road 3F: it lands on 2F)
                     return f"the boulder at ({b[0]},{b[1]}) moved unexpectedly: now at {self.boulders()}"
                 if self.in_battle() or self.is_text_visible():
                     return f"pushing stopped: {self.status_line()}"
@@ -1546,7 +1556,7 @@ class PokemonGen1Profile(GameProfile):
             cells[ty][tx] = "."                 # a solid door tile can still be walked into as the destination
         if (tx, ty) == (px, py):
             return []
-        solid = ("#", "T", "L", "S") if self.surfing() else ("#", "T", "L", "S", "~")
+        solid = ("#", "T", "L", "S", "H") if self.surfing() else ("#", "T", "L", "S", "H", "~")
         tileset = self._u8(D.CUR_TILESET)
         pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(tileset, ()))
         if self.surfing():
@@ -1842,7 +1852,8 @@ class PokemonGen1Profile(GameProfile):
                 (" S=secret switch (examine it from below)" if any("S" in r for r in cells) else "") + \
                 (" :=broken floor (a hole can drop you a floor)" if any(":" in r for r in cells) else "") + \
                 (" B=boulder (Strength pushes it)" if any("B" in r for r in cells) else "") + \
-                (" X=floor switch (push a boulder onto it)" if any("X" in r for r in cells) else "")
+                (" X=floor switch (push a boulder onto it)" if any("X" in r for r in cells) else "") + \
+                (" H=hole (push a boulder into it)" if any("H" in r for r in cells) else "")
                 + (" o=item ball" if any("o" in r for r in cells) else ""))
         ruler = "   " + "".join(str(x % 10) for x in range(w))
         body = "\n".join(f"{y:2d} " + "".join(row) for y, row in enumerate(cells))

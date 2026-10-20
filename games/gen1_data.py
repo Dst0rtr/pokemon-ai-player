@@ -343,6 +343,14 @@ SPRITE_BOULDER = 0x3F       # picture id of a boulder (Strength pushes it; Victo
 # Victory Road's floor switch (cavern tileset): its own four tiles; a boulder on it opens a barrier (pokered
 # VictoryRoad1F.asm: 1F's at (17,13))
 VICTORY_SWITCH_QUAD = (0x2B, 0x2C, 0x2D, 0x2E)
+# Victory Road's switches and 3F's boulder hole with the event flag the game sets when a boulder is on/in them
+# (wEventFlags at 0xD747, pokered constants/event_constants.asm; coordinates from scripts/VictoryRoad1F-3F.asm). An
+# activated switch is drawn as floor; the hole is drawn H until a boulder fell in (it reappears on 2F).
+VICTORY_ROAD_PUZZLE = {
+    "Victory Road 1F": {(17, 13): (0xD869, 7, "X")},
+    "Victory Road 2F": {(1, 16): (0xD7EE, 0, "X"), (9, 16): (0xD7EE, 7, "X")},
+    "Victory Road 3F": {(3, 5): (0xD813, 0, "X"), (23, 15): (0xD813, 6, "H")},
+}
 # pokered TilePairCollisionsLand / Water: in these tilesets you cannot step between the two tiles of a pair
 # (either direction). They model elevation changes in caves and the forest edges.
 TILE_PAIR_COLLISIONS_LAND = {

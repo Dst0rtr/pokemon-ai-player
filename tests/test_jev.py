@@ -1212,6 +1212,22 @@ def test_with_the_flute_route_12_is_the_place_until_snorlax_woke():
     assert d.objective(f, o)[1] == ["Route 12", "Route 13", "Fuchsia City"]
 
 
+def test_a_fainted_or_weak_strongest_pokemon_means_healing():
+    """Codex review 4 / plateau-leg-6: a fainted Charizard L70 behind five healthy L24 Pokémon was 56% team HP, no
+    healing, and the run blacked out on Victory Road 3F. The strongest Pokémon counts on its own."""
+    d = SOLO.SoloDirector({"visited": ["Viridian City"]})
+    order = [n.id for n in SOLO.GRAPH]
+    f = SOLO.Facts(badges=8, levels=[70, 24, 24, 24, 24, 24], hp_ratio=0.56, carry_ratio=0.0,
+                   manual_done=set(order[:order.index("plateau")]))
+    o = J.parse("walked\nf1 Route 23 (4,34) facing up | C L70 0/234 | ¥3000 | 8 badges")
+    text, targets, why = d.objective(f, o)
+    assert why == "heal" and "strongest Pokémon at 0%" in text
+    f.carry_ratio = 0.8
+    assert d.objective(f, o)[2] == "heal"                                   # (hysteresis: heal fully)
+    d.s["healing"], f.carry_ratio, f.hp_ratio = False, 0.95, 0.95
+    assert d.objective(f, o)[2] == "plateau"
+
+
 def test_the_poke_flute_is_played_at_a_sleeping_snorlax(tmp_path):
     """Full run 56: ~700 talks to the Route 12 Snorlax with the Poké Flute in the bag."""
     (tmp_path / "data").mkdir()
@@ -1519,6 +1535,10 @@ def test_a_boulder_is_offered_for_each_floor_switch_with_strength(tmp_path):
     o = J.parse("walked\nf1 Victory Road 1F (1,1) facing up | C L70 200/234 | ¥3000 | 8 badges\n"
                 "Victory Road 1F 7x3, you at (1,1) facing up.\n 0 #######\n 1 #P.B.X#\n 2 #######")
     assert (3, 1) in o.grid and o.grid[(3, 1)] == "B" and o.grid[(5, 1)] == "X"
+    hole = J.parse("walked\nf1 Victory Road 3F (1,1) facing up | C L70 200/234 | ¥3000 | 8 badges\n"
+                   "Victory Road 3F 7x3, you at (1,1) facing up.\n 0 #######\n 1 #P.B.H#\n 2 #######")
+    assert agent.boulder_options(hole, SOLO.Facts(badges=8, moves={"Strength"}), [])[0].label == \
+        "push the boulder at (3,1) into the hole at (5,1)"                   # 3F's hole: the boulder lands on 2F
     rest = [J.Option("walk down 4 tiles", "walk", {"path": "down 4"})]
     others = rest + [J.Option("walk to outside", "walk", {"path": "to outside"}),
                      J.Option("follow the map route to Victory Road 2F: walk to the warp at (1,1)", "walk", {"path": "to 1,1"})]
@@ -1534,6 +1554,9 @@ def test_a_boulder_is_offered_for_each_floor_switch_with_strength(tmp_path):
     agent.remember_push(o, opts[0], "no way to push the boulder at (3,1) to (5,1)")
     assert agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), rest) == rest      # refused: not again
     agent.remember_door(o, opts[0], "the boulder is at (5,1) — pushed right to (4,1), pushed right to (5,1)")
+    assert agent.s["reobserve"] == "Victory Road 1F"
+    agent.s.pop("reobserve")
+    agent.remember_door(o, opts[0], "pushed right to (5,1), then stopped: BATTLE (wild) starting")   # landed, then a battle
     assert agent.s["reobserve"] == "Victory Road 1F"
 
 

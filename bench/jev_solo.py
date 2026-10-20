@@ -73,6 +73,7 @@ class Facts:
     milestones: list = field(default_factory=list)
     levels: list = field(default_factory=list)
     hp_ratio: float = 1.0
+    carry_ratio: float = 1.0                         # HP share of the strongest Pokémon (the one carrying the run)
     attack_pp: Optional[int] = None      # PP left on damaging moves of the Pokémon that can still fight (None: unknown)
     manual_done: set = field(default_factory=set)
     explored: int = 0                    # learned atlas: warps and edges taken so far (exploring counts as progress)
@@ -253,9 +254,11 @@ class SoloDirector:
         self.s["ever_items"] = sorted(set(self.s["ever_items"]) | names)
         moves = {m["name"] for p in party for m in p.get("moves", [])}
         hp = sum(p["hp"] for p in party), sum(p["max_hp"] for p in party)
+        carry = max(party, key=lambda p: p["level"]) if party else None
         return Facts(badges=o.badges if o.map else self.s.get("badges", 0), items=names, ever_items=set(self.s["ever_items"]),
                      moves=moves, visited=set(self.s["visited"]), milestones=list(self.s["milestones"]),
                      levels=[p["level"] for p in party], hp_ratio=(hp[0] / hp[1]) if hp[1] else 1.0,
+                     carry_ratio=(carry["hp"] / carry["max_hp"]) if carry and carry["max_hp"] else 1.0,
                      attack_pp=attack_pp(party),
                      manual_done=set(self.s["manual_done"]), came_from=self.s.get("came_from", ""),
                      elevator=self.s.get("elevator", ""), events=set(self.s.get("events", [])),
@@ -267,12 +270,17 @@ class SoloDirector:
         """(objective text, walk targets, why) after the code rules that override the graph."""
         node = current_node(f)
         no_pp = f.attack_pp is not None and f.attack_pp < LOW_PP
-        if f.levels and (f.hp_ratio < 0.35 or no_pp or self.s.get("healing") and f.hp_ratio < 0.9):   # hysteresis: heal fully
+        # the strongest Pokémon counts on its own: five healthy weak ones hid a fainted Charizard L70 (Codex review 4;
+        # plateau-leg-6 blacked out on Victory Road 3F)
+        weak_carry = len(f.levels) > 1 and f.carry_ratio < 0.35
+        if f.levels and (f.hp_ratio < 0.35 or no_pp or weak_carry or
+                         self.s.get("healing") and min(f.hp_ratio, f.carry_ratio) < 0.9):   # hysteresis: heal fully
             self.s["healing"] = True
             here = [POKE_CENTERS[o.map]] if o.map in POKE_CENTERS else []
             pcs = here + [POKE_CENTERS[m] for m in reversed(self.s["visited"]) if m in POKE_CENTERS and m != o.map]
             if pcs:
-                weak = f"{round(100 * f.hp_ratio)}% HP" + (f", {f.attack_pp} PP left on attacking moves" if no_pp else "")
+                weak = f"{round(100 * f.hp_ratio)}% HP" + (f", {f.attack_pp} PP left on attacking moves" if no_pp else "") + \
+                    (f", your strongest Pokémon at {round(100 * f.carry_ratio)}%" if weak_carry else "")
                 return (f"Your team is weak ({weak}): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
                         pcs[:2], "heal")
         self.s["healing"] = False
@@ -529,10 +537,14 @@ class SoloDirector:
             opts.append(Option("press B to close menus", "press", {"buttons": "B B B"}, "clear a stuck menu or text box"))
             opts.append(Option("open and close the START menu", "press", {"buttons": "START W10 B W10 B"},
                                "resets a player who cannot move after a scripted scene"))
-        if f.hp_ratio < 0.5 and party and o.mode == "overworld":
+        if (f.hp_ratio < 0.5 or f.carry_ratio < 0.5) and party and o.mode == "overworld":
             heal = next((h for h in HEAL_ITEMS if h in f.items), None)
-            weakest = min(party, key=lambda p: p["hp"] / max(p["max_hp"], 1))
-            if heal and weakest["hp"] < weakest["max_hp"]:
+            # the strongest Pokémon first when it is hurt, never a fainted one (a potion cannot revive: Codex review 4)
+            alive = [p for p in party if p["hp"] > 0]
+            carry = max(party, key=lambda p: p["level"])
+            weakest = carry if 0 < carry["hp"] < carry["max_hp"] / 2 else \
+                min(alive, key=lambda p: p["hp"] / max(p["max_hp"], 1)) if alive else carry
+            if heal and 0 < weakest["hp"] < weakest["max_hp"]:
                 opts.append(Option(f"use a {heal} on {weakest['species']}", "manage",
                                    {"action": "use", "target": heal, "target2": weakest["species"]}, "heal a hurt Pokémon"))
         return opts
