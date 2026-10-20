@@ -987,8 +987,9 @@ class Agent:
         except (KeyError, IndexError, ValueError):
             return opts
         trod = [tuple(t) for t in self.s.get("trod", {}).get(self.trod_key(o.map), [])] + [tuple(o.pos)]
+        refused = {tuple(t) for t in self.s.get("floor_refused", {}).get(self.trod_key(o.map), [])}
         floor = [(d, c) for c, d in dist.items() if 0 <= c[1] < len(cells) and 0 <= c[0] < len(cells[c[1]])
-                 and cells[c[1]][c[0]] in (".", ",", ":", "X")]
+                 and cells[c[1]][c[0]] in (".", ",", ":", "X") and c not in refused]
         far = sorted((d, c) for d, c in floor if all(abs(c[0] - t[0]) + abs(c[1] - t[1]) > TROD_RADIUS for t in trod))
         exact = not far
         if exact:
@@ -1854,7 +1855,8 @@ class Agent:
                 # (not a walk cut short by a trainer or a battle: Codex review 3)
                 # not reached (a wall the view does not show, someone in the way): it counts as walked, or the strict
                 # puzzle order would offer it again and again
-                self.s.setdefault("trod", {}).setdefault(self.trod_key(o.map), []).append([int(fx[1]), int(fx[2])])
+                # (kept apart from the cells walked: as "walked" its radius hid the floor around it: Codex review 12)
+                self.s.setdefault("floor_refused", {}).setdefault(self.trod_key(o.map), []).append([int(fx[1]), int(fx[2])])
         cur = map_id(o.map)
         if after.map and after.map != o.map and o.map.startswith("Pokémon Mansion") and \
                 after.map.startswith("Pokémon Mansion") and o.pos and after.pos and not m and cur is not None:

@@ -1857,7 +1857,9 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     agent.s["trod"]["Pokémon Mansion 3F#0"] = [[1, 1]]
     agent.nav_feedback(o, J.Option("explore the unvisited floor at (9,1)", "walk", {"path": "to 9,1"}),
                        J.parse("no walkable route from (1,1) to (9,1) on this map"), "")
-    assert [9, 1] in agent.s["trod"]["Pokémon Mansion 3F#0"]                  # not reached: not offered again
+    assert [9, 1] in agent.s["floor_refused"]["Pokémon Mansion 3F#0"]         # not reached: not offered again...
+    assert [9, 1] not in agent.s["trod"]["Pokémon Mansion 3F#0"]              # ...and not walked (Codex review 12)
+    assert agent.nav.data["maps"][str(f3)]["falls"][0][2:] == [map_id("Pokémon Mansion 1F"), 16, 14]   # the fall above
     talked = J.parse("went toward (12,1): right 3/11 — stopped: dialogue appeared\n"
                      "f1 Pokémon Mansion 3F (4,1) facing right | C L60 200/207 | ¥3000 | 6 badges")
     agent.nav_feedback(o, J.Option("explore the unvisited floor at (12,1)", "walk", {"path": "to 12,1"}), talked, "")
