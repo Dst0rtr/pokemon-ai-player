@@ -3556,3 +3556,32 @@ def test_healing_skips_a_poke_center_whose_way_is_blocked_lately(tmp_path):
     opts, _ = agent.nav_options(o, ["Viridian Poké Center", "Cinnabar Poké Center"], SOLO.Facts(badges=8), why="heal")
     assert any(x.label.startswith("follow the map route to Cinnabar Poké Center") for x in opts), [x.label for x in opts]
     assert agent.s.get("heal_noroute_step", -1) != 50
+
+
+def test_healing_in_the_plateau_lobby_makes_the_safe_checkpoint(tmp_path):
+    """Codex review 17: the safe checkpoint was saved only on maps named "... Poké Center", so the Lobby's nurse never
+    replaced it (full run 90's stayed in Cinnabar at six badges)."""
+    class Server(FakeServer):
+        async def __call__(self, name, args):
+            self.calls.append((name, args))
+            status = "f1 Indigo Plateau Lobby (7,7) facing up | Charizard L70 227/227 | ¥3000 | 8 badges"
+            if name == "screen":
+                return status + "\n(no readable text on screen)"
+            if name == "state" and args.get("section") == "party":
+                return "party:\n1. Charizard L70 227/227 [Slash 20pp] Fire"
+            if name == "state" and args.get("section") == "items":
+                return "bag: Potion×1"
+            if name == "state":
+                return _view("Indigo Plateau Lobby", ["#######", "#.....#", "###D###"])
+            if name == "memory":
+                return _warps_hex([]) if args["address"] == "D3AE" else "D365: 22"
+            return f"ok\n{status}"
+
+    from bench.jev_atlas import LearnedAtlas
+    (tmp_path / "data").mkdir()
+    server = Server()
+    agent = Agent(_agent_args(tmp_path, "solo", max_steps=1), server, J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.s["want_safe"] = True
+    asyncio.run(agent.run())
+    assert ("save_state", {"slot": "jev-safe"}) in server.calls

@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, ClaudePlanner, JevError, drop_repeats,  # noqa: E402
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
-from bench.jev_solo import GRAPH, GYM_NODES, STUCK_Q, is_status_move, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS, STORY_RE as SOLO_STORY_RE  # noqa: E402
+from bench.jev_solo import GRAPH, GYM_NODES, NURSE_SPOTS, STUCK_Q, is_status_move, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS, STORY_RE as SOLO_STORY_RE  # noqa: E402
 from bench.jev_nav import ScopedBlocks, MOVES, Hop, WorldNav, map_id  # noqa: E402
 from bench.jev_atlas import HEX_RE, LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
@@ -476,7 +476,9 @@ class Agent:
                 self.director.league_prep_option(o, self.party, self.items)
         if self.director and kind == "overworld" and self.director.want_checkpoint(self.s["step"]):
             await self.tool("save_state", slot="jev-progress")
-        if kind == "overworld" and o.map.endswith("Poké Center") and self.s.pop("want_safe", False):
+        if kind == "overworld" and (o.map.endswith("Poké Center") or o.map in NURSE_SPOTS) and \
+                self.s.pop("want_safe", False):
+            # (the Indigo Plateau Lobby too: full run 90's safe checkpoint stayed in Cinnabar at six badges; Codex 17)
             await self.tool("save_state", slot="jev-safe")   # healed here: a place a reload can always leave
             self.s["safe_step"] = self.s["step"]
         if forced:
