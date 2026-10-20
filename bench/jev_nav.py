@@ -53,6 +53,25 @@ class Hop:
         return f"walk to the warp at ({self.x},{self.y}) → {self.dest_name}"
 
 
+class ScopedBlocks(frozenset):
+    """Blocked hop keys that hold only where they failed from: `origins` {key: [[x, y], ...]}, `linked(map, a, b)` says
+    whether two cells are in the same walkable part. A route search asks per arrival point (`applies`)."""
+
+    def __new__(cls, keys=(), origins: Optional[dict] = None, linked=None):
+        obj = super().__new__(cls, keys)
+        obj.origins, obj.linked = origins or {}, linked
+        return obj
+
+    def applies(self, key: str, node: tuple) -> bool:
+        fs = self.origins.get(key)
+        if not fs or self.linked is None or node[1] < 0:
+            return True
+        try:
+            return any(self.linked(node[0], (f[0], f[1]), (node[1], node[2])) for f in fs)
+        except (KeyError, IndexError):
+            return True
+
+
 class WorldNav:
     """Lazy, cached map data from a ROM image. Map ids are pokered's (the server's status line uses their names)."""
 
@@ -231,7 +250,8 @@ class WorldNav:
                 continue
             for steps, hop, arr in trans:
                 key = f"{hop.map}:{hop.x},{hop.y}"
-                if key in blocked or arr[0] in entry and hop.map != entry[arr[0]]:
+                if key in blocked and (not isinstance(blocked, ScopedBlocks) or blocked.applies(key, node)) \
+                        or arr[0] in entry and hop.map != entry[arr[0]]:
                     continue
                 c = cost + steps + HOP_COST + TAKEN_COST * taken.get(key, 0)
                 if c < best.get(arr, 1 << 30):

@@ -35,7 +35,7 @@ from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, Claud
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import GRAPH, GYM_NODES, STUCK_Q, is_status_move, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS, STORY_RE as SOLO_STORY_RE  # noqa: E402
-from bench.jev_nav import MOVES, Hop, WorldNav, map_id  # noqa: E402
+from bench.jev_nav import ScopedBlocks, MOVES, Hop, WorldNav, map_id  # noqa: E402
 from bench.jev_atlas import LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
 from bench import jev as J  # noqa: E402
@@ -797,25 +797,24 @@ class Agent:
         return out[:3]
 
     def blocked_now(self, o: Optional[Obs] = None) -> frozenset:
-        """Route hops that keep failing (the same set the objective's route leaves out), each only in the section of the
+        """Route hops that keep failing (the same set the objective's route leaves out), each only in the parts of the
         map it failed from: full run 81 was refused Rock Tunnel B1F's far ladder from the east part, and the block then
         hid it from (23,11), whose part does reach it; the frontier sent the player round by Vermilion and Viridian
-        (~1,700 steps)."""
+        (~1,700 steps). On this map the player's cell decides; a route search asks per arrival (ScopedBlocks), so a
+        route planned from another map through the good part keeps the hop too (Codex review 8)."""
         cur = map_id(o.map) if o is not None and o.map else None
         frm = self.s.get("nav_block_from", {})
+        frm = {k: (v if v and isinstance(v[0], list) else [v]) for k, v in frm.items() if v}   # (one origin, older state)
+        linked = self.nav.linked if isinstance(self.nav, LearnedAtlas) else None
         out = set()
         for k, until in self.s["nav_blocked"].items():
             if until <= self.s["step"]:
                 continue
-            f = frm.get(k)
-            if f and cur is not None and o.pos and k.startswith(f"{cur}:") and isinstance(self.nav, LearnedAtlas):
-                try:
-                    if not self.nav.linked(cur, (f[0], f[1]), tuple(o.pos)):
-                        continue                          # failed from another part of this map
-                except (KeyError, IndexError):
-                    pass
+            if k in frm and linked and cur is not None and o.pos and k.startswith(f"{cur}:") and \
+                    not ScopedBlocks((k,), frm, linked).applies(k, (cur, o.pos[0], o.pos[1])):
+                continue                                  # failed from another part of this map
             out.add(k)
-        return frozenset(out)
+        return ScopedBlocks(out, frm, linked)
 
     def puzzle_pending(self, targets: list[str]) -> bool:
         """One of the objective's maps has secret switches (S) and a warp not taken yet."""
@@ -1862,8 +1861,11 @@ class Agent:
             if key:
                 if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) <= NAV_BLOCK_STEPS:
                     self.s["nav_blocked"][key] = self.s["step"] + NAV_BLOCK_STEPS   # failed again: try another way
-                    if o.pos:
-                        self.s.setdefault("nav_block_from", {})[key] = list(o.pos)  # (from this part of the map)
+                if o.pos:                                 # every part of the map it failed from (Codex review 8)
+                    fs = self.s.setdefault("nav_block_from", {}).get(key) or []
+                    fs = fs if not fs or isinstance(fs[0], list) else [fs]
+                    if list(o.pos) not in fs:
+                        self.s["nav_block_from"][key] = (fs + [list(o.pos)])[-8:]
                 self.s["nav_noroute"][key] = self.s["step"]
 
     def hop_walk(self, cur: int, pos: tuple, x: int, y: int, side: str = "") -> Optional[tuple[dict, list]]:

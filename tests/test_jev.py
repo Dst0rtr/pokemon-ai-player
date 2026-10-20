@@ -1125,6 +1125,15 @@ def test_a_blocked_hop_stays_blocked_only_in_the_part_it_failed_from(tmp_path):
     west = J.parse("walked\nf1 Rock Tunnel B1F (2,2) facing up | C L30 80/90 | ¥2543 | 3 badges")
     assert key not in agent.blocked_now(west)                              # another part of B1F: not blocked there
     assert key in agent.blocked_now()                                      # (no position known: blocked)
+    # Codex review 8: planned from 1F, the route arriving in the good part keeps the hop
+    f1, r10 = map_id("Rock Tunnel 1F"), map_id("Route 10")
+    agent.nav.observe(b1, _view("Rock Tunnel B1F", ["#########", "#D..#...#", "#..D#..D#", "#########"]),
+                      _warps_hex([(1, 1, 0, r10), (7, 2, 4, f1), (3, 2, 5, f1)]), [])
+    agent.nav.observe(f1, _view("Rock Tunnel 1F", ["#####", "#D..#", "#####"]), _warps_hex([(1, 1, 2, b1)]), [])
+    on1f = J.parse("walked\nf1 Rock Tunnel 1F (2,1) facing up | C L30 80/90 | ¥2543 | 3 badges")
+    assert agent.nav.route(f1, (2, 1), r10, blocked=frozenset(agent.blocked_now(on1f))) is None   # map-wide: lost
+    hops = agent.nav.route(f1, (2, 1), r10, blocked=agent.blocked_now(on1f))
+    assert hops and hops[-1].dest == r10, hops
 
 
 def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
