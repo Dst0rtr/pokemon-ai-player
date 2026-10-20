@@ -60,5 +60,12 @@
     "initial_milestones": [],
     "progress": "giovanni",
     "_made_by": "end of the viridian-gym-7 experiment earth-leg (0a14d6a): Viridian Gym, 8 badges"
+  },
+  "indigo-plateau": {
+    "state": "saves/Pokemon-Red_Version/indigo-plateau.state",
+    "goal": "champion defeated",
+    "initial_milestones": [],
+    "progress": "plateau",
+    "_made_by": "end of the earth-badge experiment plateau-leg-7 (2f0a35f): Lorelei's Room, 8 badges"
   }
 }
