@@ -46,6 +46,7 @@ TROD_RADIUS = 3                                 # floor within this many steps o
 SWITCH_REST_STEPS = 15                          # a Mansion switch just pressed is not offered again this long
 SEALED_STEPS = 600                              # after a warp did not open, the people on its map come first this long
 NAV_BLOCK_STEPS = 300                           # a route hop that failed is avoided this long
+TALK_STOPS = 8                 # dialogue stops further on, per hop, before they count as failures
 SHORT_BLOCK_STEPS = 30                          # ...or this long when something on the way stopped the walk
 FACING_STEP = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 MAP_CHANGE_RE = re.compile(r"CARD KEY opened|switch behind the poster|played the POK.{1,2} FLUTE|Who wouldn't\?|"
@@ -2096,9 +2097,14 @@ class Agent:
                 # stopped by someone further on each time (Route 23's badge guards, one per gate: full run 90 was
                 # stopped by the Marsh and Volcano guards on the way to Victory Road and blocked its entrance 300 steps
                 # from one cell below it) is progress; stopped at the same cell again is a person in the way
+                # (at most TALK_STOPS such stops per hop in NAV_BLOCK_STEPS: two cells in turn is no progress; Codex 17)
                 stops = self.s.setdefault("nav_talk_stop", {})
-                moved_on = key in stops and stops[key] != list(after.pos)
-                stops[key] = list(after.pos)
+                last = stops.get(key)
+                if not last or len(last) < 4 or self.s["step"] - last[3] > NAV_BLOCK_STEPS:
+                    last = None
+                moved_on = bool(last) and last[:2] != list(after.pos) and last[2] < TALK_STOPS
+                stops[key] = [after.pos[0], after.pos[1], (last[2] + 1) if last else 1,
+                              last[3] if last else self.s["step"]]
                 if moved_on:                        # the earlier stop was someone else further back: not "again"
                     self.s.setdefault("nav_fail_from", {}).pop(key, None)
             else:

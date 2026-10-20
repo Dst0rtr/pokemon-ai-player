@@ -3585,3 +3585,24 @@ def test_healing_in_the_plateau_lobby_makes_the_safe_checkpoint(tmp_path):
     agent.s["want_safe"] = True
     asyncio.run(agent.run())
     assert ("save_state", {"slot": "jev-safe"}) in server.calls
+
+
+def test_dialogue_stops_alternating_between_two_cells_are_bounded(tmp_path):
+    """Codex review 17: c58df3b took every stop at a new cell as progress; stops at A, B, A, B... never blocked the hop."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r23 = map_id("Route 23")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    opt = J.Option("follow the map route to Victory Road 1F: walk to the warp at (4,31) → Victory Road 1F", "walk",
+                   {"path": "to 4,31"})
+    o = J.parse("walked\nf1 Route 23 (9,89) facing up | C L50 100/120 | ¥3000 | 8 badges")
+    for i in range(20):
+        agent.s["step"] = 10 + 2 * i
+        cell = (7, 85) if i % 2 else (11, 56)
+        agent.nav_feedback(o, opt, J.parse(f"went toward (4,31): up 4/17 — stopped: dialogue appeared\n"
+                                           f"f1 Route 23 ({cell[0]},{cell[1]}) facing up | C L50 100/120 | ¥3000 | 8 badges"), "")
+        if f"{r23}:4,31" in agent.s["nav_blocked"]:
+            break
+    assert f"{r23}:4,31" in agent.s["nav_blocked"] and i < 12, i
