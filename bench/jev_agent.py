@@ -821,6 +821,9 @@ class Agent:
         # a switch only once nothing is left to see in this door state (floor walked is kept per state: trod_key);
         # every switch flips the same doors, so pressing early only undoes the last press (volcano-leg-14 and -19)
         rv = self.s.get("revisit")
+        # the cell-by-cell pass waits until both door states had the quick pass (two presses): volcano-leg-23 walked
+        # Mansion 1F one cell at a time for ~400 steps with one press made
+        early = self.s.get("flips", 0) < 2
         kinds = (lambda x: bool(rv) and x.label.startswith(f"go back to {rv}"),   # a revisit begun is finished first
                  # (Codex review 3: "go back to 2F" from B1F went by 1F, where the route to B1F turned it round)
                  lambda x: x.label.startswith("follow the map route"),   # the objective's own route first
@@ -829,6 +832,8 @@ class Agent:
                  lambda x: here(x) or ball(x),
                  lambda x: x.label.startswith("explore the unvisited floor"),
                  lambda x: x.label.startswith(("go back to", "take the stairs")),
+                 lambda x: early and x.label.startswith("press the secret switch"),
+                 lambda x: x.label.startswith("explore the untested floor"),
                  lambda x: x.label.startswith("press the secret switch"),
                  back,
                  # another floor's exits last: volcano-leg-14 went 1F <-> 2F ~20 times between "go to 1F (unexplored
@@ -905,7 +910,8 @@ class Agent:
         floor = [(d, c) for c, d in dist.items() if 0 <= c[1] < len(cells) and 0 <= c[0] < len(cells[c[1]])
                  and cells[c[1]][c[0]] in (".", ",")]
         far = sorted((d, c) for d, c in floor if all(abs(c[0] - t[0]) + abs(c[1] - t[1]) > TROD_RADIUS for t in trod))
-        if not far:
+        exact = not far
+        if exact:
             # then every cell never stepped on: a hole is one cell, and near walked floor is not tested floor (Codex
             # review 3: Mansion 3F's holes to 1F lay two and three cells from cells walked; stepping on one drops you,
             # so a hole is never among the cells walked)
@@ -917,7 +923,8 @@ class Agent:
                 out.append((x, y))
             if len(out) == 2:
                 break
-        new = [Option(f"explore the unvisited floor at ({x},{y})", "walk", {"path": f"to {x},{y}", "on_battle": "stop"},
+        word = "untested" if exact else "unvisited"      # (the cell-by-cell pass is slow: see puzzle_order)
+        new = [Option(f"explore the {word} floor at ({x},{y})", "walk", {"path": f"to {x},{y}", "on_battle": "stop"},
                       "part of this floor never walked on: some ways on are not doors (a hole in the floor)") for x, y in out]
         goal_floor = o.map == targets[-1]                 # (B1F works on its own floor: Codex review 3)
         if not new and not goal_floor:
@@ -945,7 +952,7 @@ class Agent:
                                   then=walk[1]))
         if new:                                           # (blind walks only dilute them: ~60 of them on 3F in volcano-leg-5)
             opts = [x for x in opts if not (x.label.startswith("walk ") and x.label.endswith(" tiles"))]
-        if any(x.label.startswith("explore the unvisited floor") for x in new):
+        if any(x.label.startswith(("explore the unvisited floor", "explore the untested floor")) for x in new):
             # warps already taken lead to floors already seen: volcano-leg-8 took the stairs it had just come up by
             # (Jev ~0.5 for them, ~0.1 for the unwalked floor) ~150 times between Mansion 2F and 3F
             arr = self.nav.data["maps"].get(str(cur), {}).get("arrivals", {})
@@ -1527,7 +1534,7 @@ class Agent:
                     x, y = x + dx, y + dy
                     if [x, y] not in t and len(t) < 900:
                         t.append([x, y])
-        if opt.label.startswith("explore the unvisited floor"):
+        if opt.label.startswith(("explore the unvisited floor", "explore the untested floor")):
             m = None                                     # a fall on the way is not a warp at the walk's target cell
             fx = re.search(r"\((\d+),(\d+)\)", opt.label)
             if fx and o.map and ("no walkable route" in after.head or "could not get closer" in after.head):

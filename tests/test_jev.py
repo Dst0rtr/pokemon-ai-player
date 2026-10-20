@@ -1351,6 +1351,11 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     assert [x.label[:7] for x in agent.puzzle_order(away + mixed[1:2], T, inside)] == ["go back"]   # a switch comes last
     assert [x.label[:5] for x in agent.puzzle_order(away[:1] + mixed[1:2], T, inside)] == ["press"]
     assert agent.s["flips"] == 1 and agent.trod_key("Pokémon Mansion 1F") == "Pokémon Mansion 1F#1"   # one YES so far
+    exact = mk("explore the untested floor at (3,3)")
+    assert [x.label[:5] for x in agent.puzzle_order(exact + mixed[1:2], T, inside)] == ["press"]   # one door state seen
+    agent.s["flips"] = 3
+    assert agent.puzzle_order(exact + mixed[1:2], T, inside) == exact                   # both seen: cell by cell now
+    agent.s["flips"] = 1
     agent.nav.data["maps"][str(f2)]["arrivals"]["3,1"] = {"map": f1, "x": 4, "y": 2, "seen": True}   # 2F's stairs land at (4,2)
     route = mk("follow the map route to Pokémon Mansion B1F: walk to the warp at (21,23) → Pokémon Mansion B1F")
     assert agent.puzzle_order(mixed + ball + route, T, inside) == route                  # the objective's route first
@@ -1420,7 +1425,7 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     del agent.nav.route
     agent.s["trod"]["Pokémon Mansion 3F#0"] += [[6, 1], [10, 1]]
     nxt = [x.label for x in agent.floor_options(o, [], targets)]            # nothing far left: cells never stepped on
-    assert nxt[:1] == ["explore the unvisited floor at (2,1)"]
+    assert nxt[:1] == ["explore the untested floor at (2,1)"]
     agent.s["trod"]["Pokémon Mansion 3F#0"] += [[x, 1] for x in range(1, 13)]
     assert [x.label for x in agent.floor_options(o, [], targets)] == []      # every cell stepped on
     agent.s["trod"]["Pokémon Mansion 3F#0"] = [[1, 1]]
