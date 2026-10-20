@@ -799,22 +799,17 @@ class Agent:
     def blocked_now(self, o: Optional[Obs] = None) -> frozenset:
         """Route hops that keep failing (the same set the objective's route leaves out), each only in the parts of the
         map it failed from: full run 81 was refused Rock Tunnel B1F's far ladder from the east part, and the block then
-        hid it from (23,11), whose part does reach it; the frontier sent the player round by Vermilion and Viridian
-        (~1,700 steps). On this map the player's cell decides; a route search asks per arrival (ScopedBlocks), so a
-        route planned from another map through the good part keeps the hop too (Codex review 8)."""
-        cur = map_id(o.map) if o is not None and o.map else None
+        hid it from (23,11), whose part does reach it (~1,700 steps). Every active key is kept; whoever asks about a
+        concrete cell asks `at(key, (map, x, y))`, and a route search asks per arrival (Codex reviews 8, 9)."""
         frm = self.s.get("nav_block_from", {})
-        frm = {k: (v if v and isinstance(v[0], list) else [v]) for k, v in frm.items() if v}   # (one origin, older state)
+        frm = {k: [f[:2] for f in (v if isinstance(v[0], list) else [v])] for k, v in frm.items() if v}
         linked = self.nav.linked if isinstance(self.nav, LearnedAtlas) else None
-        out = set()
-        for k, until in self.s["nav_blocked"].items():
-            if until <= self.s["step"]:
-                continue
-            if k in frm and linked and cur is not None and o.pos and k.startswith(f"{cur}:") and \
-                    not ScopedBlocks((k,), frm, linked).applies(k, (cur, o.pos[0], o.pos[1])):
-                continue                                  # failed from another part of this map
-            out.add(k)
-        return ScopedBlocks(out, frm, linked)
+        return ScopedBlocks({k for k, until in self.s["nav_blocked"].items() if until > self.s["step"]}, frm, linked)
+
+    def blocked_here(self, o: Obs, cur: int, x: int, y: int) -> bool:
+        """Whether the hop at (x,y) on this map is blocked for the player where they stand."""
+        b, key = self.blocked_now(o), f"{cur}:{x},{y}"
+        return b.at(key, (cur, *o.pos)) if o.pos and isinstance(b, ScopedBlocks) else key in b
 
     def puzzle_pending(self, targets: list[str]) -> bool:
         """One of the objective's maps has secret switches (S) and a warp not taken yet."""
@@ -844,7 +839,7 @@ class Agent:
         for i, (x, y, _, _) in enumerate(warps):
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
             if (x, y) not in near or not dests & set(targets) or dests == {o.map} or arr.get(f"{x},{y}", {}).get("seen") \
-                    or f"{cur}:{x},{y}" in self.blocked_now(o):   # (Codex review 3: puzzle helpers bypassed blocked hops)
+                    or self.blocked_here(o, cur, x, y):   # (Codex review 3: puzzle helpers bypassed blocked hops)
                 continue                                  # (stairs already taken: volcano-leg-12 went 2F <-> 3F ~70 times)
             walk = self.hop_walk(cur, tuple(o.pos), x, y)
             label = f"take the stairs: walk to the warp at ({x},{y}) → {sorted(dests & set(targets))[0]}"   # (nav_feedback learns it)
@@ -995,7 +990,7 @@ class Agent:
             for key in self.s.get("stairs_changed", []):
                 k, w = key.split(":")
                 x, y = (int(v) for v in w.split(","))
-                if int(k) != cur or (x, y) not in near or key in self.blocked_now(o):
+                if int(k) != cur or (x, y) not in near or self.blocked_here(o, cur, x, y):
                     continue
                 arr = self.nav.data["maps"][k]["arrivals"][w]
                 walk = self.hop_walk(cur, tuple(o.pos), x, y)
@@ -1145,7 +1140,7 @@ class Agent:
                 self.s.get("clues", {}).pop(n, None)
                 self.s.get("sealed", {}).pop(n, None)
                 cur = map_id(n)
-                for k in ("nav_noroute", "nav_blocked", "terrain_noroute"):
+                for k in ("nav_noroute", "nav_blocked", "terrain_noroute", "nav_fail_from", "nav_block_from"):
                     for key in [key for key in self.s.get(k, {}) if key.startswith(f"{cur}:")]:
                         del self.s[k][key]
                 self.s.get("talk_noroute", {}).pop(n, None)
@@ -1411,9 +1406,8 @@ class Agent:
         _, trans = self.nav.reach(cur, tuple(o.pos), surf=surf, cut=cut)
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}   # warps this section of the map can reach
         sides: dict = {}
-        now_blocked = set(self.blocked_now(o))
         for steps, h, _ in trans:                         # edges this section reaches: the nearest cell per side
-            if h.kind == "edge" and h.x >= 0 and f"{cur}:{h.x},{h.y}" not in now_blocked and \
+            if h.kind == "edge" and h.x >= 0 and not self.blocked_here(o, cur, h.x, h.y) and \
                     (h.side not in sides or steps < sides[h.side][0]):
                 sides[h.side] = (steps, h)
         for _, h in sides.values():
@@ -1423,7 +1417,7 @@ class Agent:
                 opts.append(Option(label, "walk", walk[0], f"leave this map by its {h.side} edge", then=walk[1]))
                 self.edge_opts[label] = (h.side, h.x, h.y)
         for i, (x, y, _, _) in enumerate(self.nav.map(cur)["warps"]):
-            if (x, y) not in near or (x, y) == skip or f"{cur}:{x},{y}" in now_blocked:
+            if (x, y) not in near or (x, y) == skip or self.blocked_here(o, cur, x, y):
                 continue                                  # (a blocked warp too, like the edges: the locked Cinnabar Gym)
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
             if dests & closed:
@@ -1864,20 +1858,23 @@ class Agent:
                 # times) is blocked by its cell like a warp; the next cell on that side is offered instead
                 key = f"{cur}:{self.edge_hop[1]},{self.edge_hop[2]}"
             if key:
-                fails = self.s.setdefault("nav_fail_from", {}).get(key) or []
-                # failed again from the same part of the map (full run 82: refusals from B1F's east part, then a trainer
-                # stopping the walk from (23,11) once, blocked the far ladder in the part that reaches it)
-                same_part = not o.pos or not isinstance(self.nav, LearnedAtlas) or \
-                    ScopedBlocks((key,), {key: fails}, self.nav.linked).applies(key, (cur, o.pos[0], o.pos[1])) and bool(fails)
-                if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) <= NAV_BLOCK_STEPS and same_part:
+                # failed again from the same part of the map, lately (full run 82: refusals from B1F's east part, then
+                # a trainer stopping the walk from (23,11) once, blocked the far ladder in the part that reaches it;
+                # each failure keeps its own step: Codex review 9)
+                fails = [f for f in self.s.setdefault("nav_fail_from", {}).get(key) or []
+                         if len(f) > 2 and self.s["step"] - f[2] <= NAV_BLOCK_STEPS]
+                same_part = bool(fails) and (not o.pos or not isinstance(self.nav, LearnedAtlas) or ScopedBlocks(
+                    (key,), {key: [f[:2] for f in fails]}, self.nav.linked).applies(key, (cur, o.pos[0], o.pos[1])))
+                if same_part:
                     self.s["nav_blocked"][key] = self.s["step"] + NAV_BLOCK_STEPS   # failed again: try another way
                     if o.pos:                             # the parts of the map it is blocked in (Codex review 8)
                         fs = self.s.setdefault("nav_block_from", {}).get(key) or []
                         fs = fs if not fs or isinstance(fs[0], list) else [fs]
                         if list(o.pos) not in fs:
                             self.s["nav_block_from"][key] = (fs + [list(o.pos)])[-8:]
-                if o.pos and list(o.pos) not in fails:
-                    self.s["nav_fail_from"][key] = (fails + [list(o.pos)])[-8:]
+                if o.pos:
+                    self.s["nav_fail_from"][key] = ([f for f in fails if f[:2] != list(o.pos)]
+                                                    + [[o.pos[0], o.pos[1], self.s["step"]]])[-8:]
                 self.s["nav_noroute"][key] = self.s["step"]
 
     def hop_walk(self, cur: int, pos: tuple, x: int, y: int, side: str = "") -> Optional[tuple[dict, list]]:

@@ -62,6 +62,10 @@ class ScopedBlocks(frozenset):
         obj.origins, obj.linked = origins or {}, linked
         return obj
 
+    def at(self, key: str, node: tuple) -> bool:
+        """Blocked for a hop taken from `node` (map, x, y)."""
+        return key in self and self.applies(key, node)
+
     def applies(self, key: str, node: tuple) -> bool:
         fs = self.origins.get(key)
         if not fs or self.linked is None or node[1] < 0:

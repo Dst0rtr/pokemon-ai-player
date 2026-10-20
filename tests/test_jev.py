@@ -1121,15 +1121,15 @@ def test_a_blocked_hop_stays_blocked_only_in_the_part_it_failed_from(tmp_path):
         agent.s["step"] = step
         agent.nav_feedback(east, opt, J.parse("no walkable route from (7,2) to (1,1) on this map"), "")
     key = f"{b1}:1,1"
-    assert key in agent.blocked_now(east)
+    assert agent.blocked_here(east, b1, 1, 1)
     west = J.parse("walked\nf1 Rock Tunnel B1F (2,2) facing up | C L30 80/90 | ¥2543 | 3 badges")
-    assert key not in agent.blocked_now(west)                              # another part of B1F: not blocked there
+    assert not agent.blocked_here(west, b1, 1, 1)                          # another part of B1F: not blocked there
     assert key in agent.blocked_now()                                      # (no position known: blocked)
     # full run 82: a trainer stopping the walk once from the good part is no second failure there
     agent.s["step"] = 12
     agent.nav_feedback(west, opt, J.parse("went toward (1,1): left 1/1 — stopped: dialogue appeared\n"
                                           "f1 Rock Tunnel B1F (1,2) facing left | C L30 80/90 | ¥2543 | 3 badges"), "")
-    assert key not in agent.blocked_now(west)
+    assert not agent.blocked_here(west, b1, 1, 1)
     # Codex review 8: planned from 1F, the route arriving in the good part keeps the hop
     f1, r10 = map_id("Rock Tunnel 1F"), map_id("Route 10")
     agent.nav.observe(b1, _view("Rock Tunnel B1F", ["#########", "#D..#...#", "#..D#..D#", "#########"]),
@@ -1139,6 +1139,18 @@ def test_a_blocked_hop_stays_blocked_only_in_the_part_it_failed_from(tmp_path):
     assert agent.nav.route(f1, (2, 1), r10, blocked=frozenset(agent.blocked_now(on1f))) is None   # map-wide: lost
     hops = agent.nav.route(f1, (2, 1), r10, blocked=agent.blocked_now(on1f))
     assert hops and hops[-1].dest == r10, hops
+    # Codex review 9: the frontier from that good arrival keeps the hop; from the bad part it stays blocked
+    front = agent.nav.frontier(b1, (3, 2), set(), blocked=agent.blocked_now(on1f))
+    assert any((h.x, h.y) == (1, 1) for h in front), front
+    assert not any((h.x, h.y) == (1, 1) for h in agent.nav.frontier(b1, (7, 2), set(), blocked=agent.blocked_now(on1f)))
+    # Codex review 9: an old failure from this part does not make a new one "again" (each failure keeps its step)
+    for k in ("nav_blocked", "nav_block_from", "nav_fail_from"):
+        agent.s[k].clear()
+    agent.s["nav_noroute"].clear()
+    for step, who in ((1, west), (1000, east), (1001, west)):
+        agent.s["step"] = step
+        agent.nav_feedback(who, opt, J.parse("no walkable route from (2,2) to (1,1) on this map"), "")
+    assert key not in agent.s["nav_blocked"]
 
 
 def test_after_a_black_out_in_viridian_forest_the_route_goes_back_to_it(tmp_path):

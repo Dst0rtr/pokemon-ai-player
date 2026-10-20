@@ -341,7 +341,8 @@ class LearnedAtlas(WorldNav):
             else:
                 taken = self.data["edges"].get(f"{mid}:{hop.side}", {}).get("seen")
                 key = ("edge", hop.side)
-            if taken or key in seen or f"{mid}:{hop.x},{hop.y}" in blocked:
+            bk = f"{mid}:{hop.x},{hop.y}"
+            if taken or key in seen or (blocked.at(bk, (mid, *pos)) if hasattr(blocked, "at") else bk in blocked):
                 continue
             seen.add(key)
             name = D.map_name(hop.dest)
