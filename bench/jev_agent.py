@@ -1000,7 +1000,8 @@ class Agent:
     def remember_push(self, o: Obs, opt: Option, reply: str) -> None:
         """A boulder that cannot go onto that switch (no way, did not move) is not offered for it again for a while."""
         m = re.match(r"push the boulder at \((\d+),(\d+)\) onto the switch at \((\d+),(\d+)\)", opt.label)
-        if m and o.map and re.search(r"no way to push|did not move|no boulder at|could not get behind", reply):
+        if m and o.map and re.search(r"no way to push|did not move|no boulder at|could not get behind", reply) \
+                and not re.search(r"battle started|dialogue appeared|stopped: BATTLE", reply):   # (an interruption is not a no)
             self.s.setdefault("push_tried", {}).setdefault(o.map, {})[f"{m[1]},{m[2]}>{m[3]},{m[4]}"] = self.s["step"]
 
     def switch_options(self, o: Obs, opts: list[Option]) -> list[Option]:

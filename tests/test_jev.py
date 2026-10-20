@@ -1509,6 +1509,8 @@ def test_a_boulder_is_offered_for_each_floor_switch_with_strength(tmp_path):
     assert opts[0].args == {"path": "push 3,1 to 5,1", "on_battle": "stop"}          # (the server turns Strength on)
     assert [x.label for x in opts] == [opts[0].label]                               # blind walks give way
     assert agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Surf"}), rest) == rest          # no Strength
+    agent.remember_push(o, opts[0], "could not get behind the boulder at (3,1): went toward (2,1): up 0/1 — stopped: battle started")
+    assert agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), rest)[0].label == opts[0].label   # not a no
     agent.remember_push(o, opts[0], "no way to push the boulder at (3,1) to (5,1)")
     assert agent.boulder_options(o, SOLO.Facts(badges=8, moves={"Strength"}), rest) == rest      # refused: not again
     agent.remember_door(o, opts[0], "the boulder is at (5,1) — pushed right to (4,1), pushed right to (5,1)")
