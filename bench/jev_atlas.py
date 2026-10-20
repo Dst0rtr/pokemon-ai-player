@@ -95,7 +95,7 @@ class LearnedAtlas(WorldNav):
             for nk, n in (m.get("nocross") or {}).items():
                 nc = mine.setdefault("nocross", {})
                 nc[nk] = max(nc.get(nk, 0), n)
-            for key in ("noroute", "walked"):
+            for key in ("noroute", "walked", "falls"):
                 for rec in m.get(key, []):
                     if rec not in mine.setdefault(key, []):
                         mine[key].append(rec)
@@ -154,6 +154,15 @@ class LearnedAtlas(WorldNav):
         self._maps.pop(mid, None)
         self._maps.pop(dest, None)
         self.dirty = True
+
+    def record_fall(self, mid: int, x: int, y: int, dest: int, ax: int, ay: int) -> None:
+        """Stepping on (x,y) of map mid dropped the player to (ax,ay) on dest (a hole: no way back up)."""
+        m = self.data["maps"].setdefault(str(mid), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
+        rec = [x, y, dest, ax, ay]
+        if rec not in m.setdefault("falls", []):
+            m["falls"].append(rec)
+            self._maps.pop(mid, None)
+            self.dirty = True
 
     def record_noroute(self, mid: int, frm: tuple[int, int], to: tuple[int, int]) -> None:
         m = self.data["maps"].setdefault(str(mid), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
@@ -298,6 +307,11 @@ class LearnedAtlas(WorldNav):
             return {}, trans
         dist, trans = super().reach(mid, start, surf=surf, cut=cut, avoid=avoid, parents=parents)
         out = [t for t in trans if t[1].kind == "warp" and not self.unreachable(mid, start, (t[1].x, t[1].y))]
+        # holes the player has fallen through: one way down, walked onto like a warp (Codex review 12: run 85's way to
+        # Mansion B1F is 3F's collapsed floor into 1F's south part; unlearned, a return after healing had no route)
+        for fx, fy, dm, ax, ay in (self.data["maps"].get(str(mid)) or {}).get("falls", []):
+            if (fx, fy) in dist:
+                out.append((dist[(fx, fy)], Hop(mid, "warp", fx, fy, dm, steps=dist[(fx, fy)]), (dm, ax, ay)))
         cells = m["cells"]
         h, w = len(cells), len(cells[0]) if cells else 0
         for side, dm, _, _ in m["conns"]:

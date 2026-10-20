@@ -1223,6 +1223,30 @@ def test_mansion_floor_walked_is_kept_per_real_door_state(tmp_path):
     assert agent.trod_key("Pokémon Mansion 3F") == "Pokémon Mansion 3F#0" and agent.trod_key("Route 1") == "Route 1"
 
 
+def test_a_fall_through_the_mansion_floor_is_learned_one_way(tmp_path):
+    """Codex review 12: the way to Mansion B1F is a fall from 3F's collapsed floor into 1F's south part; it was not
+    learned, so after a heal no route led back to B1F. A fall (after a battle, or during a walk) is a one-way hop."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f1, f3 = map_id("Pokémon Mansion 1F"), map_id("Pokémon Mansion 3F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(f3, _view("Pokémon Mansion 3F", ["######", "#D..:#", "######"]), _warps_hex([(1, 1, 0, map_id("Pokémon Mansion 2F"))]), [])
+    agent.nav.observe(f1, _view("Pokémon Mansion 1F", ["######", "#..D.#", "######"]), _warps_hex([(3, 1, 0, map_id("Pokémon Mansion B1F"))]), [])
+    agent.s["step"] = 10
+    agent.learn_walked(J.parse("battle over\nf1 Pokémon Mansion 3F (4,1) facing right | C L60 100/120 | ¥3000 | 7 badges"))
+    agent.s["step"] = 11
+    agent.learn_walked(J.parse("pressed A\nf1 Pokémon Mansion 1F (1,1) facing down | C L60 100/120 | ¥3000 | 7 badges"))
+    assert agent.nav.data["maps"][str(f3)]["falls"] == [[4, 1, f1, 1, 1]]
+    hops = agent.nav.route(f3, (2, 1), map_id("Pokémon Mansion B1F"))
+    assert hops and (hops[0].x, hops[0].y, hops[0].dest) == (4, 1, f1), hops
+    assert agent.nav.route(f1, (1, 1), f3) is None                          # no way back up the hole
+    agent.s["step"] = 30                                                    # a reload between floors is no fall
+    agent.learn_walked(J.parse("loaded state 'jev-progress'\nf1 Pokémon Mansion 3F (2,1) facing down | C L60 100/120 | ¥3000 | 7 badges"))
+    assert len(agent.nav.data["maps"][str(f1)].get("falls", [])) == 0
+
+
 def test_the_celadon_roof_offers_its_machines(tmp_path):
     """Codex review 10: run 75's Celadon Mart Roof has 26 solid cells touching the floor, over the cap of 12, and no
     examine option was offered (full run 71: 274 decisions of blind walks there looking for a vending machine)."""

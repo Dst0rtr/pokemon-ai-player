@@ -1642,6 +1642,12 @@ class Agent:
         if not isinstance(self.nav, LearnedAtlas) or not o.map or not o.pos or map_id(o.map) is None:
             return
         last, self.s["last_ow"] = self.s.get("last_ow"), [o.map, o.pos[0], o.pos[1], self.s["step"]]
+        if last and last[0] != o.map and str(last[0]).startswith("Pokémon Mansion") and o.map.startswith("Pokémon Mansion") \
+                and not re.search(r"\b(?:up|down|left|right) \d+/\d+|loaded state|blacked out", o.head) \
+                and self.s["step"] - last[3] <= 12:
+            # dropped to another floor with no walk in this reply: a hole stepped on before a battle (volcano-leg-26 fell
+            # from 3F's (17,14) after the battle that cell started)
+            self.record_fall(map_id(last[0]), (last[1], last[2]), o)
         # not across a warp pad on the same map, a spinner, a reload or a black-out: those do not join the parts of a
         # map (Codex review 8: two of the Saffron Gym's rooms became linked after a pad trip)
         report = re.findall(r"\b(?:up|down|left|right) (\d+)/\d+", o.head)   # (a reply after a chain of walks has none)
@@ -1651,6 +1657,17 @@ class Agent:
             self.pad_landing(map_id(o.map), tuple(o.pos))
         if last and last[0] == o.map and self.s["step"] - last[3] <= 40 and not moved:
             self.nav.record_walk(map_id(o.map), (last[1], last[2]), tuple(o.pos))
+
+    def record_fall(self, mid: Optional[int], cell: tuple, after: Obs) -> None:
+        """A drop from `cell` of map mid to where `after` stands, learned as a one-way hop (not a warp: none is there)."""
+        if mid is None or not isinstance(self.nav, LearnedAtlas) or map_id(after.map) is None:
+            return
+        try:
+            if any(abs(w[0] - cell[0]) + abs(w[1] - cell[1]) <= 1 for w in self.nav.map(mid)["warps"]):
+                return                                    # stairs, not a hole
+        except (KeyError, IndexError):
+            return
+        self.nav.record_fall(mid, cell[0], cell[1], map_id(after.map), *after.pos)
 
     def pad_landing(self, mid: int, pos: tuple) -> bool:
         """Whether `pos` is where (or next to where) a warp pad of this map lands on this same map: a walk ending there
@@ -1820,6 +1837,14 @@ class Agent:
                 # puzzle order would offer it again and again
                 self.s.setdefault("trod", {}).setdefault(self.trod_key(o.map), []).append([int(fx[1]), int(fx[2])])
         cur = map_id(o.map)
+        if after.map and after.map != o.map and o.map.startswith("Pokémon Mansion") and \
+                after.map.startswith("Pokémon Mansion") and o.pos and after.pos and not m and cur is not None:
+            # a fall through the floor during a walk (no warp was the target): the cell the moves reached is the hole
+            x, y = o.pos
+            for d, n in re.findall(r"\b(up|down|left|right) (\d+)/\d+", after.head):
+                dx, dy = MOVES[d]
+                x, y = x + dx * int(n), y + dy * int(n)
+            self.record_fall(cur, (x, y), after)
         if m and after.map and after.map != o.map and cur is not None:
             key = f"{cur}:{m[1]},{m[2]}"
             self.s["nav_taken"][key] = self.s["nav_taken"].get(key, 0) + 1
