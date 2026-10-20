@@ -3167,6 +3167,10 @@ def test_an_opened_card_key_door_is_read_again_and_routed_through(tmp_path):
     agent.s["nav_noroute"][f"{f8}:5,1"] = agent.s["step"]
     assert agent.nav.route(f8, (2, 1), f9) is None and not agent.atlas_due(o)
     door = J.Option("open the locked door at (3,1) with the Card Key", "walk", {"path": "right 1"})
+    agent.remember_door(o, door, "went toward (2,1): right 0/1 — stopped: dialogue appeared")   # a Rocket: no try (run 90)
+    assert "3,1" not in agent.s.get("card_tried", {}).get("Silph Co. 8F", {})
+    agent.remember_door(o, door, "walked right 0/1 — stopped: blocked")                        # a real try
+    assert "3,1" in agent.s["card_tried"]["Silph Co. 8F"]
     agent.remember_door(o, door, "Bingo! The CARD KEY opened the door!")
     assert agent.atlas_due(o) and f"{f8}:5,1" not in agent.s["nav_noroute"]
     agent.nav.observe(f8, _view("Silph Co. 8F", ["#######", "#P...D#", "#######"]), warps, [])   # what step() reads
