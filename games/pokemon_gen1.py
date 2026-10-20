@@ -47,6 +47,12 @@ _STATUS_MOVES = {"Growl", "Tail Whip", "String Shot", "Leer", "Sand-Attack", "Ha
                  "Mirror Move", "Bide", "Counter", "Rage"}   # Rage locks the user in for the whole battle (Gen 1)
 
 
+
+# Gen 1 high-critical moves (Karate Chop, Razor Leaf, Crabhammer, Slash): 8x the critical rate, near-certain for a fast
+# attacker, and a critical hit roughly doubles the damage; valued at 1.7x (Codex review 15: Strength 80 was preferred to
+# Charizard's Slash, and Slash was the move forgotten for Earthquake)
+HIGH_CRIT = {2: 1.7, 75: 1.7, 152: 1.7, 163: 1.7}
+
 class PokemonGen1Profile(GameProfile):
     name = "pokemon-gen1"
     agent_hints = (
@@ -528,7 +534,7 @@ class PokemonGen1Profile(GameProfile):
         table = self._load_move_data()
         ids = {self._norm(D.move_name(i)): i for i in range(1, 166)}
         eff, power, _, acc = table.get(ids.get(self._norm(name), 0), (0, 0, 0, 255))
-        v = power * (acc / 255 if acc else 1)
+        v = power * (acc / 255 if acc else 1) * HIGH_CRIT.get(ids.get(self._norm(name), 0), 1.0)
         if eff in (D.EFFECT_CHARGE, D.EFFECT_FLY, D.EFFECT_HYPER_BEAM):
             v /= 2
         elif eff == D.EFFECT_SELF_KO:
@@ -739,6 +745,7 @@ class PokemonGen1Profile(GameProfile):
                 atk = st(D.BATTLE_MON, 3 if special else 0)
                 dfn = max(st(D.ENEMY_MON, 3 if special else 1), 1)
                 dmg_ = ((2 * lvl // 5 + 2) * power * atk / dfn / 50 + 2) * (1.5 if typ in my_types else 1) * mult
+                dmg_ *= HIGH_CRIT.get(mid, 1.0)
             value = min(dmg_, foe_hp) * acc / 255
             if eff in (D.EFFECT_CHARGE, D.EFFECT_FLY) or (eff == D.EFFECT_HYPER_BEAM and dmg_ < foe_hp):
                 value /= 2

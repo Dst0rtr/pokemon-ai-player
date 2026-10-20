@@ -406,6 +406,7 @@ def test_the_move_to_forget_keeps_the_best_attack_of_each_type(emu):
     assert pick(["Surf", "Growl", "Body Slam", "Mist"], "THUNDERBOLT") in (1, 3)   # a status move goes, never Surf
     assert pick(["Cut", "Surf", "Strength", "Flash"], "THUNDERBOLT") is None       # HMs only
     assert pick(["Slash", "Ember", "Leer", "Scratch"], "CUT") == 2                 # an HM is always taught
+    assert pick(["Slash", "Cut", "Ember", "Strength"], "BODY SLAM") is None      # Slash's criticals beat 85 (Codex 15)
 
 
 def test_a_safari_battle_shows_its_menu_not_a_battle_intro(emu, monkeypatch):
