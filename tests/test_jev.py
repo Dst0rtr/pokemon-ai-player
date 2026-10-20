@@ -3608,3 +3608,40 @@ def test_dialogue_stops_alternating_between_two_cells_are_bounded(tmp_path):
         if f"{r23}:4,31" in agent.s["nav_blocked"]:
             break
     assert f"{r23}:4,31" in agent.s["nav_blocked"] and i < 12, i
+
+
+def test_training_leaves_out_strong_wilds_whose_grass_is_out_of_reach(tmp_path):
+    """Full Jev benchmark (20261020_133617): training for Sabrina at L59, Route 12's L30 wilds were the strongest met,
+    so Lavender Town routed there; Route 12's grass is beyond its gate, out of reach from Lavender's side, so on Route 12
+    training took the nearest other grass, Route 10, north through Lavender, and back (~1,000 steps to the call cap).
+    A map whose grass is out of reach from where you arrive is not a strong-wilds target, here or from elsewhere."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    town, r10, r12 = map_id("Lavender Town"), map_id("Route 10"), map_id("Route 12")
+    atlas.observe(r10, _view("Route 10", ["#,,,,,#", "#,,,,,#", "#,,,,,#", "#.....#"]), _warps_hex([]),
+                  [("south", "Lavender Town")])
+    atlas.observe(town, _view("Lavender Town", ["#.....#", "#.....#", "#.....#"]), _warps_hex([]),
+                  [("north", "Route 10"), ("south", "Route 12")])
+    atlas.observe(r12, _view("Route 12", ["#.....#", "#.....#", "#######", "#,,,,,#", "#,,,,,#"]), _warps_hex([]),
+                  [("north", "Lavender Town")])
+    atlas.record_edge(town, "north", 2, 0, r10, 2, 3)
+    atlas.record_edge(r10, "south", 2, 3, town, 2, 0)
+    atlas.record_edge(town, "south", 2, 2, r12, 2, 0)
+    atlas.record_edge(r12, "north", 2, 0, town, 2, 2)
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s["visited"] = ["Route 10", "Lavender Town", "Route 12"]
+    agent.party = [{"species": "Charizard", "level": 59, "hp": 198, "max_hp": 198, "moves": []}]
+    agent.s["wild_levels"] = {"Route 12": 30, "Route 10": 30}
+    on12 = J.parse("walked\nf1 Route 12 (2,0) facing up | C L59 198/198 | ¥3000 | 5 badges")
+    train = agent.train_options(on12, None)
+    assert train and train[0].label.startswith("follow the map route to train on Route 10"), train   # the next strongest
+    assert "Route 12" in agent.s["no_grass"]
+    agent.s["wild_levels"] = {"Route 12": 30}                    # the only strong ones: Route 10's plain grass instead
+    in_town = J.parse("walked\nf1 Lavender Town (2,1) facing down | C L59 198/198 | ¥3000 | 5 badges")
+    train = agent.train_options(in_town, None)
+    assert train and "Route 10" in train[0].label and "Route 12" not in train[0].label, train
+    south = J.parse("walked\nf1 Route 12 (2,3) facing up | C L59 198/198 | ¥3000 | 5 badges")   # by the gate's far side
+    assert agent.train_options(south, None)[0].label.startswith("train in the tall grass at")
+    assert "Route 12" not in agent.s["no_grass"]

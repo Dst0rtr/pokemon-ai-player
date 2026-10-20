@@ -1651,6 +1651,8 @@ class Agent:
         no_grass = self.s.setdefault("no_grass", [])
         if not grass and any("," in "".join(r) for r in cells) and o.map not in no_grass:
             no_grass.append(o.map)                       # its grass is out of reach from where you arrive
+        elif grass and o.map in no_grass:
+            no_grass.remove(o.map)                       # arrived on the grass's side (Route 12 by its south gate)
         for d, (gx, gy) in grass[:40]:
             for name, (dx, dy) in MOVES.items():
                 nb = (gx + dx, gy + dy)
@@ -1705,7 +1707,11 @@ class Agent:
         """Train where the wild Pokémon are strongest of those met (league-leg-2 trained Charizard L73 on Route 1's L3
         Rattata after losing to Lorelei): pace there, in grass if it has any (caves have encounters anywhere), or the
         map route there. Only once a map's wild Pokémon are worth it (at least half the strongest party level)."""
-        lv = {n: v for n, v in self.s.get("wild_levels", {}).items() if not safari(n) and map_id(n) is not None}
+        # nor where the grass is out of reach from where you arrive (the full benchmark: Lavender routed to Route 12's L30
+        # wilds beyond its gate, Route 12 then to Route 10's grass through Lavender, ~1,000 steps to the call cap)
+        no_grass = self.s.setdefault("no_grass", [])
+        lv = {n: v for n, v in self.s.get("wild_levels", {}).items()
+              if not safari(n) and map_id(n) is not None and n not in no_grass}
         top = max((p["level"] for p in self.party), default=0)
         caps = caps or {}
         good = sorted((v, n) for n, v in lv.items() if v >= top * ratio and v > 0)
@@ -1723,6 +1729,10 @@ class Agent:
                 grassy = any("," in row for row in cells)     # (cells are rows of characters: Codex review 5's crash)
                 ok = (",",) if grassy else (".", ",", ":")
                 spot = sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] in ok)
+                if grassy and not spot:
+                    if o.map not in no_grass:
+                        no_grass.append(o.map)
+                    continue                                  # out of reach from here: the next strongest
                 for _, (gx, gy) in spot[:40]:
                     for d, (dx, dy) in MOVES.items():
                         nb = (gx + dx, gy + dy)
@@ -1734,7 +1744,7 @@ class Agent:
                             return [Option(f"train here at ({gx},{gy}) (wild Pokémon up to L{v})", "walk", first,
                                            "pace back and forth until a wild Pokémon appears, then fight it",
                                            then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
-                return []
+                continue
             r = self.route_ok(cur, tuple(o.pos), mid, blocked=blocked, **caps)
             r = None if r and self.loops_back(cur, r) else r
             walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "") if r else None
