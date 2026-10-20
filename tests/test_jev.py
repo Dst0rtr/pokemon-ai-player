@@ -2517,6 +2517,33 @@ def test_a_gym_leader_behind_warp_pads_is_sought_through_them(tmp_path, nav):
 
 
 
+def test_a_pad_trip_or_a_window_does_not_corrupt_what_the_atlas_knows(tmp_path):
+    """Codex review 8: a Saffron Gym pad trip (same map, no "entered") linked two rooms as one walkable part; and an
+    action reply's 10x9 window without a boulder wiped one remembered elsewhere on the map."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    gym = map_id("Saffron Gym")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(gym, _view("Saffron Gym", ["##########", "#..D#D...#", "##########"]), _warps_hex([]), [])
+    agent.learn_walked(J.parse("walked\nf1 Saffron Gym (1,1) facing up | C L50 200/207 | ¥3000 | 6 badges"))
+    agent.s["step"] += 1
+    agent.learn_walked(J.parse("went toward (3,1): right 2/2 — could not get closer\n"
+                               "f1 Saffron Gym (7,1) facing right | C L50 200/207 | ¥3000 | 6 badges"))
+    assert not agent.nav.linked(gym, (1, 1), (7, 1))
+    agent.s["step"] += 1
+    agent.learn_walked(J.parse("went toward (8,1): right 1/1\nf1 Saffron Gym (8,1) facing right | C L50 200/207 | ¥3000 | 6 badges"))
+    assert agent.nav.linked(gym, (7, 1), (8, 1))                           # an ordinary walk still links
+    vr = J.parse("walked\nf1 Victory Road 1F (5,1) facing up | C L60 180/190 | ¥2543 | 7 badges")
+    vr.grid = {(3, 1): "B", (4, 1): "."}
+    agent.boulders(map_id("Victory Road 1F"), vr)
+    vr.grid = {(10, 10): ".", (11, 10): "."}                               # a window elsewhere
+    assert agent.boulders(map_id("Victory Road 1F"), vr) == {(3, 1)}
+    vr.grid = {(3, 1): "."}                                                # its own cell seen empty: pushed away
+    assert agent.boulders(map_id("Victory Road 1F"), vr) == set()
+
+
 def test_a_warp_pad_on_the_same_map_is_recorded_as_taken(tmp_path):
     """Full run 75: walking onto a Saffron Gym pad ends "could not get closer" on another pad of the same map; only a
     map change recorded a warp, so the pads stayed frontier and the Cinnabar objective came back to them (~1,400 steps)."""

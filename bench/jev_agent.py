@@ -1625,7 +1625,13 @@ class Agent:
         if not isinstance(self.nav, LearnedAtlas) or not o.map or not o.pos or map_id(o.map) is None:
             return
         last, self.s["last_ow"] = self.s.get("last_ow"), [o.map, o.pos[0], o.pos[1], self.s["step"]]
-        if last and last[0] == o.map and self.s["step"] - last[3] <= 40:
+        # not across a warp pad on the same map, a spinner, a reload or a black-out: those do not join the parts of a
+        # map (Codex review 8: two of the Saffron Gym's rooms became linked after a pad trip)
+        report = re.findall(r"\b(?:up|down|left|right) (\d+)/\d+", o.head)   # (a reply after a chain of walks has none)
+        steps = sum(int(n) for n in report)
+        jumped = bool(report) and last and abs(o.pos[0] - last[1]) + abs(o.pos[1] - last[2]) > 2 * steps + 1   # (ledges: 2)
+        moved = jumped or re.search(r"\bentered\b|\bslid\b|loaded state|blacked out", o.head, re.I)
+        if last and last[0] == o.map and self.s["step"] - last[3] <= 40 and not moved:
             self.nav.record_walk(map_id(o.map), (last[1], last[2]), tuple(o.pos))
 
     def sleeper_gone(self, o: Obs, after: Obs) -> None:
@@ -1642,7 +1648,10 @@ class Agent:
         has no view, and the atlas keeps boulders as floor: Codex review 7 had a refusal there learned as a lasting wall)."""
         seen = self.s.setdefault("boulders", {})
         if o.grid and o.map:
-            seen[o.map] = sorted([c[0], c[1]] for c, ch in o.grid.items() if ch == "B")
+            # like the item balls: a view replaces only the boulders in the cells it covers (an action reply's window is
+            # 10x9; Codex review 8: a window without the boulder dropped one remembered elsewhere)
+            kept = [c for c in seen.get(o.map, []) if tuple(c) not in o.grid]
+            seen[o.map] = sorted(kept + [[c[0], c[1]] for c, ch in o.grid.items() if ch == "B"])
         return {tuple(c) for c in seen.get(o.map or "", [])}
 
     def learn_noroute(self, o: Obs) -> None:
