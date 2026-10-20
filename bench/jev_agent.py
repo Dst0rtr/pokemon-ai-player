@@ -1479,6 +1479,16 @@ class Agent:
         path = set(self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=cut))
         tried = self.s.setdefault("clear_tries", {})
         blockers = [n for n in o.npcs if n in path and tried.get(f"{h.map}:{n[0]},{n[1]}", 0) < 2]   # 2 tries: it stays
+        if surf and blockers:
+            # the first obstacle along the way decides: water before anyone standing further on is Surf's job (plateau-
+            # leg experiment: Route 23's guards stand past its water, and "talk to the guard" was offered, not Surf)
+            seq = self.nav.path_cells(cur, tuple(o.pos), (h.x, h.y), surf=surf, cut=cut)
+            cells = self.nav.map(cur)["cells"]
+            at_ = lambda x, y: cells[y][x] if 0 <= y < len(cells) and 0 <= x < len(cells[y]) else "#"
+            water = next((k for k in range(1, len(seq)) if at_(*seq[k]) == "~" and at_(*seq[k - 1]) != "~"), None)
+            first = next((k for k, c in enumerate(seq) if c in blockers), None)
+            if water is not None and (first is None or water < first):
+                blockers = []
         if not blockers and (cut or surf):
             return self.cut_option(cur, o, h, prefix, desc, surf, cut)
         if not blockers:
@@ -1599,6 +1609,8 @@ class Agent:
             pass
         elif "no walkable route" in after.head or (after.mode == "overworld" and after.map == o.map and after.pos == o.pos
                                                     and "already at" not in after.head) \
+                or (m and after.mode == "overworld" and after.map == o.map and after.pos and re.search(r" 0/1$", after.head)
+                    and abs(after.pos[0] - int(m[1])) + abs(after.pos[1] - int(m[2])) <= 2) \
                 or ("stopped: dialogue appeared" in after.head and after.map in ("", o.map)):
             # (a person who stops the walk every time, e.g. Saffron's thirsty gate guards, blocks the hop like a wall;
             # bills-house iteration 34 walked into the Route 5 gate guard ~430 times. A trainer stops it only once.)

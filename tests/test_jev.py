@@ -1084,6 +1084,10 @@ def test_route_across_water_offers_surf_from_the_shore(tmp_path):
     assert not any("first surf" in x.label for x in opts)
     opts, _ = agent.nav_options(o, ["Route 21"], SOLO.Facts(badges=6, moves={"Cut"}))
     assert not any("first surf" in x.label for x in opts)                  # no Surf: no such option
+    o.npcs = [(6, 1)]                                       # someone stands past the water (Route 23's guards)
+    opts, _ = agent.nav_options(o, ["Route 21"], SOLO.Facts(badges=6, moves={"Surf"}))
+    assert any("first surf from the shore onto the water at (4,1)" in x.label for x in opts)
+    assert not any("first clear the way" in x.label for x in opts)
 
 
 def test_tree_behind_a_ledge_is_still_found(tmp_path):
@@ -1467,6 +1471,25 @@ def test_the_route_to_grass_for_training_leaves_out_blocked_hops(tmp_path):
     sz = map_id("Safari Zone Center")
     agent.nav.observe(sz, _view("Safari Zone Center", ["#####", "#P,,#", "#####"]), _warps_hex([]), [])
     assert agent.train_options(J.parse("walked\nf1 Safari Zone Center (1,1) facing up | C L50 200/207 | ¥3000 | 5 badges"), None) == []
+
+
+def test_a_door_that_will_not_let_you_through_is_a_failed_hop(tmp_path):
+    """Plateau-leg experiment: Mansion 1F's back door pair (26,27)/(27,27): each walk moved one cell to the twin and
+    failed to step down ("down 0/1"); the player had moved, so the hop never counted as failed (~60 tries)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f1 = map_id("Pokémon Mansion 1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    o = J.parse("walked\nf1 Pokémon Mansion 1F (26,26) facing down | C L60 200/207 | ¥3000 | 8 badges")
+    opt = J.Option("walk to the warp at (26,27) → Cinnabar Island", "walk", {"path": "to 26,27"})
+    after = J.parse("went toward (27,27): right 1/1, down 0/1, down 0/1, down 0/1\n"
+                    "f1 Pokémon Mansion 1F (27,26) facing down | C L60 200/207 | ¥3000 | 8 badges")
+    agent.nav_feedback(o, opt, after, "")
+    assert f"{f1}:26,27" in agent.s["nav_noroute"]
+    agent.nav_feedback(o, opt, after, "")
+    assert f"{f1}:26,27" in agent.s["nav_blocked"]                          # twice: left out for a while
 
 
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):

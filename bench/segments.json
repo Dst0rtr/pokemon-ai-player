@@ -46,5 +46,19 @@
     "initial_milestones": [],
     "progress": "cinnabar",
     "_made_by": "end of the after-sabrina experiment cinnabar-leg-3 (431e308): Pokémon Mansion, 6 badges, Lapras with Surf"
+  },
+  "viridian-gym-7": {
+    "state": "saves/Pokemon-Red_Version/viridian-gym-7.state",
+    "goal": "badge: Earth",
+    "initial_milestones": [],
+    "progress": "blaine",
+    "_made_by": "end of the cinnabar-island experiment volcano-leg-26 (0a14d6a): Viridian Gym, 7 badges, Secret Key"
+  },
+  "earth-badge": {
+    "state": "saves/Pokemon-Red_Version/earth-badge.state",
+    "goal": "reached: Indigo Plateau Lobby",
+    "initial_milestones": [],
+    "progress": "giovanni",
+    "_made_by": "end of the viridian-gym-7 experiment earth-leg (0a14d6a): Viridian Gym, 8 badges"
   }
 }
