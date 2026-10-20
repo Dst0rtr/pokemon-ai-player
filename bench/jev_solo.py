@@ -47,7 +47,7 @@ POKE_CENTERS = {"Viridian City": "Viridian Poké Center", "Pewter City": "Pewter
 # GymTrashScript). A wrong second can resets both locks (and moves the first switch).
 TRASH_CANS = [(x, y) for y in (7, 9, 11) for x in (1, 3, 5, 7, 9)]
 # the bag holds 20 kinds; a full bag picks nothing up, not even the Lift Key (full run 55 lost ~2,100 steps to it).
-# Tossed first: TMs (solo never teaches them), then items it never uses.
+# Tossed first: TMs it does not teach (KEEP_TMS are taught), then items it never uses.
 # moves that do no damage: their PP does not count as fighting strength (full run 58 blacked out on Route 10 with
 # only Leer left: Struggle against a Pidgey)
 STATUS_MOVES = {"Growl", "Leer", "Tail Whip", "Sand-Attack", "SmokeScreen", "String Shot", "Harden", "Defense Curl",
@@ -61,6 +61,10 @@ LOW_PP = 10
 BAG_SLOTS = 20
 JUNK = ("Moon Stone", "Fire Stone", "Water Stone", "Thunder Stone", "Leaf Stone", "Dome Fossil", "Helix Fossil",
         "Old Amber", "Nugget", "Poké Doll", "Antidote", "Burn Heal", "Ice Heal", "Awakening", "Paralyze Heal")
+# strong attacks taught from the bag, never tossed (Codex 6: runs 73/75 tossed TM24 Thunderbolt first; the Elite Four
+# beat a team with one fighter and no coverage). A TM is used up when taught, so the strongest Pokémon gets it first.
+KEEP_TMS = {"TM24": "Thunderbolt", "TM13": "Ice Beam", "TM26": "Earthquake", "TM29": "Psychic", "TM38": "Fire Blast",
+            "TM14": "Blizzard", "TM25": "Thunder", "TM15": "Hyper Beam"}
 TOSS_RETRY_STEPS = 50                                # a toss whose menu failed waits this long
 NURSE_SPOT = (3, 3)                                  # where the player talks to a Poké Center nurse (facing up)
 NURSE_SPOTS = {"Indigo Plateau Lobby": (7, 7)}       # elsewhere: the Lobby's nurse stands at (7,5) (ROM object list)
@@ -298,7 +302,8 @@ class SoloDirector:
         weak_carry = len(f.levels) > 1 and (f.carry_ratio < 0.35 or f.carry_pp is not None and f.carry_pp < LOW_PP)
         league = o.map in E4_ROOMS                         # its doors lock behind you: items, not a Poké Center
         if node.id == "champion" and o.map == "Indigo Plateau Lobby" and self.league_next(f) == "Lorelei" \
-                and f.levels and min(f.hp_ratio, f.carry_ratio) < 1:
+                and f.levels and (min(f.hp_ratio, f.carry_ratio) < 1 or "Indigo Plateau Lobby" not in self.s.get("healed_at", [])):
+            # (also at full HP the first time: PP is restored and a loss then wakes the player here, not in Viridian: Codex 6)
             return ("Heal fully at the Indigo Plateau Poké Center before the Elite Four (talk to the nurse, answer YES): "
                     "there is no way back between their rooms.", ["Indigo Plateau Lobby"], "heal")
         if f.levels and not league and (f.hp_ratio < 0.35 or no_pp or weak_carry or
@@ -439,7 +444,7 @@ class SoloDirector:
             return None
         refused = set(self.s.get("no_toss", []))
         names = [n for n, _ in items if n not in refused]
-        junk = [n for n in names if n.startswith("TM")] + [n for j in JUNK for n in names if n == j]
+        junk = [n for n in names if n.startswith("TM") and n not in KEEP_TMS] + [n for j in JUNK for n in names if n == j]
         if not junk:
             return None
         return Option(f"toss {junk[0]} (the bag is full)", "manage", {"action": "toss", "target": junk[0]},
@@ -544,6 +549,16 @@ class SoloDirector:
                     opts.append(Option(f"teach {hm} ({move}) to {mon}", "manage",
                                        {"action": "use", "target": hm, "target2": f"{mon}: weakest"},
                                        f"{move} is needed to pass obstacles"))
+        # a kept TM: to the strongest Pokémon that has not refused it and does not know the move yet
+        for tm, move in KEEP_TMS.items():
+            if tm in f.items:
+                mon = next((p["species"] for p in sorted(party, key=lambda p: -p.get("level", 0))
+                            if f"{tm}:{p['species']}" not in self.s.get("hm_no", [])
+                            and move not in [m["name"] if isinstance(m, dict) else m for m in p.get("moves", [])]), None)
+                if mon:
+                    opts.append(Option(f"teach {tm} ({move}) to {mon}", "manage",
+                                       {"action": "use", "target": tm, "target2": f"{mon}: weakest"},
+                                       f"{move} is a strong attack for the battles ahead"))
         if why == "heal" and (o.map.endswith("Poké Center") or o.map in NURSE_SPOTS) and o.pos:
             # code knows where the nurse is: every Gen 1 Poké Center has her at (3,1) behind the counter, talked to
             # from (3,3) facing up; the generic talk-to options cannot reach her across the counter

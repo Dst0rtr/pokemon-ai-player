@@ -250,6 +250,24 @@ def test_solo_objective_progression_and_rules():
     assert "teach HM01 (Cut) to Charmeleon" in labels and "teach HM01 (Cut) to Butterfree" not in labels
 
 
+def test_coverage_tms_are_kept_and_taught_to_the_strongest_pokemon():
+    """Codex 6: runs 73 and 75 tossed TM24 (Thunderbolt) first to free a bag slot, and the Elite Four beat a team with
+    one fighter. A kept TM is never tossed; it is taught to the highest level Pokémon that has not refused it."""
+    d = SOLO.SoloDirector({"visited": [], "milestones": [], "step": 1000})
+    bag = [(f"Item{i}", 1) for i in range(17)] + [("TM24", 1), ("TM28", 1)]
+    toss = d.bag_option(bag)
+    assert toss.args["target"] == "TM28"
+    assert d.bag_option([(f"Item{i}", 1) for i in range(18)] + [("TM24", 1)]) is None
+    o = J.parse(PEWTER)
+    f = SOLO.Facts(items={"TM24"}, moves={"Ember"})
+    teach = [x for x in d.extra_options(o, f, J.parse_party(PARTY), [], [], "") if x.label.startswith("teach TM24")]
+    assert [x.label for x in teach] == ["teach TM24 (Thunderbolt) to Charmeleon"]
+    assert teach[0].args == {"action": "use", "target": "TM24", "target2": "Charmeleon: weakest"}
+    d.s["hm_no"] = ["TM24:Charmeleon"]                                     # "not compatible": the next strongest
+    labels = [x.label for x in d.extra_options(o, f, J.parse_party(PARTY), [], [], "")]
+    assert "teach TM24 (Thunderbolt) to Butterfree" in labels
+
+
 def test_solo_jev_done_votes_and_stuck_tracking():
     s = {"visited": [], "milestones": []}
     d = SOLO.SoloDirector(s)
@@ -1300,6 +1318,8 @@ def test_the_elite_four_is_one_room_at_a_time_and_a_loss_starts_over():
     assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "heal"       # back in the Lobby: heal fully first
     f.hp_ratio = f.carry_ratio = 1.0
     d.s["healing"] = False
+    assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "heal"       # full HP, first time: the nurse anyway (Codex 6)
+    d.s["healed_at"] = ["Indigo Plateau Lobby"]
     assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "train"     # L72 is not enough after that loss
     f.levels = [80, 30]
     assert d.objective(f, room("Indigo Plateau Lobby"))[1][-1] == "Lorelei's Room"   # a loss starts over
