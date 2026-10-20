@@ -144,8 +144,11 @@ GRAPH: list[Node] = [
     Node("cut", "Board the S.S. Anne in Vermilion harbor and talk to the captain on the top deck to get HM01 (Cut).",
          ("Vermilion Dock", "S.S. Anne 1F", "S.S. Anne 2F", "S.S. Anne Captain's Room"), lambda f: f.has("HM01")),
     Node("surge", "Cut the small tree in front of the Vermilion Gym and beat Lt. Surge.", ("Vermilion Gym",), _badge(3)),
-    Node("lavender", "Go to Lavender Town: east of Cerulean via Route 9 and Route 10, through Rock Tunnel.",
-         ("Route 9", "Route 10", "Rock Tunnel 1F", "Lavender Town"), lambda f: f.reached("Lavender Town")),
+    # (B1F is part of the way: full run 78 explored it as a side map, left it by "go to Route 10 (unexplored exits)"
+    # and went round by Vermilion to Route 12's Snorlax, ~2,300 steps)
+    Node("lavender", "Go to Lavender Town: east of Cerulean via Route 9 and Route 10, through Rock Tunnel "
+                     "(its ladders lead between 1F and B1F several times before the exit south).",
+         ("Route 9", "Route 10", "Rock Tunnel 1F", "Rock Tunnel B1F", "Lavender Town"), lambda f: f.reached("Lavender Town")),
     Node("celadon", "Go west from Lavender via Route 8 and the Underground Path to Route 7 and Celadon City.",
          ("Route 8", "Route 7", "Celadon City"), lambda f: f.reached("Celadon City")),
     Node("erika", "Beat Erika in the Celadon Gym (cut the tree in front of it).", ("Celadon Gym",), _badge(4)),

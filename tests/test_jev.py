@@ -1255,6 +1255,16 @@ def test_the_elite_four_is_one_room_at_a_time_and_a_loss_starts_over():
     assert d.objective(f, room("Indigo Plateau Lobby"))[1][-1] == "Lorelei's Room"   # a loss starts over
 
 
+def test_rock_tunnel_b1f_is_part_of_the_way_to_lavender():
+    """Full run 78 explored Rock Tunnel B1F as a side map and left it for Route 10's unexplored exits (~2,300 steps
+    round by Vermilion to the Snorlax): B1F is one of the objective's maps, so its ladders come before leaving."""
+    d = SOLO.SoloDirector({})
+    order = [n.id for n in SOLO.GRAPH]
+    f = SOLO.Facts(badges=3, levels=[35], manual_done=set(order[:order.index("lavender")]))
+    o = J.parse("walked\nf1 Rock Tunnel B1F (33,25) facing up | C L35 100/110 | ¥3000 | 3 badges")
+    assert "Rock Tunnel B1F" in d.objective(f, o)[1]
+
+
 def test_the_poke_flute_is_played_at_a_sleeping_snorlax(tmp_path):
     """Full run 56: ~700 talks to the Route 12 Snorlax with the Poké Flute in the bag."""
     (tmp_path / "data").mkdir()
