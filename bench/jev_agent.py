@@ -1477,7 +1477,9 @@ class Agent:
         # touched the floor, over the cap, and its panel at (1,1) was never offered; full run 52, ~3,000 steps)
         objs = [(x, y) for y in range(top, h - 1) for x in range(1, w - 1) if cells[y][x] == "#" and any(
             0 <= x + dx < w and 0 <= y + dy < h and cells[y + dy][x + dx] in (".", ",", ":", "X") for dx, dy in MOVES.values())]
-        if not objs or len(objs) > 12:
+        # (a roof's vending machines sit among many solid cells: Celadon Mart Roof has 26, over the cap, and no option
+        # was offered; full run 71 spent 274 decisions on it: Codex review 10)
+        if not objs or len(objs) > (40 if o.map.endswith(" Roof") else 12):
             return []
         said = self.s["said"].get(o.map, {})
         px, py = o.pos

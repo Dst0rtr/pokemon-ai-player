@@ -1209,6 +1209,24 @@ def test_a_back_outside_warp_lands_on_the_outside_maps_warp_it_names(tmp_path):
     assert atlas.warp_dest(gate, 0) == [(r22, -1, -1)]
 
 
+def test_the_celadon_roof_offers_its_machines(tmp_path):
+    """Codex review 10: run 75's Celadon Mart Roof has 26 solid cells touching the floor, over the cap of 12, and no
+    examine option was offered (full run 71: 274 decisions of blind walks there looking for a vending machine)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    roof = ["####################", "##........##########", "##..##......###D####", "##..##............##",
+            "##......##........##", "##......##........##", "##................##", "####################"]
+    agent.nav.observe(map_id("Celadon Mart Roof"), _view("Celadon Mart Roof", roof), _warps_hex([(15, 2, 0, 0x7E)]), [])
+    o = J.parse("walked\nf1 Celadon Mart Roof (15,3) facing down | C L40 100/120 | ¥3000 | 4 badges")
+    opts = agent.object_options(o)
+    assert opts and all(x.label.startswith("examine the object at") for x in opts)
+    assert any(x.label.startswith("examine the object at (10,1)") or x.label.startswith("examine the object at (11,1)")
+               for x in opts) or len(opts) == 8
+
+
 def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
     from bench.jev_nav import Hop as J_Hop
     """Full run 81: from Route 15's east part (its gate not entered yet) the route to Fuchsia went round by Route 14,
