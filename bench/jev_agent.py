@@ -555,6 +555,8 @@ class Agent:
                 for room in SOLO_E4_ROOMS:
                     self.s["said"].pop(room, None)
             self.director.lost(facts)                    # the milestone event is not reliable; the battle text is
+        if "fighting fit" in reply and o.map == "Indigo Plateau Lobby":
+            self.s["lobby_fresh"] = True                 # healed for this league attempt (see SoloDirector.objective)
         if "fighting fit" in reply and o.map:
             self.s.setdefault("healed_at", [])
             if o.map not in self.s["healed_at"]:

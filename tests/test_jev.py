@@ -1340,8 +1340,11 @@ def test_the_elite_four_is_one_room_at_a_time_and_a_loss_starts_over():
     f.hp_ratio = f.carry_ratio = 1.0
     d.s["healing"] = False
     assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "heal"       # full HP, first time: the nurse anyway (Codex 6)
-    d.s["healed_at"] = ["Indigo Plateau Lobby"]
+    d.s["lobby_fresh"] = True                                               # (the agent sets it on "fighting fit" there)
     assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "train"     # L72 is not enough after that loss
+    d.objective(f, room("Lorelei's Room"))                                  # an attempt: the next one heals again (Codex 7)
+    assert d.objective(f, room("Indigo Plateau Lobby"))[2] == "heal"
+    d.s["lobby_fresh"] = True
     f.levels = [80, 30]
     assert d.objective(f, room("Indigo Plateau Lobby"))[1][-1] == "Lorelei's Room"   # a loss starts over
 

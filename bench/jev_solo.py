@@ -304,9 +304,12 @@ class SoloDirector:
         # (and its attacking PP: run 75's Charizard had Slash 0, Ember 0, Strength 0 with plenty in reserve: Codex 5)
         weak_carry = len(f.levels) > 1 and (f.carry_ratio < 0.35 or f.carry_pp is not None and f.carry_pp < LOW_PP)
         league = o.map in E4_ROOMS                         # its doors lock behind you: items, not a Poké Center
+        if league:
+            self.s["lobby_fresh"] = False                  # an attempt began: the next one heals in the Lobby again
         if node.id == "champion" and o.map == "Indigo Plateau Lobby" and self.league_next(f) == "Lorelei" \
-                and f.levels and (min(f.hp_ratio, f.carry_ratio) < 1 or "Indigo Plateau Lobby" not in self.s.get("healed_at", [])):
-            # (also at full HP the first time: PP is restored and a loss then wakes the player here, not in Viridian: Codex 6)
+                and f.levels and (min(f.hp_ratio, f.carry_ratio) < 1 or not self.s.get("lobby_fresh")):
+            # before every attempt, also at full HP: PP is restored (Codex 7: Cut's PP hid empty attacks) and a loss then
+            # wakes the player here, not in Viridian (Codex 6)
             return ("Heal fully at the Indigo Plateau Poké Center before the Elite Four (talk to the nurse, answer YES): "
                     "there is no way back between their rooms.", ["Indigo Plateau Lobby"], "heal")
         if f.levels and not league and (f.hp_ratio < 0.35 or no_pp or weak_carry or
