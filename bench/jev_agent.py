@@ -1459,7 +1459,10 @@ class Agent:
         best = self.strong_wilds(o, cur, safari)
         if best:
             return best
-        grass = [] if safari(o.map) else sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
+        top = max((p["level"] for p in self.party), default=0)
+        lv = self.s.get("wild_levels", {})
+        weak = lambda name: name in lv and lv[name] * 2 < top   # (met there and not worth it: try grass not met yet)
+        grass = [] if safari(o.map) or weak(o.map) else sorted((d, c) for c, d in dist.items() if cells[c[1]][c[0]] == ",")
         no_grass = self.s.setdefault("no_grass", [])
         if not grass and any("," in "".join(r) for r in cells) and o.map not in no_grass:
             no_grass.append(o.map)                       # its grass is out of reach from where you arrive
@@ -1479,7 +1482,7 @@ class Agent:
         blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
         for name in self.s["visited"]:
             mid = map_id(name)
-            if mid is None or mid == cur or name in no_grass or safari(name):
+            if mid is None or mid == cur or name in no_grass or safari(name) or weak(name):
                 continue
             try:
                 if not any("," in "".join(r) for r in self.nav.map(mid)["cells"]):
