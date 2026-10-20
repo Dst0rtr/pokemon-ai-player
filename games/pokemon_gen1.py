@@ -755,12 +755,21 @@ class PokemonGen1Profile(GameProfile):
         logs: list[str] = []
         if self.in_safari_battle():
             return "Safari Zone battle: there is no FIGHT. battle('item') throws a Safari Ball, battle('bait') / battle('rock') change catch odds, battle('run') leaves"
+        first_foe = None
         for turn in range(25):
             if not self.in_battle():
                 break
             b = self.battle()
             if b and b["mine"]["max_hp"] and b["mine"]["hp"] <= b["mine"]["max_hp"] // 4 and turn:
                 return " | ".join(logs) + f" — stopped: {b['mine']['species']} is low on HP ({b['mine']['hp']}/{b['mine']['max_hp']}); switch, use an item, run, or battle('auto') again to keep going"
+            # a trainer's next Pokémon is a new matchup: hand it back (switch, item, or auto again) before attacking it
+            # (Codex review 15: in league-leg-6 one auto call ran from Lorelei's Dewgong into her Cloyster and on)
+            foe = (b["enemy"]["species"], b["enemy"]["max_hp"]) if b and b["enemy"]["max_hp"] else None
+            if b and b.get("kind") == "trainer" and foe:
+                if first_foe is None:
+                    first_foe = foe
+                elif foe != first_foe and turn:
+                    return " | ".join(logs) + f" — stopped: the trainer sent out {b['enemy']['species']} (L{b['enemy']['level']}); switch, use an item, or battle('auto') again"
             r = self.battle_action(emu, "fight", self._auto_move(target) if b else "")
             logs.append(r)
             if ("needs a decision" in r or "prompt" in r or "battle('switch'" in r or "battle over" in r

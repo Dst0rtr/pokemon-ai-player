@@ -450,6 +450,27 @@ def test_the_map_view_lists_elevation_steps(emu, monkeypatch):
     assert line == "elevation steps (no walking across): 0,0d 1,0d", line   # (2,1) is a wall: no step listed
 
 
+def test_auto_battle_hands_back_a_trainers_next_pokemon(emu, monkeypatch):
+    # Codex review 15: one battle('auto') ran from Lorelei's Dewgong into her Cloyster and on; a new matchup now returns
+    prof = emu.profile
+    mon = lambda sp, hp=100: {"species": sp, "nick": "", "level": 50, "hp": hp, "max_hp": 100, "status": "", "moves": []}  # noqa: E731
+    foes = iter(["Dewgong", "Dewgong", "Cloyster", "Cloyster"])
+    state = {"foe": "Dewgong"}
+    monkeypatch.setattr(prof, "in_battle", lambda: 2)
+    monkeypatch.setattr(prof, "in_safari_battle", lambda: False)
+    monkeypatch.setattr(prof, "battle", lambda: {"kind": "trainer", "safari": False, "enemy": mon(state["foe"]), "mine": mon("Charizard")})
+    monkeypatch.setattr(prof, "_auto_move", lambda target="": "Slash")
+    attacked = []
+
+    def act(emu_, action, target=""):
+        attacked.append(state["foe"])
+        state["foe"] = next(foes)
+        return "turn done"
+    monkeypatch.setattr(prof, "battle_action", act)
+    out = prof.battle_auto(emu)
+    assert "trainer sent out Cloyster" in out and "Cloyster" not in attacked, (out, attacked)
+
+
 def test_milestone_snapshot_includes_team(emu):
     emu.metrics.restart("team")
     mem = emu.pyboy.memory
