@@ -67,6 +67,14 @@ JUNK = ("Moon Stone", "Fire Stone", "Water Stone", "Thunder Stone", "Leaf Stone"
 # strong attacks taught from the bag, never tossed (Codex 6: runs 73/75 tossed TM24 Thunderbolt first; the Elite Four
 # beat a team with one fighter and no coverage). A TM is used up when taught, so the strongest Pokémon gets it first.
 SAME_TYPE_RELIABLE = {"Fire Blast": "Flamethrower", "Blizzard": "Ice Beam", "Thunder": "Thunderbolt"}
+
+
+def tm_wanted(p: dict, tm: str, move: str, refused) -> bool:
+    """A kept TM for this Pokémon: not refused by the game, the move not known yet, and no reliable move of its type
+    replaced (Fire Blast's 5 PP for Flamethrower's 15; full run 90 taught Blizzard over Ice Beam and Fire Blast over
+    Flamethrower on Route 23: Codex review 17)."""
+    known = {m["name"] if isinstance(m, dict) else m for m in p.get("moves", [])}
+    return f"{tm}:{p['species']}" not in refused and not {move, SAME_TYPE_RELIABLE.get(move)} & known
 KEEP_TMS = {"TM24": "Thunderbolt", "TM13": "Ice Beam", "TM26": "Earthquake", "TM29": "Psychic", "TM38": "Fire Blast",
             "TM14": "Blizzard", "TM25": "Thunder", "TM15": "Hyper Beam"}
 STATUS_CURES = {"PSN": ("Antidote",), "BRN": ("Burn Heal",), "PAR": ("Paralyze Heal",), "FRZ": ("Ice Heal",),
@@ -504,9 +512,7 @@ class SoloDirector:
             # (a reliable move of the same type is kept: Fire Blast's 5 PP for Flamethrower's 15, Blizzard over the Ice Beam
             # just taught; Codex review 16)
             mon = next((p["species"] for p in sorted(party, key=lambda p: -p.get("level", 0))
-                        if f"{tm}:{p['species']}" not in refused
-                        and not {move, SAME_TYPE_RELIABLE.get(move)} & {m["name"] if isinstance(m, dict) else m
-                                                                       for m in p.get("moves", [])}), None)
+                        if tm_wanted(p, tm, move, refused)), None)
             if mon:
                 return Option(f"teach {tm} ({move}) to {mon} (league preparation)", "manage",
                               {"action": "use", "target": tm, "target2": f"{mon}: weakest"}, "coverage for the Elite Four")
@@ -667,8 +673,7 @@ class SoloDirector:
         for tm, move in KEEP_TMS.items():
             if tm in f.items:
                 mon = next((p["species"] for p in sorted(party, key=lambda p: -p.get("level", 0))
-                            if f"{tm}:{p['species']}" not in self.s.get("hm_no", [])
-                            and move not in [m["name"] if isinstance(m, dict) else m for m in p.get("moves", [])]), None)
+                            if tm_wanted(p, tm, move, self.s.get("hm_no", []))), None)
                 if mon:
                     opts.append(Option(f"teach {tm} ({move}) to {mon}", "manage",
                                        {"action": "use", "target": tm, "target2": f"{mon}: weakest"},

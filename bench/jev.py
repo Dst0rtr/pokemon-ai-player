@@ -445,7 +445,7 @@ def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], all
     for p in party:
         if p["hp"] <= 0 or p["species"].lower() == active:
             continue
-        if not only_switch and p["level"] < lead - 15 and _frac(mine) >= 0.2:
+        if not only_switch and p["level"] <= lead - 15 and _frac(mine) >= 0.2:
             # a far weaker teammate is no relief for a fighter still standing (full run 90: Jev swapped L70 Charizard
             # for L15 Lapras twice against a Cooltrainer's Ivysaur; Lapras fainted and the team blacked out)
             continue

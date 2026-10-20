@@ -3413,6 +3413,8 @@ def test_a_far_weaker_teammate_is_no_switch_for_a_fighter_still_standing():
     b = {"kind": "trainer", "menu": "", "mine": dict(char), "enemy": {"species": "Ivysaur", "level": 40, "hp": 90, "max_hp": 120}}
     labels = [x.label for x in J.battle_options(b, [char, lapras], [])]
     assert "switch to Lapras" not in labels and "auto-battle" in labels
+    assert "switch to Lapras" not in [x.label for x in J.battle_options(b, [char, dict(lapras, level=55)], [])]   # 15 below
+    assert "switch to Lapras" in [x.label for x in J.battle_options(b, [char, dict(lapras, level=56)], [])]
     b["mine"] = dict(char, hp=30)
     assert "switch to Lapras" in [x.label for x in J.battle_options(b, [char, lapras], [])]
     b["mine"] = dict(char, hp=0)
@@ -3480,3 +3482,18 @@ def test_a_target_map_with_a_boulder_puzzle_left_is_somewhere_to_go(tmp_path):
     agent.s["push_tried"] = {"Victory Road 1F": {"3,1>5,1": 90}}                   # refused lately: not again
     opts, _ = agent.nav_options(o, targets, SOLO.Facts(badges=8, moves={"Strength", "Surf"}), why="plateau")
     assert not any(x.label.startswith("follow the map route to Victory Road 1F") for x in opts)
+
+
+def test_ordinary_tm_teaching_keeps_a_reliable_move_of_the_same_type():
+    """Codex review 17: full run 90 taught Blizzard over Lapras's Ice Beam (step 8970) and Fire Blast over Charizard's
+    Flamethrower (8985) from the ordinary options; only the league preparation had the check."""
+    d = SOLO.SoloDirector({"visited": ["Route 23"], "milestones": []})
+    party = [{"species": "Charizard", "level": 70, "hp": 200, "max_hp": 227,
+              "moves": [{"name": "Flamethrower", "pp": 15}, {"name": "Slash", "pp": 20}]},
+             {"species": "Lapras", "level": 16, "hp": 50, "max_hp": 50,
+              "moves": [{"name": "Ice Beam", "pp": 10}, {"name": "Surf", "pp": 15}]}]
+    o = J.parse("walked\nf1 Route 23 (4,34) facing up | C L70 200/227 | ¥3000 | 8 badges")
+    f = SOLO.Facts(badges=8, items={"TM38", "TM14", "TM24"}, levels=[70, 16])
+    labels = [x.label for x in d.extra_options(o, f, party, [], [], "plateau")]
+    assert "teach TM38 (Fire Blast) to Charizard" not in labels and "teach TM14 (Blizzard) to Lapras" not in labels
+    assert "teach TM24 (Thunderbolt) to Charizard" in labels
