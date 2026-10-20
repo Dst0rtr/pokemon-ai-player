@@ -1102,6 +1102,31 @@ def test_a_boulder_or_a_door_change_keeps_a_refusal_from_being_a_lasting_wall(tm
     assert agent.s["terrain_noroute"][f"{vr}:1,1"][1:] == [5, 1]
 
 
+def test_a_blocked_hop_stays_blocked_only_in_the_part_it_failed_from(tmp_path):
+    """Full run 81: Rock Tunnel B1F's far ladder (3,3) was refused twice from the east part (33,25) and blocked for the
+    whole map; from (23,11), whose part reaches it, the route then left it out and the frontier sent the player round
+    by Vermilion and Viridian (~1,700 steps)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    b1 = map_id("Rock Tunnel B1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(b1, _view("Rock Tunnel B1F", ["#########", "#D..#...#", "#...#..D#", "#########"]),
+                      _warps_hex([(1, 1, 7, 82), (7, 2, 4, 82)]), [])
+    east = J.parse("walked\nf1 Rock Tunnel B1F (7,2) facing up | C L30 80/90 | ¥2543 | 3 badges")
+    opt = J.Option("follow the map route to Lavender Town: walk to the warp at (1,1) → Rock Tunnel 1F", "walk",
+                   {"path": "to 1,1"})
+    for step in (10, 11):
+        agent.s["step"] = step
+        agent.nav_feedback(east, opt, J.parse("no walkable route from (7,2) to (1,1) on this map"), "")
+    key = f"{b1}:1,1"
+    assert key in agent.blocked_now(east)
+    west = J.parse("walked\nf1 Rock Tunnel B1F (2,2) facing up | C L30 80/90 | ¥2543 | 3 badges")
+    assert key not in agent.blocked_now(west)                              # another part of B1F: not blocked there
+    assert key in agent.blocked_now()                                      # (no position known: blocked)
+
+
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
     from bench.jev_atlas import LearnedAtlas
     from bench.jev_nav import map_id
