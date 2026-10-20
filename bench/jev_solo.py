@@ -28,7 +28,10 @@ from bench.jev import HEAL_ITEMS, Obs, Option
 
 # Giovanni's line after losing on Silph Co. 11F (the dialogue box can break it across lines)
 STORY_RE = {"silph": re.compile(r"ruined\s+our\s+plans\s+for\s+SILPH", re.I),
-            "snorlax": re.compile(r"SNORLAX\s+woke\s+up", re.I)}
+            # (the battle's opening line can go unseen: full run 80 heard only "Enemy SNORLAX fainted!" and "SNORLAX
+            # calmed down! ... it returned to the mountains!", and went back to Route 12 from Route 13)
+            "snorlax": re.compile(r"SNORLAX\s+woke\s+up|SNORLAX\s+calmed\s+down|Enemy\s+SNORLAX\s+fainted|"
+                                  r"SNORLAX\s+was\s+caught", re.I)}
 
 FIELD_MOVES = {"Cut": "HM01", "Fly": "HM02", "Surf": "HM03", "Strength": "HM04", "Flash": "HM05"}
 E4_ORDER = ["Lorelei", "Bruno", "Agatha", "Lance", "Champion"]

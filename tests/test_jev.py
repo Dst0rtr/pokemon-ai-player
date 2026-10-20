@@ -1275,6 +1275,11 @@ def test_with_the_flute_route_12_is_the_place_until_snorlax_woke():
     d.heard("SNORLAX woke up! | It attacked in a grumpy rage!")
     f.events = set(d.s["events"])
     assert d.objective(f, o)[1] == ["Route 12", "Route 13", "Fuchsia City"]
+    for line in ("Enemy SNORLAX fainted! | AAAA gained 660 EXP. Points!",
+                 "dialogue ended: SNORLAX calmed down! With a big | down! With a big yawn, it returned"):
+        d2 = SOLO.SoloDirector({})
+        d2.heard(line)                                                     # full run 80: the opening line unseen
+        assert d2.s["events"] == ["snorlax"]
 
 
 def test_a_fainted_or_weak_strongest_pokemon_means_healing():
