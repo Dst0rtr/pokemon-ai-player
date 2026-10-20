@@ -1859,13 +1859,20 @@ class Agent:
                 # times) is blocked by its cell like a warp; the next cell on that side is offered instead
                 key = f"{cur}:{self.edge_hop[1]},{self.edge_hop[2]}"
             if key:
-                if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) <= NAV_BLOCK_STEPS:
+                fails = self.s.setdefault("nav_fail_from", {}).get(key) or []
+                # failed again from the same part of the map (full run 82: refusals from B1F's east part, then a trainer
+                # stopping the walk from (23,11) once, blocked the far ladder in the part that reaches it)
+                same_part = not o.pos or not isinstance(self.nav, LearnedAtlas) or \
+                    ScopedBlocks((key,), {key: fails}, self.nav.linked).applies(key, (cur, o.pos[0], o.pos[1])) and bool(fails)
+                if self.s["step"] - self.s["nav_noroute"].get(key, -10**9) <= NAV_BLOCK_STEPS and same_part:
                     self.s["nav_blocked"][key] = self.s["step"] + NAV_BLOCK_STEPS   # failed again: try another way
-                if o.pos:                                 # every part of the map it failed from (Codex review 8)
-                    fs = self.s.setdefault("nav_block_from", {}).get(key) or []
-                    fs = fs if not fs or isinstance(fs[0], list) else [fs]
-                    if list(o.pos) not in fs:
-                        self.s["nav_block_from"][key] = (fs + [list(o.pos)])[-8:]
+                    if o.pos:                             # the parts of the map it is blocked in (Codex review 8)
+                        fs = self.s.setdefault("nav_block_from", {}).get(key) or []
+                        fs = fs if not fs or isinstance(fs[0], list) else [fs]
+                        if list(o.pos) not in fs:
+                            self.s["nav_block_from"][key] = (fs + [list(o.pos)])[-8:]
+                if o.pos and list(o.pos) not in fails:
+                    self.s["nav_fail_from"][key] = (fails + [list(o.pos)])[-8:]
                 self.s["nav_noroute"][key] = self.s["step"]
 
     def hop_walk(self, cur: int, pos: tuple, x: int, y: int, side: str = "") -> Optional[tuple[dict, list]]:

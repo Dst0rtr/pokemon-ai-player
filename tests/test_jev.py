@@ -1125,6 +1125,11 @@ def test_a_blocked_hop_stays_blocked_only_in_the_part_it_failed_from(tmp_path):
     west = J.parse("walked\nf1 Rock Tunnel B1F (2,2) facing up | C L30 80/90 | ¥2543 | 3 badges")
     assert key not in agent.blocked_now(west)                              # another part of B1F: not blocked there
     assert key in agent.blocked_now()                                      # (no position known: blocked)
+    # full run 82: a trainer stopping the walk once from the good part is no second failure there
+    agent.s["step"] = 12
+    agent.nav_feedback(west, opt, J.parse("went toward (1,1): left 1/1 — stopped: dialogue appeared\n"
+                                          "f1 Rock Tunnel B1F (1,2) facing left | C L30 80/90 | ¥2543 | 3 badges"), "")
+    assert key not in agent.blocked_now(west)
     # Codex review 8: planned from 1F, the route arriving in the good part keeps the hop
     f1, r10 = map_id("Rock Tunnel 1F"), map_id("Route 10")
     agent.nav.observe(b1, _view("Rock Tunnel B1F", ["#########", "#D..#...#", "#..D#..D#", "#########"]),
