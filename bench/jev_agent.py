@@ -394,9 +394,11 @@ class Agent:
             opts = self.clue_options(o) + opts            # the Game Corner: the switch behind the guarded poster
             opts = self.switch_options(o, opts)           # the Pokémon Mansion: secret switches open and shut doors
             if o.map in targets and why not in ("heal", "train"):
+                before = opts
                 opts = self.floor_options(o, opts, targets)   # floor never walked on (a hole drops to the floor below)
                 opts = self.puzzle_stay(o, opts, targets)     # and the other floors, not the way out
                 opts = self.puzzle_order(opts, targets, o)    # one kind of move at a time while a puzzle is pending
+                opts = opts or before                         # (never nothing: volcano-leg-17 sent Jev an empty choice)
             elif why not in ("heal", "train"):
                 opts = self.puzzle_return(o, opts, targets)   # the way on is a switch back there, not a new map
             opts = self.sealed_first(o, opts, why)
@@ -447,6 +449,9 @@ class Agent:
             reload = self.idle_reload()
             if reload:
                 opts, forced = [reload], reload
+        if not opts:                                     # a Jev choice needs at least one option (HTTP 422 otherwise)
+            opts = [Option(f"walk {d} 4 tiles", "walk", {"path": f"{d} 4", "on_battle": "stop"}) for d in
+                    ("up", "down", "left", "right")] if kind == "overworld" else press_options()
         dec = self.policy.decide(kind, self.jev_state(o, objective), opts, step=self.s["step"], nouls=nouls, battle=battle)
         if self.director and dec.noul:
             marked = self.director.absorb(facts, dec.noul)
@@ -778,7 +783,7 @@ class Agent:
             if walk and not any(f"({x},{y})" in z.label and "warp" in z.label for z in opts):
                 stairs.append(Option(label, "walk", walk[0], "another floor of the objective's building", then=walk[1]))
         keep = [x for x in opts if not (x.label.startswith("explore the frontier") and not any(t in x.label for t in targets))]
-        return keep + stairs
+        return (keep + stairs) or opts                    # (never nothing: volcano-leg-17 sent Jev an empty choice)
 
     def puzzle_order(self, opts: list[Option], targets: list[str], o: Optional[Obs] = None) -> list[Option]:
         """Inside a building whose switches still hide a warp: the first kind of move that exists, in this order:

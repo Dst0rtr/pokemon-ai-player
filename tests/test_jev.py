@@ -1322,6 +1322,7 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     agent.nav_feedback(inside, stay[0], up, "")
     assert agent.nav.data["maps"][str(f1)]["arrivals"]["4,2"]["seen"]                     # taken: learned like any warp
     assert agent.puzzle_stay(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]) == []   # not again
+    assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]) == leave
     agent.s["stairs_changed"] = [f"{f1}:4,2"]                 # a press elsewhere changed 2F since these stairs were taken
     agent.s["trod"]["Pokémon Mansion 1F"] = [[x, y] for x in range(1, 6) for y in (1, 2)]
     by = agent.floor_options(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
