@@ -1393,6 +1393,27 @@ def test_a_hop_stopped_by_someone_on_the_way_is_held_only_briefly(tmp_path):
     assert agent.s["nav_blocked"][f"{f6}:9,16"] == 101 + JA.SHORT_BLOCK_STEPS
 
 
+def test_a_refusal_the_party_can_clear_is_no_failed_hop(tmp_path):
+    """Full run 88: Route 8's tree refusal (Cut's job) and a gambler's interruption later counted as two failures of
+    the Underground Path's entrance, which was blocked 300 steps; the frontier went to Route 8's gate to Saffron."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    r8 = map_id("Route 8")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.party = [{"species": "Charizard", "level": 40, "hp": 1, "max_hp": 1, "moves": [{"name": "Cut", "pp": 30}]}]
+    o = J.parse("walked\nf1 Route 8 (29,12) facing left | C L40 100/120 | ¥3000 | 3 badges")
+    opt = J.Option("follow the map route to Underground Path (Route 8): walk to the warp at (13,3) → Underground Path (Route 8)",
+                   "walk", {"path": "to 13,3"})
+    agent.s["step"] = 10
+    agent.nav_feedback(o, opt, J.parse("no walkable route from (29,12) to (13,3) on this map — a small tree (T) blocks part"), "")
+    agent.s["step"] = 12
+    agent.nav_feedback(o, opt, J.parse("went toward (13,3): left 15/15 — stopped: dialogue appeared"), "")
+    key = f"{r8}:13,3"
+    assert key not in agent.s["nav_blocked"] and key in agent.s["nav_noroute"]
+
+
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
     from bench.jev_atlas import LearnedAtlas
     from bench.jev_nav import map_id

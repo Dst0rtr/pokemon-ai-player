@@ -2012,7 +2012,12 @@ class Agent:
                 # an edge crossing that fails (Pallet Town's south edge is water: full-run iteration 36 tried it ~2,800
                 # times) is blocked by its cell like a warp; the next cell on that side is offered instead
                 key = f"{cur}:{self.edge_hop[1]},{self.edge_hop[2]}"
-            if key:
+            # a refusal for a small tree or water the party can clear is Cut's or Surf's job (their options follow), not
+            # a failed hop (full run 88: the tree refusal on Route 8 plus a gambler's interruption later blocked the
+            # Underground Path's entrance 300 steps, and the frontier tried Route 8's gate to Saffron instead)
+            clearable = ("small tree" in after.head and self.can_clear("Cut", "HM01")) or \
+                ("water (~)" in after.head and self.can_clear("Surf", "HM03"))
+            if key and not clearable:
                 # failed again from the same part of the map, lately (full run 82: refusals from B1F's east part, then
                 # a trainer stopping the walk from (23,11) once, blocked the far ladder in the part that reaches it;
                 # each failure keeps its own step: Codex review 9)
@@ -2036,7 +2041,8 @@ class Agent:
                 if o.pos:
                     self.s["nav_fail_from"][key] = ([f for f in fails if f[:2] != list(o.pos)]
                                                     + [[o.pos[0], o.pos[1], self.s["step"]]])[-8:]
-                self.s["nav_noroute"][key] = self.s["step"]
+            if key:
+                self.s["nav_noroute"][key] = self.s["step"]   # (the cut/surf options read it)
 
     def hop_walk(self, cur: int, pos: tuple, x: int, y: int, side: str = "") -> Optional[tuple[dict, list]]:
         """Walk args and follow-up walks for one hop: to a warp tile, or to the route's own edge cell and one step
