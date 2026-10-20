@@ -1178,6 +1178,23 @@ def test_after_a_black_out_in_viridian_forest_the_route_goes_back_to_it(tmp_path
     assert opts[0].label.startswith("follow the map route to Viridian Forest"), [x.label for x in opts]
 
 
+def test_a_back_outside_warp_lands_on_the_outside_maps_warp_it_names(tmp_path):
+    """Full run 83: Mt. Moon B1F's exit is a "back outside" warp (0xFF) whose index names Route 4's (24,5); taken as
+    "somewhere on Route 4", the route to Cerulean (which crosses Route 4 twice) looked like a loop and was dropped."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    r4, b1 = map_id("Route 4"), map_id("Mt. Moon B1F")
+    atlas.observe(r4, _view("Route 4", ["#####", "#D.D#", "#####"]), _warps_hex([(1, 1, 0, 59), (3, 1, 7, b1)]), [])
+    atlas.observe(b1, _view("Mt. Moon B1F", ["####", "#.D#", "####"]), _warps_hex([(2, 1, 1, 0xFF)]), [])
+    atlas.data["maps"][str(b1)]["outside"] = r4
+    atlas._maps.clear()
+    assert atlas.warp_dest(b1, 0) == [(r4, 3, 1)]
+    atlas.data["maps"][str(b1)]["warps"][0][2] = 9                          # an index past the list: still unknown
+    atlas._maps.clear()
+    assert atlas.warp_dest(b1, 0) == [(r4, -1, -1)]
+
+
 def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
     from bench.jev_nav import Hop as J_Hop
     """Full run 81: from Route 15's east part (its gate not entered yet) the route to Fuchsia went round by Route 14,

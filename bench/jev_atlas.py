@@ -258,9 +258,17 @@ class LearnedAtlas(WorldNav):
             twin = m["arrivals"].get(f"{nx},{ny}")
             if twin and any((w[0], w[1]) == (nx, ny) for w in m["warps"]):
                 return [(twin["map"], twin["x"], twin["y"])]
-        if dm == 0xFF:                                       # "back outside": wLastMap, arrival unknown until taken once
+        if dm == 0xFF:                                       # "back outside": wLastMap
             out = self.data["maps"].get(str(mid), {}).get("outside")
-            return [(out, *UNKNOWN)] if out is not None else []
+            if out is None:
+                return []
+            try:                                             # the warp index is one of the outside map's warps (full
+                owarps = self.map(out)["warps"]              # run 83: Mt. Moon B1F's exit lands at Route 4's (24,5); as
+                if dw < len(owarps):                         # "somewhere on Route 4" the route to Cerulean was taken for
+                    return [(out, owarps[dw][0], owarps[dw][1])]   # a loop and dropped, ~900 steps west)
+            except KeyError:
+                pass
+            return [(out, *UNKNOWN)]
         try:
             dwarps = self.map(dm)["warps"]
             if dw < len(dwarps):
