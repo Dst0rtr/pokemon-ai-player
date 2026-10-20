@@ -441,8 +441,13 @@ def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], all
             if mv["pp"] > 0 and not mv.get("disabled"):
                 opts.append(Option(f"use {mv['name']}", "battle", {"action": "fight", "target": mv["name"]},
                                    f"attack with {mv['name']} ({mv['pp']} PP left)"))
+    lead = mine.get("level") or 0
     for p in party:
         if p["hp"] <= 0 or p["species"].lower() == active:
+            continue
+        if not only_switch and p["level"] < lead - 15 and _frac(mine) >= 0.2:
+            # a far weaker teammate is no relief for a fighter still standing (full run 90: Jev swapped L70 Charizard
+            # for L15 Lapras twice against a Cooltrainer's Ivysaur; Lapras fainted and the team blacked out)
             continue
         opts.append(Option(f"switch to {p['species']}", "battle", {"action": "switch", "target": p["species"]},
                            f"L{p['level']}, {p['hp']}/{p['max_hp']} HP, moves: " + ", ".join(m["name"] for m in p["moves"])))
