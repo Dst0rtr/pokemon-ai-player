@@ -396,6 +396,18 @@ def test_learn_prompt_uses_the_learner_and_stops_at_the_battle_menu(emu, monkeyp
     assert presses == ["A", "DOWN DOWN", "A", "A", "A"]                    # nothing pressed at the battle menu
 
 
+def test_the_move_to_forget_keeps_the_best_attack_of_each_type(emu):
+    # Codex 7: by raw power Fire Blast deleted Slash (Flamethrower kept) and Fire Spin was learned over Slash
+    pick = emu.profile._forget_choice
+    zard = ["Slash", "Cut", "Flamethrower", "Strength"]
+    assert pick(zard, "FIRE BLAST") == 2
+    assert pick(zard, "FIRE SPIN") is None                                  # nothing gained: keep the old moves
+    assert pick(["Slash", "Cut", "Ember", "Strength"], "FLAMETHROWER") == 2
+    assert pick(["Surf", "Growl", "Body Slam", "Mist"], "THUNDERBOLT") in (1, 3)   # a status move goes, never Surf
+    assert pick(["Cut", "Surf", "Strength", "Flash"], "THUNDERBOLT") is None       # HMs only
+    assert pick(["Slash", "Ember", "Leer", "Scratch"], "CUT") == 2                 # an HM is always taught
+
+
 def test_milestone_snapshot_includes_team(emu):
     emu.metrics.restart("team")
     mem = emu.pyboy.memory

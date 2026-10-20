@@ -7,6 +7,7 @@ battle, map and dialogue information as a few lines of text instead of images.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 
 from . import gen1_data as D
@@ -518,6 +519,50 @@ class PokemonGen1Profile(GameProfile):
             return "prompt"
         return None
 
+    def _move_value(self, name: str) -> float:
+        """Rough worth of a move: power x accuracy, two-turn/recharge/self-KO moves at half or less; status moves 0."""
+        table = self._load_move_data()
+        ids = {self._norm(D.move_name(i)): i for i in range(1, 166)}
+        eff, power, _, acc = table.get(ids.get(self._norm(name), 0), (0, 0, 0, 255))
+        v = power * (acc / 255 if acc else 1)
+        if eff in (D.EFFECT_CHARGE, D.EFFECT_FLY, D.EFFECT_HYPER_BEAM):
+            v /= 2
+        elif eff == D.EFFECT_SELF_KO:
+            v /= 4
+        return v
+
+    def _move_type(self, name: str) -> int:
+        table = self._load_move_data()
+        ids = {self._norm(D.move_name(i)): i for i in range(1, 166)}
+        return table.get(ids.get(self._norm(name), 0), (0, 0, -1, 0))[2]
+
+    def _forget_choice(self, moves: list[str], new: str = "") -> Optional[int]:
+        """Which known move to forget for `new` (index into `moves`), or None to keep the old moves: the set kept is the
+        one with the best attack per type (sum over types of the strongest move of each), HMs never go; on a tie a move
+        of the new move's type goes first, then the weaker one (Codex 7: raw power deleted Slash for Fire Blast with
+        Flamethrower kept, and Fire Spin was learned over Slash). Without `new`, the weakest move by that measure."""
+        keep = {self._norm(m) for m in D.FIELD_MOVES}
+
+        def score(ms: list[str]) -> float:
+            best: dict[int, float] = {}
+            for m in ms:
+                v = self._move_value(m)
+                if v > 0:
+                    t = self._move_type(m)
+                    best[t] = max(best.get(t, 0), v)
+            return sum(best.values())
+        cands = [j for j, m in enumerate(moves) if self._norm(m) not in keep]
+        if not cands:
+            return None
+        if not new or self._norm(new) in keep:            # an HM is taught for the field: the weakest move goes
+            return min(cands, key=lambda j: (self._move_value(moves[j]), j))
+        now = score(moves)
+        nt = self._move_type(new)
+        ranked = sorted(cands, key=lambda j: (-score([m for k, m in enumerate(moves) if k != j] + [new]),
+                                              self._move_type(moves[j]) != nt, self._move_value(moves[j])))
+        j = ranked[0]
+        return j if score([m for k, m in enumerate(moves) if k != j] + [new]) > now else None
+
     _LEARN_WORDS = ("learn", "forgot", "forget", "poof", "1, 2", "make room", "abandon", "trying to", "older move")
 
     def _learner(self, txt: str) -> Optional[dict[str, Any]]:
@@ -537,10 +582,14 @@ class PokemonGen1Profile(GameProfile):
         Flamethrower; generic cursor presses tried to delete Cut, an HM, and gave up). It stops at the battle menu or
         any text that is not about the move (Codex 6: pressing A through the menu attacked three times)."""
         seen: list[str] = []
+        new_move = ""
         for _ in range(16):
             txt, d = self.screen_text() or "", (self.dialog_text() or "").lower()
             if self.in_battle() and self._classify(txt) in ("main", "choose"):
                 break
+            nm = re.search(r"(?:make\s+room\s+for|learn)\s+([A-Z][A-Z0-9\- ]+?)[?!.]", " ".join(txt.split()))
+            if nm and not new_move:
+                new_move = nm[1].strip()
             if "▶YES" in txt or "▶NO" in txt:
                 self._collect(seen)
                 if "abandon" in d:
@@ -556,17 +605,12 @@ class PokemonGen1Profile(GameProfile):
                 if not mon:
                     emu.press("B", settle=1)
                     continue
-                table = self._load_move_data()
-                ids = {D.move_name(i): i for i in range(1, 166)}
-                keep = {self._norm(m) for m in D.FIELD_MOVES}
                 names = [self._norm(n) for n, _ in mon["moves"]]
-                ranked = sorted((table.get(ids.get(n, 0), (0, 0, 0, 0))[1], j) for j, (n, _) in enumerate(mon["moves"])
-                                if self._norm(n) not in keep)
-                if not ranked:
-                    emu.press("B", settle=1)              # every move is an HM: keep them
+                k = self._forget_choice([n for n, _ in mon["moves"]], new_move)
+                if k is None:
+                    emu.press("B", settle=1)              # only HMs, or nothing better: keep the old moves
                     learn = False
                     continue
-                k = ranked[0][1]
                 seen.append(f"forgot {mon['moves'][k][0]}")
                 cur = self._list_cursor(txt, names) or 0
                 if k != cur:
@@ -1307,13 +1351,10 @@ class PokemonGen1Profile(GameProfile):
                 mon = self.party()[picked] if picked < len(self.party()) else None
                 names = [self._norm(n) for n, _ in mon["moves"]] if mon else []
                 fk = self._norm(forget)
-                if fk == "weakest" and mon:                   # the move with the least power (status moves first); HMs stay
-                    table = self._load_move_data()
-                    ids = {D.move_name(i): i for i in range(1, 166)}
-                    keep = {self._norm(m) for m in D.FIELD_MOVES}
-                    ranked = sorted((table.get(ids.get(n, 0), (0, 0, 0, 0))[1], j) for j, (n, _) in enumerate(mon["moves"])
-                                    if self._norm(n) not in keep)
-                    fk = names[ranked[0][1]] if ranked else ""
+                if fk == "weakest" and mon:                   # the move whose loss costs least (see _forget_choice); HMs stay
+                    nm = re.search(r"make\s+room\s+for\s+([A-Z][A-Z0-9\- ]+?)[?!.]", " ".join(" ".join(seen + [txt]).split()))
+                    k = self._forget_choice([n for n, _ in mon["moves"]], nm[1].strip() if nm else "")
+                    fk = names[k] if k is not None else ""
                 idx = next((i for i, n in enumerate(names) if fk and (n.startswith(fk) or fk in n)), None)
                 if idx is None:
                     emu.press("B", settle=1)                  # → "Abandon learning X?"

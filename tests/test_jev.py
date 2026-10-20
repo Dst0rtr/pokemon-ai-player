@@ -268,6 +268,21 @@ def test_coverage_tms_are_kept_and_taught_to_the_strongest_pokemon():
     assert "teach TM24 (Thunderbolt) to Butterfree" in labels
 
 
+
+def test_a_tm_not_learned_twice_passes_that_pokemon_over(tmp_path):
+    """Codex 7: a TM the server declines to teach (nothing worth forgetting) stayed in the bag and was offered again."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    opt = J.Option("teach TM24 (Thunderbolt) to Lapras", "manage", {"action": "use", "target": "TM24", "target2": "Lapras: weakest"})
+    agent.remember_refusal(opt, "used TM24 | Abandon learning THUNDERBOLT?")
+    assert "TM24:Lapras" not in agent.s.get("hm_no", [])
+    agent.remember_refusal(opt, "used TM24 | Abandon learning THUNDERBOLT?")
+    assert "TM24:Lapras" in agent.s["hm_no"]
+    agent.remember_refusal(J.Option("x", "manage", {"action": "use", "target": "TM13", "target2": "Lapras: weakest"}),
+                           "LAPRAS learned ICE BEAM!")
+    assert "TM13:Lapras" not in agent.s["hm_no"] and "TM13:Lapras" not in agent.s.get("teach_tries", {})
+
+
 def test_solo_jev_done_votes_and_stuck_tracking():
     s = {"visited": [], "milestones": []}
     d = SOLO.SoloDirector(s)

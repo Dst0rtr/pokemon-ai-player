@@ -604,6 +604,15 @@ class Agent:
         if opt.tool == "manage" and opt.args.get("action") == "use" and "not compatible" in reply:
             refused = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
             self.s.setdefault("hm_no", []).append(refused)
+        elif opt.tool == "manage" and opt.args.get("action") == "use" and opt.args.get("target", "").startswith("TM") \
+                and "learned" not in reply.lower():
+            # a TM not learned for another reason (nothing worth forgetting, a menu that went wrong): twice and that
+            # Pokémon is passed over, so the same teach is not offered forever (Codex review 7)
+            key = f"{opt.args['target']}:{opt.args.get('target2', '').partition(':')[0].strip()}"
+            tries = self.s.setdefault("teach_tries", {})
+            tries[key] = tries.get(key, 0) + 1
+            if tries[key] >= 2:
+                self.s.setdefault("hm_no", []).append(key)
 
     def blacked_out(self, o: Obs, after: Obs, reply: str) -> bool:
         """A lost battle: the text says so, or (full run 50: the last turns of a loss to Misty were plain "pressed A"
