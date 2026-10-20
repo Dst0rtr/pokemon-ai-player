@@ -1433,6 +1433,23 @@ def test_route_through_a_small_tree_offers_cut(tmp_path):
     assert not any("cut the tree" in x.label for x in opts)                # no Cut: no such option
 
 
+def test_the_atlas_learns_elevation_steps_from_the_map_view(tmp_path):
+    """Codex review 14: the learned atlas had no idea of cave/forest elevation steps (pokered TilePairCollisionsLand),
+    so parts walled off by them looked reachable (run 87's Safari Zone West pocket). The server lists them with the map
+    ("x,yr": no walking between (x,y) and (x+1,y); "x,yd": and (x,y+1)) and reach honours them."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    sw = map_id("Safari Zone West")
+    atlas = LearnedAtlas(tmp_path / "a.json")
+    view = _view("Safari Zone West", ["#####", "#...#", "#...#", "#####"]) + "\nelevation steps (no walking across): 1,1d 2,1d 3,1d"
+    atlas.observe(sw, view, _warps_hex([]), [])
+    dist, _ = atlas.reach(sw, (1, 1))
+    assert (3, 1) in dist and (1, 2) not in dist and (3, 2) not in dist
+    atlas.save()
+    again = LearnedAtlas(tmp_path / "b.json", seed=tmp_path / "a.json")
+    assert (1, 2) not in again.reach(sw, (1, 1))[0]                       # kept with the map
+
+
 def test_without_surf_water_on_the_way_does_not_excuse_a_refusal(tmp_path):
     """Full run 87: in a Safari Zone pocket walled off by a forest elevation step, ~100 refusals were each excused as
     "Surf's job" (the atlas path crossed the pond) with no Surf in the party, so nothing was learned and the same walks

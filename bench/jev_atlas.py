@@ -85,7 +85,7 @@ class LearnedAtlas(WorldNav):
     def merge(self, other: dict) -> None:
         for k, m in (other.get("maps") or {}).items():
             mine = self.data["maps"].setdefault(k, {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
-            for key in ("cells", "warps", "conns", "outside"):
+            for key in ("cells", "warps", "conns", "outside", "seams"):
                 if m.get(key):
                     mine[key] = m[key]
             for wk, arr in (m.get("arrivals") or {}).items():
@@ -128,6 +128,9 @@ class LearnedAtlas(WorldNav):
         cells = parse_view(view)
         if cells:
             m["cells"] = ["".join(r) for r in cells]
+            # elevation steps the character grid cannot show (the server lists them with the map: Codex review 14)
+            ev = re.search(r"^elevation steps \(no walking across\): (.+)$", view, re.M)
+            m["seams"] = [[int(a), int(b), d] for a, b, d in re.findall(r"(\d+),(\d+)([rd])", ev[1])] if ev else []
         warps = parse_warps(warps_text)
         if warps:
             m["warps"] = [list(w) for w in warps]
@@ -254,7 +257,9 @@ class LearnedAtlas(WorldNav):
             self._maps[mid] = {"tileset": None, "tiles": None, "cells": cells,
                                "warps": [tuple(w) for w in m.get("warps", [])],
                                "conns": [(side, dm, None, None) for side, dm in m.get("conns", [])],
-                               "arrivals": m.get("arrivals", {})}
+                               "arrivals": m.get("arrivals", {}),
+                               "seams": frozenset(frozenset(((x, y), (x + (d == "r"), y + (d == "d"))))
+                                                  for x, y, d in m.get("seams", []))}
         return self._maps[mid]
 
     def entries(self) -> dict:

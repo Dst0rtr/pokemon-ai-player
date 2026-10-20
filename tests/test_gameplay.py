@@ -437,6 +437,15 @@ def test_route_hint_names_what_blocks_the_route(emu, monkeypatch):
     assert "needs Surf" in prof.route_hint(3, 1)
 
 
+def test_the_map_view_lists_elevation_steps(emu, monkeypatch):
+    # Codex review 14: the character grid cannot show cave/forest elevation steps; the map view lists them
+    prof = emu.profile
+    monkeypatch.setattr(prof, "_u8", lambda a, real=prof._u8: 3 if a == D.CUR_TILESET else real(a))   # forest tileset
+    monkeypatch.setattr(prof, "full_map_tiles", lambda: [[0x30, 0x30, 0x30], [0x2E, 0x2E, 0x2E]])
+    line = prof.elevation_text([list("..."), list("..#")])
+    assert line == "elevation steps (no walking across): 0,0d 1,0d", line   # (2,1) is a wall: no step listed
+
+
 def test_milestone_snapshot_includes_team(emu):
     emu.metrics.restart("team")
     mem = emu.pyboy.memory

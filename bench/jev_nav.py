@@ -133,6 +133,7 @@ class WorldNav:
         w = len(cells[0]) if cells else 0
         warp_at = {(x, y): i for i, (x, y, _, _) in enumerate(m["warps"])}
         pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(m["tileset"], ()))
+        seams = m.get("seams") or frozenset()          # learned elevation steps (LearnedAtlas: no tiles to check)
         if surf:
             pairs |= set(D.TILE_PAIR_COLLISIONS_WATER.get(m["tileset"], ()))
         passable = {".", ",", ":", "X"} | ({"~"} if surf else set()) | ({"T"} if cut else set())
@@ -158,7 +159,8 @@ class WorldNav:
                                 if arr:
                                     trans.append((d + 1, Hop(mid, "edge", x, y, dm, side=s, steps=d + 1), arr))
                         continue
-                    if pairs and frozenset((tiles[y][x], tiles[ny][nx])) in pairs or (nx, ny) in avoid:
+                    if pairs and frozenset((tiles[y][x], tiles[ny][nx])) in pairs or (nx, ny) in avoid \
+                            or seams and frozenset(((x, y), (nx, ny))) in seams:
                         continue
                     if (nx, ny) in warp_at:
                         if (nx, ny) not in seen_warp:

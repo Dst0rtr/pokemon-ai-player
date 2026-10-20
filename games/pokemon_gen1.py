@@ -1980,8 +1980,31 @@ class PokemonGen1Profile(GameProfile):
         body = "\n".join(f"{y:2d} " + "".join(row) for y, row in enumerate(cells))
         exits = ", ".join(f"({wx},{wy})→{self.map_label(d)}" for wx, wy, d in self.warps()[:12])
         conns = ", ".join(f"{side} edge→{D.map_name(mid)}" for side, mid in self.connections())
-        tail = "\n".join(t for t in (f"exits: {exits}" if exits else "", f"connections: {conns}" if conns else "") if t)
+        tail = "\n".join(t for t in (f"exits: {exits}" if exits else "", f"connections: {conns}" if conns else "",
+                                     self.elevation_text(cells)) if t)
         return head + "\n" + ruler + "\n" + body + ("\n" + tail if tail else "")
+
+    def elevation_text(self, cells) -> str:
+        """Cave/forest elevation steps between neighbouring floor cells (pokered TilePairCollisionsLand): "x,yr" = no
+        walking between (x,y) and (x+1,y), "x,yd" = (x,y) and (x,y+1). The character grid cannot show them; a map built
+        from it took walled-off parts for reachable (Codex review 14: run 87's Safari Zone West)."""
+        pairs = set(D.TILE_PAIR_COLLISIONS_LAND.get(self._u8(D.CUR_TILESET), ()))
+        if not pairs:
+            return ""
+        try:
+            tiles = self.full_map_tiles()
+        except Exception:  # pragma: no cover
+            return ""
+        h, w = len(cells), len(cells[0]) if cells else 0
+        out = []
+        for y in range(h):
+            for x in range(w):
+                for d, (dx, dy) in (("r", (1, 0)), ("d", (0, 1))):
+                    nx, ny = x + dx, y + dy
+                    if nx < w and ny < h and cells[y][x] != "#" and cells[ny][nx] != "#" \
+                            and frozenset((tiles[y][x], tiles[ny][nx])) in pairs:
+                        out.append(f"{x},{y}{d}")
+        return ("elevation steps (no walking across): " + " ".join(out)) if out else ""
 
     def seed_milestones(self, names) -> None:
         by_name = {self._norm(n): m for m, n in D.MAPS.items()}
