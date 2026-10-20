@@ -803,18 +803,11 @@ class Agent:
         def ball(x: Option) -> bool:                      # one this part of the floor reaches (volcano-leg-15 tried 3F's
             m = re.search(r"at \((\d+),(\d+)\) \(an item ball", x.label)     # ball at (25,5) from the far side ~5 times)
             return bool(m) and (dist is None or any((int(m[1]) + dx, int(m[2]) + dy) in dist for dx, dy in MOVES.values()))
-        presses = [(steps[-1], k) for k, steps in self.s.get("switches", {}).items() if steps]
-        last = max(presses)[1] if presses else ""
-        same = lambda x: o is not None and x.label.startswith(f"press the secret switch at ({last.split(':')[-1]})") \
-            and last.startswith(f"{o.map}:")
-        # the switch pressed last waits until the floors it changed were seen (volcano-leg-14 pressed 1F's 11 times,
-        # flipping the doors back before anyone looked); another switch does not wait (volcano-leg-18 walked 3F's top
-        # left up to its switch, which opens the way to the holes, and left by "go back to 1F" without pressing it)
-        switch = lambda x: x.label.startswith("press the secret switch") and not (self.s.get("floor_changed") and same(x))
-        floors = lambda x: x.label.startswith(("go back to", "take the stairs"))
+        # a switch only once nothing is left to see in this door state (floor walked is kept per state: trod_key);
+        # every switch flips the same doors, so pressing early only undoes the last press (volcano-leg-14 and -19)
         kinds = (lambda x: here(x) or ball(x),
                  lambda x: x.label.startswith("explore the unvisited floor"),
-                 switch, floors,
+                 lambda x: x.label.startswith(("go back to", "take the stairs")),
                  lambda x: x.label.startswith("press the secret switch"),
                  # another floor's exits last: volcano-leg-14 went 1F <-> 2F ~20 times between "go to 1F (unexplored
                  # exits)" on 2F and "go back to 3F" (through 2F) on 1F
@@ -853,12 +846,18 @@ class Agent:
         return [back] + [x for x in opts if not x.label.startswith("explore ")
                          and not (x.label.startswith("walk ") and x.label.endswith(" tiles"))]
 
+    def trod_key(self, name: str) -> str:
+        """The floor walked is kept per door state in the Pokémon Mansion: all its switches flip one setting, so the
+        parity of the presses tells which doors are open (volcano-leg-19 pressed 1F's and 2F's switches by turns, each
+        undoing the other, with every floor "walked" in the other state)."""
+        return f"{name}#{self.s.get('flips', 0) % 2}" if name.startswith("Pokémon Mansion") else name
+
     def learn_trod(self, o: Obs) -> None:
         """Cells the player has stood on, per map (for floor_options)."""
         if o.mode == "overworld" and o.map and o.pos:
             if o.map in self.s.get("floor_changed", []):
                 self.s["floor_changed"].remove(o.map)     # seen again (the atlas re-reads it on entry)
-            t = self.s.setdefault("trod", {}).setdefault(o.map, [])
+            t = self.s.setdefault("trod", {}).setdefault(self.trod_key(o.map), [])
             if list(o.pos) not in t and len(t) < 600:
                 t.append(list(o.pos))
 
@@ -878,7 +877,7 @@ class Agent:
             dist, _ = self.nav.reach(cur, tuple(o.pos))
         except (KeyError, IndexError, ValueError):
             return opts
-        trod = [tuple(t) for t in self.s.get("trod", {}).get(o.map, [])] + [tuple(o.pos)]
+        trod = [tuple(t) for t in self.s.get("trod", {}).get(self.trod_key(o.map), [])] + [tuple(o.pos)]
         far = sorted((d, c) for c, d in dist.items() if 0 <= c[1] < len(cells) and 0 <= c[0] < len(cells[c[1]])
                      and cells[c[1]][c[0]] in (".", ",")
                      and all(abs(c[0] - t[0]) + abs(c[1] - t[1]) > TROD_RADIUS for t in trod))
@@ -983,6 +982,8 @@ class Agent:
             # a Pokémon Mansion switch opens and shuts doors on every floor: all of them are forgotten, walks included
             names = [D.map_name(int(k)) for k in self.nav.data["maps"]] if isinstance(self.nav, LearnedAtlas) else []
             mansion = name.startswith("Pokémon Mansion")
+            if mansion and re.search(r"Who wouldn't\?", reply):
+                self.s["flips"] = self.s.get("flips", 0) + 1   # the doors' state (see trod_key)
             if mansion:                                   # the other floors' doors changed too: worth seeing again
                 self.s["floor_changed"] = sorted({x for x in names if x.startswith("Pokémon Mansion")} - {name})
                 # ...each part of them: every staircase between the floors leads to its own part of the next floor
@@ -1481,7 +1482,7 @@ class Agent:
             if fx and o.map and "arrived" not in after.head and "battle" not in after.head:
                 # not reached (a wall the view does not show, someone in the way): it counts as walked, or the strict
                 # puzzle order would offer it again and again
-                self.s.setdefault("trod", {}).setdefault(o.map, []).append([int(fx[1]), int(fx[2])])
+                self.s.setdefault("trod", {}).setdefault(self.trod_key(o.map), []).append([int(fx[1]), int(fx[2])])
         cur = map_id(o.map)
         if m and after.map and after.map != o.map and cur is not None:
             key = f"{cur}:{m[1]},{m[2]}"
