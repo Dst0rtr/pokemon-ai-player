@@ -1411,6 +1411,24 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     assert [9, 1] in agent.s["trod"]["Pokémon Mansion 3F"]                  # not reached: not offered again
 
 
+def test_the_route_to_grass_for_training_leaves_out_blocked_hops(tmp_path):
+    """Full run 76: training walked to Route 9's grass through Rock Tunnel again and again; B1F's ladder had no
+    walkable route from the arrival and was blocked, but the training route did not pass the blocked hops."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    lav, r9 = map_id("Lavender Town"), map_id("Route 9")
+    agent.nav.observe(lav, _view("Lavender Town", ["#####", "#P.D#", "#####"]), _warps_hex([(3, 1, 0, r9)]), [])
+    agent.nav.observe(r9, _view("Route 9", ["#####", "#,,.#", "#####"]), _warps_hex([]), [])
+    agent.s["visited"] = ["Lavender Town", "Route 9"]
+    o = J.parse("walked\nf1 Lavender Town (1,1) facing up | C L50 200/207 | ¥3000 | 6 badges")
+    assert [x.label[:41] for x in agent.train_options(o, None)] == ["follow the map route to the tall grass on"]
+    agent.s["nav_blocked"][f"{lav}:3,1"] = agent.s["step"] + 300
+    assert agent.train_options(o, None) == []                               # the only way there is blocked
+
+
 def test_a_carried_atlas_counts_its_maps_as_visited(tmp_path):
     """it75 end-state experiment: with a carried atlas but fresh agent memory, every map looked first reached during
     the objective, so the frontier beat the route to Pallet Town. A blank atlas (goal runs) leaves visited empty."""

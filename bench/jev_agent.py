@@ -1331,6 +1331,9 @@ class Agent:
                                    "pace back and forth in tall grass until a wild Pokémon appears, then fight it",
                                    then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
         best = None
+        # hops that keep failing are left out, as for the objective's route (full run 76 trained by walking to Route 9's
+        # grass through Rock Tunnel: B1F's far ladder had no walkable route from the arrival, ~400 steps up and down)
+        blocked = frozenset(k for k, until in self.s["nav_blocked"].items() if until > self.s["step"])
         for name in self.s["visited"]:
             mid = map_id(name)
             if mid is None or mid == cur or name in no_grass:
@@ -1340,7 +1343,7 @@ class Agent:
                     continue
             except (KeyError, IndexError):
                 continue
-            r = self.nav.route(cur, tuple(o.pos), mid)
+            r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked)
             if r and (best is None or len(r) < len(best[1])):
                 best = (name, r)
         if best:
