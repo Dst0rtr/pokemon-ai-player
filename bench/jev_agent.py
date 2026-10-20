@@ -1380,6 +1380,8 @@ class Agent:
                     if not found or not found[0]:
                         continue
                     r, arr = found
+                    if self.loops_back(cur, r):                   # (the same rule as the objective's route: Codex 9)
+                        continue
                     # only where the unexplored exits can be reached from the arrival point (bills-house iteration 32:
                     # Route 4's exits lie beyond its one-way ledge, and Jev crossed to it and back ~400 times)
                     try:
@@ -1548,6 +1550,8 @@ class Agent:
             except (KeyError, IndexError):
                 continue
             r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked, **caps)
+            if r and self.loops_back(cur, r):
+                r = None
             if r and (best is None or len(r) < len(best[1])):
                 best = (name, r)
         if best:
@@ -1606,6 +1610,7 @@ class Agent:
                                            then=pace if (gx, gy) != tuple(o.pos) else pace[1:])]
                 return []
             r = self.nav.route(cur, tuple(o.pos), mid, blocked=blocked, **caps)
+            r = None if r and self.loops_back(cur, r) else r
             walk = self.hop_walk(cur, tuple(o.pos), r[0].x, r[0].y, r[0].side if r[0].kind == "edge" else "") if r else None
             if walk:
                 return [Option(f"follow the map route to train on {name} (wild Pokémon up to L{v}): {r[0].label()}", "walk",
