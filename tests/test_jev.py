@@ -1411,7 +1411,7 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     (tmp_path / "data").mkdir()
     agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
                   nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
-    agent.nav.observe(f3, _view("Pokémon Mansion 3F", ["##############", "#P...........#", "##############"]), _warps_hex([]), [])
+    agent.nav.observe(f3, _view("Pokémon Mansion 3F", ["##############", "#P.......::..#", "##############"]), _warps_hex([]), [])
     targets = ["Pokémon Mansion 1F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
     o = J.parse("walked\nf1 Pokémon Mansion 3F (1,1) facing up | C L60 200/207 | ¥3000 | 6 badges")
     agent.learn_trod(o)
@@ -1424,8 +1424,8 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     assert not any(x.label.startswith("go back") for x in agent.floor_options(o, [], targets))
     del agent.nav.route
     agent.s["trod"]["Pokémon Mansion 3F#0"] += [[6, 1], [10, 1]]
-    nxt = [x.label for x in agent.floor_options(o, [], targets)]            # nothing far left: cells never stepped on
-    assert nxt[:1] == ["explore the untested floor at (2,1)"]
+    nxt = [x.label for x in agent.floor_options(o, [], targets)]            # nothing far left: broken floor (":") cell
+    assert nxt == ["explore the untested floor at (9,1)"]                   # by cell, not the whole floor
     agent.s["trod"]["Pokémon Mansion 3F#0"] += [[x, 1] for x in range(1, 13)]
     assert [x.label for x in agent.floor_options(o, [], targets)] == []      # every cell stepped on
     agent.s["trod"]["Pokémon Mansion 3F#0"] = [[1, 1]]

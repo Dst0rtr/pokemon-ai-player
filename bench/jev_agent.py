@@ -177,7 +177,7 @@ class Agent:
     def free_neighbour(self, o: Obs) -> bool:
         g = self.grid(o.map)
         x, y = o.pos
-        return any(g.get((x + dx, y + dy)) in (".", ",") for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)))
+        return any(g.get((x + dx, y + dy)) in (".", ",", ":") for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)))
 
     def grid(self, name: str) -> dict:
         return {tuple(int(v) for v in k.split(",")): c for k, c in self.s["grids"].get(name, {}).items()}
@@ -737,7 +737,7 @@ class Agent:
             if any(self.s["step"] - tried.get(f"{x},{y}", -10**9) <= NAV_BLOCK_STEPS for x, y in pair):
                 continue
             stands = [((x + dx, y + dy), face, (x, y)) for x, y in pair for (dx, dy), face in J.STEP_TOWARD.items()
-                      if grid.get((x + dx, y + dy)) in (".", ",") and (x + dx, y + dy) not in o.npcs
+                      if grid.get((x + dx, y + dy)) in (".", ",", ":") and (x + dx, y + dy) not in o.npcs
                       and (reach is None or (x + dx, y + dy) in reach or (x + dx, y + dy) == (px, py))]
             if not stands:
                 continue
@@ -908,15 +908,15 @@ class Agent:
             return opts
         trod = [tuple(t) for t in self.s.get("trod", {}).get(self.trod_key(o.map), [])] + [tuple(o.pos)]
         floor = [(d, c) for c, d in dist.items() if 0 <= c[1] < len(cells) and 0 <= c[0] < len(cells[c[1]])
-                 and cells[c[1]][c[0]] in (".", ",")]
+                 and cells[c[1]][c[0]] in (".", ",", ":")]
         far = sorted((d, c) for d, c in floor if all(abs(c[0] - t[0]) + abs(c[1] - t[1]) > TROD_RADIUS for t in trod))
         exact = not far
         if exact:
             # then every cell never stepped on: a hole is one cell, and near walked floor is not tested floor (Codex
             # review 3: Mansion 3F's holes to 1F lay two and three cells from cells walked; stepping on one drops you,
             # so a hole is never among the cells walked)
-            seen = set(trod)
-            far = sorted((d, c) for d, c in floor if c not in seen)
+            seen = set(trod)                              # (only broken floor ":": a cell-by-cell walk of whole floors
+            far = sorted((d, c) for d, c in floor if c not in seen and cells[c[1]][c[0]] == ":")   # cost ~800 steps)
         out: list = []
         for _, (x, y) in far:
             if all(abs(x - a) + abs(y - b) > 2 * TROD_RADIUS for a, b in out):
@@ -1363,7 +1363,7 @@ class Agent:
         # the side and bottom borders are walls, not objects (the Rocket Hideout Elevator's view has them: 14 wall cells
         # touched the floor, over the cap, and its panel at (1,1) was never offered; full run 52, ~3,000 steps)
         objs = [(x, y) for y in range(top, h - 1) for x in range(1, w - 1) if cells[y][x] == "#" and any(
-            0 <= x + dx < w and 0 <= y + dy < h and cells[y + dy][x + dx] in (".", ",") for dx, dy in MOVES.values())]
+            0 <= x + dx < w and 0 <= y + dy < h and cells[y + dy][x + dx] in (".", ",", ":") for dx, dy in MOVES.values())]
         if not objs or len(objs) > 12:
             return []
         said = self.s["said"].get(o.map, {})
@@ -1373,7 +1373,7 @@ class Agent:
         for x, y in objs:                                  # machines and PCs are used from below first
             for rank, (side, (dx, dy), face) in enumerate(sides):
                 sx, sy = x + dx, y + dy
-                if not (0 <= sx < w and 0 <= sy < h) or cells[sy][sx] not in (".", ","):
+                if not (0 <= sx < w and 0 <= sy < h) or cells[sy][sx] not in (".", ",", ":"):
                     continue
                 key = f"{x},{y} {side}"
                 first = ({"path": f"{face} 1", "on_battle": "stop"} if (sx, sy) == (px, py)
@@ -1629,7 +1629,7 @@ class Agent:
         back = {"up": "down", "down": "up", "left": "right", "right": "left"}
         for d, (dx, dy) in MOVES.items():
             nx, ny = x + dx, y + dy
-            if 0 <= ny < len(cells) and 0 <= nx < len(cells[0]) and cells[ny][nx] in (".", ",") and (nx, ny) not in warps:
+            if 0 <= ny < len(cells) and 0 <= nx < len(cells[0]) and cells[ny][nx] in (".", ",", ":") and (nx, ny) not in warps:
                 return {"path": f"{d} 1", "on_battle": "stop"}, [("walk", {"path": f"{back[d]} 1", "on_battle": "stop"})]
         return None
 

@@ -781,6 +781,25 @@ def test_mansion_switch_is_drawn_and_toggles_doors(emu):
     assert before[7][16] == "#" and after[7][16] == "."                # ...and another opened
 
 
+def test_mansion_broken_floor_is_drawn_and_walkable(emu):
+    """Mansion 3F's collapsed floor holds the holes that drop to 1F and 2F; it is drawn ':' (walkable) so the agent
+    can test it cell by cell instead of whole floors. Needs a local saves/<rom>/mansion-3f.state (3F at (7,11))."""
+    import pytest
+    from tests.conftest import ROOT
+    state = ROOT / "saves" / emu.rom_path.stem / "mansion-3f.state"
+    if not state.exists():
+        pytest.skip("no local mansion-3f.state")
+    with open(state, "rb") as f:
+        emu.pyboy.load_state(f)
+    emu.tick(2)
+    emu.profile.after_load()
+    assert emu.profile.position() == (215, 7, 11)
+    cells = emu.profile.full_map_cells()
+    assert {cells[y][x] for x in range(12, 22) for y in range(14, 18)} == {":"} and cells[5][10] == "S"
+    assert cells[11][7] == "." and sum(r.count(":") for r in cells) == 40
+    assert ":=broken floor" in emu.state("map")
+
+
 def test_walk_learns_spinners_and_plans_with_them(emu):
     """Rocket Hideout B2F is a spinner maze: the server's route crossed spinner tiles it knew nothing about and every
     walk ended where a spinner dropped it (full run 47: 2,000 decisions there). Each slide is now remembered (spinner

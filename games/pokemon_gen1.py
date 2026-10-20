@@ -1359,8 +1359,9 @@ class PokemonGen1Profile(GameProfile):
             tiles.append(row)
         return tiles
 
-    def switch_cells(self) -> set[tuple[int, int]]:
-        """The Pokémon Mansion's secret switches: the statue drawn with its own four tiles (examine it from below)."""
+    def switch_cells(self, quad: tuple = D.MANSION_SWITCH_QUAD) -> set[tuple[int, int]]:
+        """The Pokémon Mansion's secret switches: the statue drawn with its own four tiles (examine it from below); with
+        `quad`, the cells drawn with another four tiles (its broken floor)."""
         if not D.map_name(self._u8(D.CUR_MAP)).startswith("Pokémon Mansion") or self._u8(D.CUR_TILESET) != 22:
             return set()
         bw = self._u8(D.MAP_WIDTH) + 6
@@ -1369,7 +1370,7 @@ class PokemonGen1Profile(GameProfile):
         for y in range(self._u8(D.MAP_HEIGHT) * 2):
             for x in range(self._u8(D.MAP_WIDTH) * 2):
                 blk = self._block(blocks[(y // 2 + 3) * bw + (x // 2 + 3)])
-                if tuple(blk[((y % 2) * 2 + r) * 4 + (x % 2) * 2 + c] for r in (0, 1) for c in (0, 1)) == D.MANSION_SWITCH_QUAD:
+                if tuple(blk[((y % 2) * 2 + r) * 4 + (x % 2) * 2 + c] for r in (0, 1) for c in (0, 1)) == quad:
                     out.add((x, y))
         return out
 
@@ -1383,6 +1384,7 @@ class PokemonGen1Profile(GameProfile):
         tree = D.CUT_TREE_TILES.get(tileset, -1)
         doors = D.CARD_KEY_DOOR_TILES if D.map_name(self._u8(D.CUR_MAP)).startswith("Silph Co.") else ()
         switches = self.switch_cells()
+        broken = self.switch_cells(D.MANSION_BROKEN_QUAD) if switches else set()
         cells = []
         for y, trow in enumerate(self.full_map_tiles()):
             row = []
@@ -1394,7 +1396,7 @@ class PokemonGen1Profile(GameProfile):
                 elif tile in ledges:
                     row.append(D.LEDGE_CHAR[ledges[tile]])
                 elif tile in walkable:
-                    row.append(".")
+                    row.append(":" if (x, y) in broken else ".")
                 elif tile == water:
                     row.append("~")
                 elif tile == tree:
@@ -1719,7 +1721,8 @@ class PokemonGen1Profile(GameProfile):
         head = (f"{D.map_name(m)} {w}x{h}, you at ({px},{py}) facing {self.facing()}. "
                 "x→ right, y↓ down. P=you N=npc D=door/warp #=blocked .=walkable ,=tall grass v<>=one-way ledge "
                 "~=water (Surf) T=small tree (Cut)" + (" L=locked door (Card Key)" if any("L" in r for r in cells) else "") + \
-                (" S=secret switch (examine it from below)" if any("S" in r for r in cells) else "")
+                (" S=secret switch (examine it from below)" if any("S" in r for r in cells) else "") + \
+                (" :=broken floor (a hole can drop you a floor)" if any(":" in r for r in cells) else "")
                 + (" o=item ball" if any("o" in r for r in cells) else ""))
         ruler = "   " + "".join(str(x % 10) for x in range(w))
         body = "\n".join(f"{y:2d} " + "".join(row) for y, row in enumerate(cells))

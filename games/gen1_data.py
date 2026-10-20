@@ -333,6 +333,9 @@ CARD_KEY_DOOR_TILES = (0x18, 0x24, 0x5E)
 # the Pokémon Mansion's switch statue (tileset 22): its four tiles, top-left, top-right, bottom-left, bottom-right; it
 # appears only where the secret switches are (pokered hidden events 1F (2,5), 2F (2,11), 3F (10,5), B1F (20,3), (18,25))
 MANSION_SWITCH_QUAD = (0x37, 0x3F, 0x3D, 0x3E)
+# its broken floor (tileset 22): 3F's patch holds the holes that drop to 1F and 2F (pokered PokemonMansion3F.asm); 2F
+# has a larger patch, 1F none. Drawn ":" (walkable): a player sees the floor is broken there
+MANSION_BROKEN_QUAD = (0x11, 0x11, 0x11, 0x11)
 MISSABLE_LIST = 0xD5CE      # wMissableObjectList: (sprite slot, global missable index) pairs, 0xFF-terminated
 MISSABLE_FLAGS = 0xD5A6     # wMissableObjectFlags: bit set = object hidden (a taken item ball, a person gone)
 SPRITE_POKE_BALL = 0x3D     # picture id of an item ball lying on the map (wSpriteStateData1 +0)

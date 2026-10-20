@@ -191,7 +191,7 @@ MON_RE = re.compile(r"^(?P<name>.+?) L(?P<level>\d+) (?P<hp>\d+)/(?P<max_hp>\d+)
 PARTY_RE = re.compile(r"^(?P<n>\d+)\. (?P<mon>.+?\d+/\d+[^\[\n]*(?:\[[^\]]*\])?)", re.M)
 MOVE_RE = re.compile(r"^(?P<name>.+?) (?P<pp>\d+)pp(?P<dis> DISABLED)?$")
 EXIT_RE = re.compile(r"\(\d+,\d+\)→([^,\n]+)")
-MAP_ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS]+)$")
+MAP_ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS:]+)$")
 WINDOW_RE = re.compile(r"window x(-?\d+)\.\.-?\d+ y(-?\d+)\.\.-?\d+")
 CONN_RE = re.compile(r"(north|south|east|west) edge→([^,\n]+)")
 HEAL_ITEMS = ("Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore", "Fresh Water", "Soda Pop", "Lemonade")
@@ -294,7 +294,7 @@ def parse(text: str) -> Obs:
     if win and not o.npcs:
         x0, y0, i0 = win
         for r, ln in enumerate(lines[i0 + 1:i0 + 10]):
-            if not re.fullmatch(r"[#.,NPDvT<>~^LoS]{10}", ln):
+            if not re.fullmatch(r"[#.,NPDvT<>~^LoS:]{10}", ln):
                 break
             o.npcs += [(x0 + x, y0 + r) for x, c in enumerate(ln) if c in "No"]
             o.balls += [(x0 + x, y0 + r) for x, c in enumerate(ln) if c == "o"]
@@ -457,7 +457,7 @@ def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], all
     return _dedupe(opts)
 
 
-WALKABLE = set(".,")
+WALKABLE = set(".,:")
 STEP_TOWARD = {(0, -1): "down", (0, 1): "up", (-1, 0): "right", (1, 0): "left"}   # offset of the stand cell -> facing
 
 
