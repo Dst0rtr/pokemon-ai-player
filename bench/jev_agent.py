@@ -36,7 +36,7 @@ from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, Claud
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import GRAPH, GYM_NODES, STUCK_Q, is_status_move, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS, STORY_RE as SOLO_STORY_RE  # noqa: E402
 from bench.jev_nav import ScopedBlocks, MOVES, Hop, WorldNav, map_id  # noqa: E402
-from bench.jev_atlas import LearnedAtlas, explored_count, frontier_maps  # noqa: E402
+from bench.jev_atlas import HEX_RE, LearnedAtlas, explored_count, frontier_maps  # noqa: E402
 from games import gen1_data as D  # noqa: E402
 from bench import jev as J  # noqa: E402
 
@@ -350,6 +350,13 @@ class Agent:
             warps = await self.tool("memory", address="D3AE", length=129)
             last = await self.tool("memory", address="D365", length=1)        # wLastMap: where "outside" warps lead
             self.nav.observe(map_id(o.map), view, warps, cn, last_map_text=last)
+        if o.mode == "overworld" and o.map.startswith("Pokémon Mansion"):
+            # the doors' real state (EVENT_MANSION_SWITCH_ON, 0xD796 bit 0), not a count of presses: full run 85 had
+            # 21 counted flips and floor "walked" in both states at cells that are walls in one of them, so the floors
+            # that open in the other state were never explored (3F's way to the collapsed floor, 2F's east stairs)
+            flag = HEX_RE.search(await self.tool("memory", address="D796", length=1) or "")
+            if flag:
+                self.s["mansion_doors"] = int(flag[2].split()[0], 16) & 1
         if o.mode == "overworld" and o.map:
             if self.s.get("atlas_map") != o.map:
                 self.s.get("push_tried", {}).pop(o.map, None)   # a push refused from one side may work from another
@@ -939,7 +946,8 @@ class Agent:
         """The floor walked is kept per door state in the Pokémon Mansion: all its switches flip one setting, so the
         parity of the presses tells which doors are open (volcano-leg-19 pressed 1F's and 2F's switches by turns, each
         undoing the other, with every floor "walked" in the other state)."""
-        return f"{name}#{self.s.get('flips', 0) % 2}" if name.startswith("Pokémon Mansion") else name
+        doors = self.s.get("mansion_doors", self.s.get("flips", 0) % 2)
+        return f"{name}#{doors}" if name.startswith("Pokémon Mansion") else name
 
     def learn_trod(self, o: Obs) -> None:
         """Cells the player has stood on, per map (for floor_options)."""

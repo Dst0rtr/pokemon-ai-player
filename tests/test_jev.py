@@ -1209,6 +1209,20 @@ def test_a_back_outside_warp_lands_on_the_outside_maps_warp_it_names(tmp_path):
     assert atlas.warp_dest(gate, 0) == [(r22, -1, -1)]
 
 
+def test_mansion_floor_walked_is_kept_per_real_door_state(tmp_path):
+    """Full run 85: the door state was a count of presses (21), and floor was "walked" in both states at cells that are
+    walls in one of them; the floors that open in the other state were never explored. The real state is the event flag
+    EVENT_MANSION_SWITCH_ON (0xD796 bit 0), read on Mansion maps; the count is only the fallback."""
+    from bench.jev_atlas import HEX_RE
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    agent.s["flips"] = 21
+    assert agent.trod_key("Pokémon Mansion 3F") == "Pokémon Mansion 3F#1"
+    flag = HEX_RE.search("D796: 00")
+    agent.s["mansion_doors"] = int(flag[2].split()[0], 16) & 1
+    assert agent.trod_key("Pokémon Mansion 3F") == "Pokémon Mansion 3F#0" and agent.trod_key("Route 1") == "Route 1"
+
+
 def test_the_celadon_roof_offers_its_machines(tmp_path):
     """Codex review 10: run 75's Celadon Mart Roof has 26 solid cells touching the floor, over the cap of 12, and no
     examine option was offered (full run 71: 274 decisions of blind walks there looking for a vending machine)."""
