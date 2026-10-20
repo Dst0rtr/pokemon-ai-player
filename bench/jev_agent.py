@@ -462,7 +462,9 @@ class Agent:
             opts = uniq
         forced = self.director.forced_recovery(self.s["step"]) if self.director and kind == "overworld" else None
         if not forced and self.director and kind == "overworld":
-            forced = self.director.bag_option(self.items, self.party) or self.director.flute_option(self.items)
+            forced = self.director.bag_option(self.items, self.party) or self.director.flute_option(self.items) or \
+                self.director.league_recover_option(o, self.party, self.items) or \
+                self.director.league_prep_option(o, self.party, self.items)
         if self.director and kind == "overworld" and self.director.want_checkpoint(self.s["step"]):
             await self.tool("save_state", slot="jev-progress")
         if kind == "overworld" and o.map.endswith("Poké Center") and self.s.pop("want_safe", False):
@@ -557,7 +559,7 @@ class Agent:
         self.remember_choice(o, opt)
         if opt.tool == "manage" and opt.args.get("action") == "save":
             self.s["last_save_step"] = self.s["step"]
-        if opt.tool in ("manage", "shop") or GOT_RE.search(reply):
+        if opt.tool in ("manage", "shop") or any(t == "shop" for t, _ in opt.then) or GOT_RE.search(reply):
             self.s["refresh_items"] = True              # the bag, HMs or moves may have changed
         if self.director and facts is not None and self.blacked_out(o, after, reply) and \
                 self.s["step"] - self.s.get("blackout_step", -10**9) > 5:

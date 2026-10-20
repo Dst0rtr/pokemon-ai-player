@@ -318,6 +318,8 @@ class SoloDirector:
         league = o.map in E4_ROOMS                         # its doors lock behind you: items, not a Poké Center
         if league:
             self.s["lobby_fresh"] = False                  # an attempt began: the next one heals in the Lobby again
+            self.s.pop("prep_done", None)                  # ...and prepares again (league_prep_option)
+            self.s.pop("prep_tries", None)
         if node.id == "champion" and o.map == "Indigo Plateau Lobby" and self.league_next(f) == "Lorelei" \
                 and f.levels and (min(f.hp_ratio, f.carry_ratio) < 1 or not self.s.get("lobby_fresh")):
             # before every attempt, also at full HP: PP is restored (Codex 7: Cut's PP hid empty attacks) and a loss then
@@ -474,6 +476,68 @@ class SoloDirector:
             return None
         return Option(f"toss {junk[0]} (the bag is full)", "manage", {"action": "toss", "target": junk[0]},
                       "a full bag cannot pick up anything, not even key items")
+
+    def league_prep_option(self, o: Obs, party: list[dict], items: list[tuple[str, int]]) -> Optional[Option]:
+        """In the Indigo Plateau Lobby before an attempt (Lorelei next), code prepares (Codex review 15: no supplies were
+        ever bought, kept TMs were offered ~1,200 times and never taught, Rare Candies sat in a full bag): stat items and
+        Rare Candies on the strongest Pokémon, the kept TMs taught, then Full Restores (to 10) and Revives (to 5) from the
+        clerk behind the counter at (0,5), talked to from (2,5) facing left. One shopping trip per attempt."""
+        if o.map != "Indigo Plateau Lobby" or not o.pos or not party or self.league_next(None) != "Lorelei" \
+                or self.s.get("prep_done"):
+            return None
+        have = dict(items)
+        carry = max(party, key=lambda p: p.get("level", 0))
+        for it in ("Rare Candy", "HP Up", "Protein", "Iron", "Carbos", "Calcium"):
+            if have.get(it):
+                return Option(f"use a {it} on {carry['species']} (league preparation)", "manage",
+                              {"action": "use", "target": it, "target2": carry["species"]}, "stronger for the Elite Four")
+        refused = set(self.s.get("hm_no", []))
+        for tm, move in KEEP_TMS.items():
+            if not have.get(tm):
+                continue
+            mon = next((p["species"] for p in sorted(party, key=lambda p: -p.get("level", 0))
+                        if f"{tm}:{p['species']}" not in refused
+                        and move not in [m["name"] if isinstance(m, dict) else m for m in p.get("moves", [])]), None)
+            if mon:
+                return Option(f"teach {tm} ({move}) to {mon} (league preparation)", "manage",
+                              {"action": "use", "target": tm, "target2": f"{mon}: weakest"}, "coverage for the Elite Four")
+        money = o.money or 0
+        for it, want, price in (("Full Restore", 10, 3000), ("Revive", 5, 1500)):
+            n = min(want - have.get(it, 0), money // price)
+            if n > 0 and (it in have or len(items) < BAG_SLOTS):
+                self.s.setdefault("prep_tries", 0)
+                self.s["prep_tries"] += 1
+                if self.s["prep_tries"] > 6:              # (the menu did not work out: go on without)
+                    break
+                spot = (2, 5)
+                first = {"path": "left 1", "on_battle": "stop"} if tuple(o.pos) == spot else \
+                    {"path": f"to {spot[0]},{spot[1]}", "on_battle": "stop"}
+                then = ([] if tuple(o.pos) == spot else [("walk", {"path": "left 1", "on_battle": "stop"})]) + \
+                    [("shop", {"item": it, "qty": n})]
+                return Option(f"buy {n} {it} from the Lobby clerk (league preparation)", "walk", first,
+                              "healing for the five fights in a row", then=then)
+        self.s["prep_done"] = True
+        return None
+
+    def league_recover_option(self, o: Obs, party: list[dict], items: list[tuple[str, int]]) -> Optional[Option]:
+        """Between Elite Four rooms (no Poké Center): the strongest Pokémon is revived or healed before the next fight
+        (Codex review 15: healing was only an option below half HP, and Revives were never offered)."""
+        if o.map not in E4_ROOMS or not party:
+            return None
+        have = dict(items)
+        carry = max(party, key=lambda p: p.get("level", 0))
+        if carry["hp"] == 0:
+            it = next((i for i in ("Max Revive", "Revive") if have.get(i)), None)
+            if it:
+                return Option(f"use a {it} on {carry['species']}", "manage",
+                              {"action": "use", "target": it, "target2": carry["species"]}, "it fainted")
+            return None
+        if carry["hp"] < carry["max_hp"] * 0.7:
+            it = next((i for i in ("Full Restore", "Max Potion", "Hyper Potion", "Super Potion") if have.get(i)), None)
+            if it:
+                return Option(f"use a {it} on {carry['species']}", "manage",
+                              {"action": "use", "target": it, "target2": carry["species"]}, "heal before the next fight")
+        return None
 
     def flute_option(self, items: list[tuple[str, int]]) -> Optional[Option]:
         """Facing a sleeping Snorlax (the last reply said so) with the Poké Flute: code plays it (full run 56 talked to

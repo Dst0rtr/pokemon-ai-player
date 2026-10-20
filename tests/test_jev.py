@@ -268,6 +268,34 @@ def test_with_no_poke_center_in_reach_a_half_healthy_team_goes_on():
     assert d.objective(f, o)[2] == "heal"
 
 
+def test_the_league_is_prepared_for_in_the_lobby_and_between_rooms():
+    """Codex review 15 (run 88's team: Charizard L74, Lapras L15, ¥84,142, Rare Candies, TM13/TM24 kept): before an
+    attempt code uses the candies, teaches the kept TMs, then buys Full Restores and Revives from the Lobby clerk; between
+    rooms a fainted or hurt strongest Pokémon is revived or healed first."""
+    d = SOLO.SoloDirector({"visited": [], "milestones": [], "step": 1})
+    party = [{"species": "Charizard", "level": 74, "hp": 197, "max_hp": 251, "moves": [{"name": "Slash", "pp": 1}]},
+             {"species": "Lapras", "level": 15, "hp": 65, "max_hp": 65, "moves": [{"name": "Surf", "pp": 15}]}]
+    lobby = J.parse("walked\nf1 Indigo Plateau Lobby (7,7) facing up | C L74 197/251 | ¥84142 | 8 badges")
+    items = [("Rare Candy", 2), ("TM24", 1), ("Full Restore", 1)]
+    o1 = d.league_prep_option(lobby, party, items)
+    assert o1.args == {"action": "use", "target": "Rare Candy", "target2": "Charizard"}
+    o2 = d.league_prep_option(lobby, party, items[1:])
+    assert o2.args == {"action": "use", "target": "TM24", "target2": "Charizard: weakest"}
+    d.s["hm_no"] = ["TM24:Charizard"]
+    assert d.league_prep_option(lobby, party, items[1:]).args["target2"] == "Lapras: weakest"
+    buy = d.league_prep_option(lobby, party, items[2:])
+    assert buy.args["path"] == "to 2,5" and buy.then[-1] == ("shop", {"item": "Full Restore", "qty": 9})
+    assert d.league_prep_option(lobby, party, [("Full Restore", 10)]).then[-1] == ("shop", {"item": "Revive", "qty": 5})
+    assert d.league_prep_option(lobby, party, [("Full Restore", 10), ("Revive", 5)]) is None and d.s["prep_done"]
+    room = J.parse("walked\nf1 Bruno's Room (5,5) facing up | C L74 100/251 | ¥4142 | 8 badges")
+    fr = d.league_recover_option(room, party[:1] and [dict(party[0], hp=100)], [("Full Restore", 10)])
+    assert fr.args == {"action": "use", "target": "Full Restore", "target2": "Charizard"}
+    rv = d.league_recover_option(room, [dict(party[0], hp=0)], [("Revive", 5)])
+    assert rv.args["target"] == "Revive"
+    d.objective(SOLO.Facts(badges=8, levels=[74]), room)                    # an attempt began: prepare again next time
+    assert "prep_done" not in d.s
+
+
 def test_a_status_the_bag_can_cure_is_offered():
     """Codex review 12: run 85 walked a poisoned Charizard from the Safari Zone (HP 37 -> 28 -> 16) and blacked out with
     an Antidote in the bag: no cure was ever offered."""
