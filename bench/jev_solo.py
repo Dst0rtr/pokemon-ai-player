@@ -454,14 +454,17 @@ class SoloDirector:
         corridor ~2,800 steps)."""
         return {"Silph Co. 11F": "Silph Co. 7F"} if current_node(f).id == "silph" and f.has("Card Key") else {}
 
-    def bag_option(self, items: list[tuple[str, int]]) -> Optional[Option]:
+    def bag_option(self, items: list[tuple[str, int]], party: Optional[list[dict]] = None) -> Optional[Option]:
         """With 19 of the 20 bag slots taken, code tosses a stack it has no use for, so the next pickup always fits (full
         run 59 tossed only at 20: the slot it freed was refilled before Jev came back to the Gold Teeth). A toss the
         game refuses is not retried."""
         if len(items) < BAG_SLOTS - 1 or self.s.get("step", 0) - self.s.get("toss_failed_step", -10**9) < TOSS_RETRY_STEPS:
             return None
         refused = set(self.s.get("no_toss", []))
-        names = [n for n, _ in items if n not in refused]
+        # a cure the party needs now is used, not tossed (Codex review 13: the forced toss replaced the cure option)
+        needed = {c for p in (party or []) if p.get("hp", 0) > 0 and p.get("status")
+                  for c in STATUS_CURES.get(p["status"].split(" ")[0], ())}
+        names = [n for n, _ in items if n not in refused and n not in needed]
         junk = [n for n in names if n.startswith("TM") and n not in KEEP_TMS] + [n for j in JUNK for n in names if n == j]
         if not junk:
             return None

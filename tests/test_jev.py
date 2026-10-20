@@ -260,6 +260,9 @@ def test_a_status_the_bag_can_cure_is_offered():
     cure = [x for x in d.extra_options(o, f, party, [], [], "") if x.label.startswith("cure Charmeleon (PSN) with Antidote")]
     assert cure and cure[0].args == {"action": "use", "target": "Antidote", "target2": "Charmeleon"}
     assert not [x for x in d.extra_options(o, SOLO.Facts(items={"Burn Heal"}), party, [], [], "") if "Burn Heal" in x.label]
+    bag = [(f"Item{i}", 1) for i in range(18)] + [("Antidote", 1)]       # 19 kinds: one must go, not the cure
+    d.s["no_toss"] = [f"Item{i}" for i in range(18)]
+    assert d.bag_option(bag) is not None and d.bag_option(bag, party) is None  # (Codex review 13)
 
 
 def test_coverage_tms_are_kept_and_taught_to_the_strongest_pokemon():
@@ -1315,6 +1318,10 @@ def test_trapped_in_the_mansion_a_switch_comes_first(tmp_path):
     assert [x.label[:10] for x in agent.mansion_trapped(o, opts)] == ["press the ", "press the ", "walk to th"]
     route = mk("follow the map route to Cinnabar Poké Center: walk to the warp at (23,22) → Pokémon Mansion 1F")
     assert agent.mansion_trapped(o, route + opts) == route + opts               # a route exists: nothing changes
+    # Codex review 13: 1F's doors changed since it was last seen: look at it again before pressing anything
+    agent.s["floor_changed"] = ["Pokémon Mansion 1F"]
+    agent.s["switch_tried"] = []
+    assert [x.label for x in agent.mansion_trapped(o, opts)] == ["walk to the warp at (23,22) → Pokémon Mansion 1F"]
 
 
 def test_the_celadon_roof_offers_its_machines(tmp_path):

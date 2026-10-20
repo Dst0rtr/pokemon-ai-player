@@ -459,7 +459,7 @@ class Agent:
             opts = uniq
         forced = self.director.forced_recovery(self.s["step"]) if self.director and kind == "overworld" else None
         if not forced and self.director and kind == "overworld":
-            forced = self.director.bag_option(self.items) or self.director.flute_option(self.items)
+            forced = self.director.bag_option(self.items, self.party) or self.director.flute_option(self.items)
         if self.director and kind == "overworld" and self.director.want_checkpoint(self.s["step"]):
             await self.tool("save_state", slot="jev-progress")
         if forced:
@@ -831,6 +831,13 @@ class Agent:
         volcano-leg-26 went up and down those stairs ~500 steps, the experiment only got out by fainting."""
         if not o.map.startswith("Pokémon Mansion") or any(x.label.startswith("follow the map route") for x in opts):
             return opts
+        # a floor whose doors changed since it was last seen is looked at again before another press: its route may be
+        # open now (Codex review 13: with the exit's door state already set, an untried switch would undo it)
+        stale = set(self.s.get("floor_changed", [])) - {o.map}
+        look = [x for x in opts if x.tool == "walk" and "warp at" in x.label
+                and any(x.label.split("→ ", 1)[-1].startswith(f) for f in stale)]
+        if look:
+            return look
         sw = [x for x in opts if x.label.startswith("press the secret switch")]
         if not sw:
             return opts
