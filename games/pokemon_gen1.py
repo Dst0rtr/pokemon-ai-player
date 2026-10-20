@@ -1658,7 +1658,7 @@ class PokemonGen1Profile(GameProfile):
         if not (0 <= tx < w and 0 <= ty < h):
             return None
         npc_cells = {(nx, ny) for nx, ny in self.npcs()}
-        blocked = set(avoid) | (set(self.boulders()) - {(tx, ty)})   # a boulder never moves by walking past it
+        blocked = set(avoid) | ((set(self.boulders()) - {(tx, ty)}) if "B" not in allow else set())   # (never moves by walking past)
         # Never cross another warp on the way (stairs, ladders, teleport pads would whisk the player away).
         blocked |= {(wx, wy) for wx, wy, _ in self.warps() if (wx, wy) != (tx, ty)}
         if 0 <= tx < w and 0 <= ty < h and cells[ty][tx] in ("#",) and any((wx, wy) == (tx, ty) for wx, wy, _ in self.warps()):
@@ -1835,6 +1835,9 @@ class PokemonGen1Profile(GameProfile):
             notes.append("a small tree (T) blocks part of this map: use another exit or route around it; Cut removes it later")
         if by_water or by_both and "~" in flat and not self.surfing():
             notes.append("water (~) needs Surf: face it and manage('field', 'Surf')")
+        if not notes and self.boulders():
+            if self.find_path(tx, ty, allow="B") is not None:   # (what if the boulders were not there)
+                notes.append("a boulder (B) is in the way: push it aside with Strength or go round it")
         if not notes and D.TILE_PAIR_COLLISIONS_LAND.get(self._u8(D.CUR_TILESET)):
             notes.append("an elevation step (a raised ledge in a cave or forest) walls it off from this part of the map: "
                          "go round through another part or another floor")

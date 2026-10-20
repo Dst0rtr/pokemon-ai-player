@@ -1806,6 +1806,9 @@ class Agent:
             # 10x9; Codex review 8: a window without the boulder dropped one remembered elsewhere)
             kept = [c for c in seen.get(o.map, []) if tuple(c) not in o.grid]
             seen[o.map] = sorted(kept + [[c[0], c[1]] for c, ch in o.grid.items() if ch == "B"])
+            m = self.nav.data["maps"].get(str(cur)) if isinstance(self.nav, LearnedAtlas) and cur is not None else None
+            if m is not None:
+                m["boulders"] = seen[o.map]               # (the atlas routes around them: see LearnedAtlas.reach)
         return {tuple(c) for c in seen.get(o.map or "", [])}
 
     def learn_noroute(self, o: Obs) -> None:
@@ -1833,7 +1836,16 @@ class Agent:
             # edge: the walk to the water cell is refused until the player surfs); a refusal before any step is the
             # terrain whoever stands on the agent's path (see nav_feedback)
             terrain = len(p) > 5 and bool(p[5])
-            if (terrain or not on_path) and not tree:
+            # (with boulders on the map the atlas routes round them, and no path may simply mean a boulder is in the way:
+            # a boulder is moved, not a wall)
+            boulder_bound = False
+            try:
+                if self.boulders(cur, o):
+                    dist, _ = self.nav.reach(cur, frm)
+                    boulder_bound = not any((to[0] + dx, to[1] + dy) in dist for dx, dy in ((0, 0), *MOVES.values()))
+            except KeyError:
+                pass
+            if (terrain or not on_path) and not tree and not boulder_bound:
                 self.nav.record_noroute(cur, frm, to)
 
     def clear_option(self, cur: int, o: Obs, h, prefix: str, desc: str, surf: bool, cut: bool) -> Optional[Option]:

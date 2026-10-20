@@ -435,6 +435,10 @@ def test_route_hint_names_what_blocks_the_route(emu, monkeypatch):
     assert "elevation step" in hint and "Surf" not in hint, hint
     monkeypatch.setattr(prof, "find_path", lambda tx, ty, avoid=frozenset(), allow="": [("right", 2)] if "~" in allow else None)
     assert "needs Surf" in prof.route_hint(3, 1)
+    # full run 88: a boulder in Victory Road's corridor was reported as an elevation step
+    monkeypatch.setattr(prof, "boulders", lambda: [(2, 1)])
+    monkeypatch.setattr(prof, "find_path", lambda tx, ty, avoid=frozenset(), allow="": [("right", 2)] if "B" in allow else None)
+    assert "boulder (B) is in the way" in prof.route_hint(3, 1)
 
 
 def test_the_map_view_lists_elevation_steps(emu, monkeypatch):

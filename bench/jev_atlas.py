@@ -315,6 +315,10 @@ class LearnedAtlas(WorldNav):
         # 1F's south part; unlearned, a return after healing had no route)
         falls = (self.data["maps"].get(str(mid)) or {}).get("falls", [])
         holes = frozenset((f[0], f[1]) for f in falls if (f[0], f[1]) != tuple(start))
+        # boulders where they were last seen are walls until pushed (the grid keeps them as floor; full run 88: Victory
+        # Road 1F's corridor from the ladder to the exit held one, and its route was offered ~1,000 steps)
+        holes |= frozenset(tuple(b) for b in (self.data["maps"].get(str(mid)) or {}).get("boulders", [])
+                           if tuple(b) != tuple(start))
         dist, trans = super().reach(mid, start, surf=surf, cut=cut, avoid=frozenset(avoid) | holes, parents=parents)
         out = [t for t in trans if t[1].kind == "warp" and not self.unreachable(mid, start, (t[1].x, t[1].y))]
         for fx, fy, dm, ax, ay in falls:

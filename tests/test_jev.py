@@ -1126,9 +1126,16 @@ def test_a_boulder_or_a_door_change_keeps_a_refusal_from_being_a_lasting_wall(tm
         agent.nav_feedback(o, opt, J.parse("no walkable route from (5,1) to (1,1) on this map"), "")
         assert not agent.s.get("terrain_noroute")
         agent.learn_noroute(o)
-        assert not agent.nav.unreachable(vr, (5, 1), (1, 1))
+        assert not agent.nav.data["maps"][str(vr)].get("noroute")          # no lasting wall learned
+    # full run 88: the atlas routes round a remembered boulder (it held Victory Road 1F's corridor to the exit)
+    o.grid = {(3, 1): "B"}
+    agent.boulders(vr, o)
+    dist, _ = agent.nav.reach(vr, (5, 1))
+    assert (2, 1) not in dist and (4, 1) in dist
     # a terrain refusal once the boulder is gone: recorded with its origin, and dropped when the map changes
     o.grid = {(3, 1): ".", (4, 1): "."}                # a view without it
+    agent.boulders(vr, o)
+    assert (2, 1) in agent.nav.reach(vr, (5, 1))[0]
     agent.nav_feedback(o, opt, J.parse("no walkable route from (5,1) to (1,1) on this map"), "")
     assert agent.s["terrain_noroute"][f"{vr}:1,1"][1:] == [5, 1]
 
