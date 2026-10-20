@@ -815,7 +815,10 @@ class Agent:
             return bool(m) and (dist is None or any((int(m[1]) + dx, int(m[2]) + dy) in dist for dx, dy in MOVES.values()))
         # a switch only once nothing is left to see in this door state (floor walked is kept per state: trod_key);
         # every switch flips the same doors, so pressing early only undoes the last press (volcano-leg-14 and -19)
-        kinds = (lambda x: here(x) or ball(x),
+        kinds = (lambda x: x.label.startswith("follow the map route"),   # the objective's own route first
+                 # (volcano-leg-21 fell through 3F's hole next to 1F's stairs to B1F, and the order had no place for
+                 # "follow the map route to Pokémon Mansion B1F": ~150 steps of floor walks around them instead)
+                 lambda x: here(x) or ball(x),
                  lambda x: x.label.startswith("explore the unvisited floor"),
                  lambda x: x.label.startswith(("go back to", "take the stairs")),
                  lambda x: x.label.startswith("press the secret switch"),
