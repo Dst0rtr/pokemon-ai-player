@@ -1045,3 +1045,11 @@ def test_party_menus_pick_the_named_slot_when_every_nickname_is_the_same(emu):
     assert [[n for n, _ in p["moves"]] for p in emu.profile.party()] == [["Scratch"], ["Tackle"], ["Tackle", "Cut"]], r
     r = emu.manage("lead", "Squirtle")
     assert [p["species"] for p in emu.profile.party()] == ["Squirtle", "Charmander", "Bulbasaur"], r
+    # Nidoran♀ and Nidoran♂ normalize alike: the exact name wins, then one that can fight (volcano-leg-25's switch loop)
+    _inject_mon(emu, 0, 0x03, 12, [33], hp=0, nick="AAAAAAAAAA")         # Nidoran♂, fainted
+    _inject_mon(emu, 1, 0x0F, 12, [33], hp=30, nick="AAAAAAAAAA")        # Nidoran♀
+    party = emu.profile.party()
+    assert [p["species"] for p in party[:2]] == ["Nidoran♂", "Nidoran♀"]
+    assert emu.profile._party_match("Nidoran♀", party) == 1 and emu.profile._party_match("Nidoran♂", party) == 0
+    assert emu.profile._party_match("nidoran", party) == 1                   # not exact: the one that can fight
+    assert emu.profile._pick_party(emu, "Nidoran♀") == 1

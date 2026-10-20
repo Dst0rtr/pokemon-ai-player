@@ -747,10 +747,10 @@ class PokemonGen1Profile(GameProfile):
             if t.isdigit():
                 idx = max(1, min(int(t), len(party))) - 1
             else:
-                matches = [i for i, p in enumerate(party) if t and (t in self._norm(p["species"]) or t in self._norm(p["nick"]))]
-                if not matches:
+                found = self._party_match(target, party)
+                if found is None:
                     return "which Pokémon? give its party number or name: " + ", ".join(f"{i + 1}={p['species']}" for i, p in enumerate(party))
-                idx = matches[0]
+                idx = found
             cur_idx = self._u8(D.PLAYER_MON_NUMBER)
             cur_hp = b["mine"]["hp"] if b else None
             if party[idx]["hp"] == 0 or (idx == cur_idx and cur_hp == 0):   # the party struct lags behind a faint
@@ -999,16 +999,21 @@ class PokemonGen1Profile(GameProfile):
         txt = self.screen_text() or ""
         return "▶" in txt and "EXIT" in txt
 
+    def _party_match(self, target: str, party: list[dict]) -> Optional[int]:
+        """The party slot a name means: the exact species first (Nidoran♀ and Nidoran♂ normalize alike), then one that
+        can still fight (volcano-leg-25: battle('switch', 'Nidoran♀') picked the fainted Nidoran♂ ~10 times running)."""
+        t, exact = self._norm(target), target.strip().lower()
+        matches = [i for i, p in enumerate(party) if t and (t in self._norm(p["species"]) or t in self._norm(p["nick"]))]
+        matches.sort(key=lambda i: (party[i]["species"].lower() != exact, party[i]["hp"] == 0))
+        return matches[0] if matches else None
+
     def _pick_party(self, emu, target: str) -> Optional[int]:
         party = self.party()
         t = self._norm(target)
         if t.isdigit():
             idx = int(t) - 1
             return idx if 0 <= idx < len(party) else None
-        for i, p in enumerate(party):
-            if t and (t in self._norm(p["species"]) or t in self._norm(p["nick"])):
-                return i
-        return None
+        return self._party_match(target, party)
 
     def manage(self, emu, action: str, target: str = "", target2: str = "") -> str:
         action = (action or "").lower().strip()
