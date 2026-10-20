@@ -2162,6 +2162,11 @@ class PokemonGen1Profile(GameProfile):
             out.append("champion defeated (Hall of Fame)")
         if cur.get("in_battle") == 0xFF and prev.get("in_battle") != 0xFF:
             out.append("blacked out (lost a battle)")
+        elif prev.get("in_battle") not in (0, 0xFF, None) and cur.get("in_battle") == 0 and m != prev.get("map") \
+                and not D.map_name(prev.get("map")).startswith("Safari Zone"):
+            # a battle that ends on another map: the black-out's warp to the last Poké Center (the 0xFF flag is usually
+            # gone by the next snapshot: Codex review 18); out of Safari Balls goes to the gate instead
+            out.append("blacked out (lost a battle)")
         if m != prev.get("map") and m in _LANDMARKS and m not in self._reported_maps:
             self._reported_maps.add(m)
             out.append(f"reached: {D.map_name(m)}")

@@ -343,6 +343,15 @@ def test_elite_four_defeat_milestone(emu):
     assert "blacked out (lost a battle)" in out and not any(n.startswith("defeated") for n in out)
     teleported = {**cur, "map": 174, "in_battle": 0}
     assert not any(n.startswith("defeated") for n in prof.milestones(cur, teleported))
+    # Codex review 18: the 0xFF flag is gone by the time most snapshots are taken (the full benchmark and full run 91
+    # logged "blacked out!" 3 and 6 times, their results none): a battle that ends on another map is a black-out too
+    assert "blacked out (lost a battle)" in prof.milestones(cur, teleported)
+    wild = {**base, "map": 23, "in_battle": 1}                                  # Route 12 -> Lavender's Poké Center
+    assert prof.milestones(wild, {**base, "map": 141, "in_battle": 0}).count("blacked out (lost a battle)") == 1
+    assert "blacked out (lost a battle)" not in prof.milestones(wild, {**wild, "in_battle": 0})          # won or ran
+    assert prof.milestones(lost, {**lost, "map": 174, "in_battle": 0}).count("blacked out (lost a battle)") == 0  # counted
+    safari = {**base, "map": 220, "in_battle": 1}                               # out of Safari Balls: back to the gate
+    assert "blacked out (lost a battle)" not in prof.milestones(safari, {**base, "map": 156, "in_battle": 0})
     champ = {**base, "map": 120, "in_battle": 2}
     assert "defeated: Champion" in prof.milestones(champ, {**champ, "in_battle": 0})
     hof = {**champ, "in_battle": 0, "hall_of_fame": 1}
