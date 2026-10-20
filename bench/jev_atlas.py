@@ -27,10 +27,13 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from bench.jev_nav import MOVES, Hop, WorldNav
+from bench.jev_nav import MOVES, Hop, WorldNav, map_id
 from games import gen1_data as D
 
 UNKNOWN = (-1, -1)                    # arrival point not known yet: "somewhere on that map"
+# rooms whose script changes wLastMap while you walk inside (pokered Route22Gate.asm: Route 23 north of y=4, Route 22
+# south of it): their "outside" exits are not inferred from the map-entry snapshot (Codex review 10)
+DYNAMIC_OUTSIDE = {map_id("Route 22 Gate")}
 UNKNOWN_COST = 30                     # steps assumed from an unknown arrival point to any warp/edge of that map
 NOROUTE_NEAR = 6                      # a "no walkable route" learned from a cell applies to starts this close to it
 ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS:BXH]+)$")
@@ -262,6 +265,8 @@ class LearnedAtlas(WorldNav):
             out = self.data["maps"].get(str(mid), {}).get("outside")
             if out is None:
                 return []
+            if mid in DYNAMIC_OUTSIDE:                       # its script changes wLastMap inside: only real arrivals
+                return [(out, *UNKNOWN)]
             try:                                             # the warp index is one of the outside map's warps (full
                 owarps = self.map(out)["warps"]              # run 83: Mt. Moon B1F's exit lands at Route 4's (24,5); as
                 if dw < len(owarps):                         # "somewhere on Route 4" the route to Cerulean was taken for

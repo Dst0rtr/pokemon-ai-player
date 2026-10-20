@@ -1200,6 +1200,13 @@ def test_a_back_outside_warp_lands_on_the_outside_maps_warp_it_names(tmp_path):
     atlas.data["maps"][str(b1)]["warps"][0][2] = 9                          # an index past the list: still unknown
     atlas._maps.clear()
     assert atlas.warp_dest(b1, 0) == [(r4, -1, -1)]
+    # Codex review 10: Route 22 Gate's script changes wLastMap inside the room: its exits are never inferred
+    gate, r22 = map_id("Route 22 Gate"), map_id("Route 22")
+    atlas.observe(r22, _view("Route 22", ["###", "#D#", "###"]), _warps_hex([(1, 1, 0, gate)]), [])
+    atlas.observe(gate, _view("Route 22 Gate", ["###", "#D#", "###"]), _warps_hex([(1, 1, 0, 0xFF)]), [])
+    atlas.data["maps"][str(gate)]["outside"] = r22
+    atlas._maps.clear()
+    assert atlas.warp_dest(gate, 0) == [(r22, -1, -1)]
 
 
 def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
