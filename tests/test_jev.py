@@ -3497,3 +3497,43 @@ def test_ordinary_tm_teaching_keeps_a_reliable_move_of_the_same_type():
     labels = [x.label for x in d.extra_options(o, f, party, [], [], "plateau")]
     assert "teach TM38 (Fire Blast) to Charizard" not in labels and "teach TM14 (Blizzard) to Lapras" not in labels
     assert "teach TM24 (Thunderbolt) to Charizard" in labels
+
+
+def test_entering_a_floor_again_takes_its_boulders_from_the_full_map_view(tmp_path):
+    """Codex review 17: boulders reset when a floor is entered again; the entry's full map view refreshed the terrain
+    but not the boulders, so the atlas kept a boulder where it had been pushed to (a wall to routing) and missed the
+    one back at its start."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    vr2 = map_id("Victory Road 2F")
+    rows = ["#######", "#...B.#", "#.....#", "###D###"]
+
+    class Server(FakeServer):
+        async def __call__(self, name, args):
+            self.calls.append((name, args))
+            status = "f1 Victory Road 2F (1,2) facing up | Charizard L70 200/227 | ¥3000 | 8 badges"
+            if name == "screen":
+                return status + "\n(no readable text on screen)"
+            if name == "state" and args.get("section") == "map":
+                return _view("Victory Road 2F", rows)
+            if name == "state" and args.get("section") == "party":
+                return "party:\n1. Charizard L70 200/227 [Strength 15pp] Fire"
+            if name == "state":
+                return "bag: Potion×1"
+            if name == "memory":
+                return _warps_hex([(3, 3, 0, 0xFF)]) if args["address"] == "D3AE" else "D365: 22"
+            return f"walked\n{status}"
+
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo", max_steps=1), Server(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(vr2, _view("Victory Road 2F", ["#######", "#.....#", "#.....#", "###D###"]),
+                      _warps_hex([(3, 3, 0, 0xFF)]), [])
+    agent.nav.data["maps"][str(vr2)]["boulders"] = [[2, 1]]
+    agent.s["boulders"] = {"Victory Road 2F": [[2, 1]]}
+    agent.s["atlas_map"] = "Route 23"                                     # just came in, again:
+    agent.s["maps"]["Victory Road 2F"] = [["outside"], []]                 # its exits and people already known
+    agent.s.setdefault("npcs", {})["Victory Road 2F"] = []
+    asyncio.run(agent.run())
+    assert agent.s["boulders"]["Victory Road 2F"] == [[4, 1]]
+    assert agent.nav.data["maps"][str(vr2)]["boulders"] == [[4, 1]]

@@ -355,6 +355,13 @@ class Agent:
             warps = await self.tool("memory", address="D3AE", length=129)
             last = await self.tool("memory", address="D365", length=1)        # wLastMap: where "outside" warps lead
             self.nav.observe(map_id(o.map), view, warps, cn, last_map_text=last)
+            full = parse(view).grid
+            if full and map_id(o.map) is not None:
+                # the whole map's boulders, as they are now: they reset when a floor is entered again, and the reply's
+                # 10x9 window kept the old cells out of view as walls (Codex review 17)
+                shown, o.grid = o.grid, full
+                self.boulders(map_id(o.map), o)
+                o.grid = shown
         if o.mode == "overworld" and o.map.startswith("Pokémon Mansion"):
             # the doors' real state (EVENT_MANSION_SWITCH_ON, 0xD796 bit 0), not a count of presses: full run 85 had
             # 21 counted flips and floor "walked" in both states at cells that are walls in one of them, so the floors
