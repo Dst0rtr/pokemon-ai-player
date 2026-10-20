@@ -893,6 +893,11 @@ class Agent:
         # the cell-by-cell pass waits until both door states had the quick pass (two presses): volcano-leg-23 walked
         # Mansion 1F one cell at a time for ~400 steps with one press made
         early = self.s.get("flips", 0) < 2
+        doors = self.s.get("mansion_doors", self.s.get("flips", 0) % 2)
+        tried = set(self.s.get("switch_tried", []))
+        def fresh_switch(x: Option) -> bool:              # this floor's switch, not pressed yet in this door state
+            w = re.match(r"press the secret switch at \((\d+),(\d+)\)", x.label)
+            return bool(w) and o is not None and f"{o.map}:{w[1]},{w[2]}#{doors}" not in tried
         kinds = (lambda x: bool(rv) and x.label.startswith(f"go back to {rv}"),   # a revisit begun is finished first
                  # (Codex review 3: "go back to 2F" from B1F went by 1F, where the route to B1F turned it round)
                  lambda x: x.label.startswith("follow the map route"),   # the objective's own route first
@@ -900,6 +905,11 @@ class Agent:
                  # "follow the map route to Pokémon Mansion B1F": ~150 steps of floor walks around them instead)
                  lambda x: here(x) or ball(x),
                  lambda x: x.label.startswith("explore the unvisited floor"),
+                 # once both door states had their quick pass, this floor's own work before going back elsewhere: its
+                 # holes, then its switch once per door state (full run 85 left 3F by "go back to 2F" on every arrival
+                 # and never pressed 3F's switch: Codex review 12)
+                 lambda x: not early and x.label.startswith("explore the untested floor"),
+                 lambda x: not early and fresh_switch(x),
                  lambda x: x.label.startswith(("go back to", "take the stairs")),
                  lambda x: early and x.label.startswith("press the secret switch"),
                  lambda x: x.label.startswith("explore the untested floor"),
@@ -1133,6 +1143,13 @@ class Agent:
             # (Codex review 3: every press flipped the parity twice, so it never changed)
             pressed = mansion and bool(re.search(r"Who wouldn't\?", reply)) and self.s.pop("switch_pending", False)
             if pressed:
+                # which switch was pressed in which door state (each is pressed once per state: puzzle_order)
+                sa = self.s.pop("switch_at", None)
+                if sa:
+                    doors = self.s.get("mansion_doors", self.s.get("flips", 0) % 2)
+                    self.s.setdefault("switch_tried", [])
+                    if f"{sa}#{doors}" not in self.s["switch_tried"]:
+                        self.s["switch_tried"].append(f"{sa}#{doors}")
                 self.s["flips"] = self.s.get("flips", 0) + 1   # the doors' state (see trod_key)
             if pressed:                                   # the other floors' doors changed too: worth seeing again
                 self.s["floor_changed"] = sorted({x for x in names if x.startswith("Pokémon Mansion")} - {name})
@@ -1169,6 +1186,8 @@ class Agent:
         sw = re.match(r"press the secret switch at \((\d+),(\d+)\)", opt.label)
         if sw and o.map:
             self.s.setdefault("switches", {}).setdefault(f"{o.map}:{sw[1]},{sw[2]}", []).append(self.s["step"])
+            if "A secret switch" in reply:
+                self.s["switch_at"] = f"{o.map}:{sw[1]},{sw[2]}"   # (the YES that follows records it: see above)
 
     def remember_tree(self, o: Obs, after: Obs, reply: str) -> None:
         """A walk refused by a small tree makes cutting it an option; once a tree is cut, the people this map had no way

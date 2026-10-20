@@ -1773,6 +1773,20 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     assert f"{f2}:3,1" not in agent.s["nav_noroute"] and f"{f2}:3,1" not in agent.s["nav_blocked"]
     m2 = agent.nav.data["maps"][str(f2)]
     assert not m2.get("noroute") and not m2.get("walked")
+    # Codex review 12 (full run 85): past the quick pass, this floor's holes and its switch (once per door state) come
+    # before going back to another floor
+    assert agent.s["switch_tried"] == ["Pokémon Mansion 1F:2,1#0"]                    # the press above, in state 0
+    agent.s["flips"], agent.s["mansion_doors"], agent.s["switch_tried"] = 5, 0, []
+    agent.s.pop("revisit", None)
+    gb = mk("go back to Pokémon Mansion 2F by the warp at (4,2)")
+    sw = mk("press the secret switch at (2,1) (from below)")
+    ut = mk("explore the untested floor at (3,3)")
+    assert agent.puzzle_order(gb + sw + ut, T, inside) == ut
+    assert agent.puzzle_order(gb + sw, T, inside) == sw
+    agent.s["switch_tried"] = ["Pokémon Mansion 1F:2,1#0"]
+    assert agent.puzzle_order(gb + sw, T, inside) == gb                                 # pressed in this state already
+    agent.s["mansion_doors"] = 1
+    assert agent.puzzle_order(gb + sw, T, inside) == sw                                 # not yet in the other state
     facing = [J.Option("talk to what you are facing", "talk", {})] + rest
     assert [x.label for x in agent.switch_options(o, facing)] == ["walk down 4 tiles"]   # just pressed: no press back
     agent.s["step"] += 16
