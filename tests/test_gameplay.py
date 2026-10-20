@@ -408,6 +408,22 @@ def test_the_move_to_forget_keeps_the_best_attack_of_each_type(emu):
     assert pick(["Slash", "Ember", "Leer", "Scratch"], "CUT") == 2                 # an HM is always taught
 
 
+def test_a_safari_battle_shows_its_menu_not_a_battle_intro(emu, monkeypatch):
+    # Codex 10: no Pokémon of yours is out in the Safari Zone, so the status said "BATTLE (wild) starting" and the
+    # agent pressed A through the menu (runs 75/76: 100+ such decisions during the Surf/Gold Teeth objectives)
+    import bench.jev as J
+    prof = emu.profile
+    mon = lambda sp, hp: {"species": sp, "nick": "", "level": 25, "hp": hp, "max_hp": hp, "status": "", "moves": []}  # noqa: E731
+    monkeypatch.setattr(prof, "battle", lambda: {"kind": "wild", "safari": True, "enemy": mon("Rhyhorn", 60),
+                                                 "mine": mon("MissingNo(0)", 0)})
+    monkeypatch.setattr(prof, "in_safari_battle", lambda: True)
+    monkeypatch.setattr(prof, "battle_menu", lambda: "menu: BALL/BAIT/ROCK/RUN (Safari: cursor on BALL)")
+    line = prof.status_line()
+    assert "starting" not in line and "BALL/BAIT/ROCK/RUN" in line, line
+    o = J.parse("pressed A\n" + line)
+    assert o.mode == "battle" and [x.args["action"] for x in J.battle_options(o.battle, [], [])] == ["item", "bait", "rock", "run"]
+
+
 def test_milestone_snapshot_includes_team(emu):
     emu.metrics.restart("team")
     mem = emu.pyboy.memory

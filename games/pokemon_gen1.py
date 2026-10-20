@@ -343,6 +343,10 @@ class PokemonGen1Profile(GameProfile):
             return "intro/title (no map loaded yet)"
         b = self.battle()
         if b:
+            if self.in_safari_battle() and b["enemy"]["max_hp"] and "Safari" in (menu := self.battle_menu()):
+                # no Pokémon of yours is sent out in the Safari Zone: its menu is the whole battle (Codex review 10: the
+                # "starting" line hid it, and Jev pressed A through runs 75/76's Safari battles, 100+ decisions)
+                return f"BATTLE ({b['kind']}): enemy {self._mon_line(b['enemy'])} | you (none in the Safari Zone) | {menu}"
             if b["enemy"]["max_hp"] == 0 or b["mine"]["max_hp"] == 0 or b["mine"]["species"].startswith("MissingNo(0"):
                 who = f"wild {b['enemy']['species']} appeared" if b["kind"] == "wild" and b["enemy"]["max_hp"] else "trainer challenge"
                 return f"BATTLE ({b['kind']}) starting: {who} (press A / wait)"
