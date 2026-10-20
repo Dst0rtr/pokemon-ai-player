@@ -1127,6 +1127,26 @@ def test_a_blocked_hop_stays_blocked_only_in_the_part_it_failed_from(tmp_path):
     assert key in agent.blocked_now()                                      # (no position known: blocked)
 
 
+def test_a_route_back_to_somewhere_on_this_map_is_no_route(tmp_path):
+    """Full run 81: from Route 15's east part (its gate not entered yet) the route to Fuchsia went round by Route 14,
+    13, 12, Lavender and Route 8 and back to "somewhere on Route 15", then out its west edge. Such a route only says
+    this part does not reach the goal: the frontier (the gate) takes over."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    r15, r14, gate = map_id("Route 15"), map_id("Route 14"), map_id("Route 15 Gate 1F")
+    agent.nav.observe(r15, _view("Route 15", ["..#....", "..#D...", "..#...."]), _warps_hex([(3, 1, 0, gate)]),
+                      [("west", "Fuchsia City"), ("east", "Route 14")])
+    agent.nav.observe(r14, _view("Route 14", [".....", ".....", "....."]), _warps_hex([]), [("west", "Route 15")])
+    agent.s["visited"] = ["Route 14", "Route 15"]
+    o = J.parse("walked\nf1 Route 15 (5,1) facing left | C L45 160/170 | ¥3000 | 4 badges")
+    opts, _ = agent.nav_options(o, ["Route 13", "Fuchsia City"], SOLO.Facts(badges=4), "fuchsia")
+    assert not [x for x in opts if x.label.startswith("follow the map route to Fuchsia")], [x.label for x in opts]
+    assert any("(3,1)" in x.label for x in opts), [x.label for x in opts]   # the gate
+
+
 def test_unreachable_blocker_means_a_wall_not_a_try(tmp_path):
     from bench.jev_atlas import LearnedAtlas
     from bench.jev_nav import map_id

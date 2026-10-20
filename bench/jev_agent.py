@@ -1295,6 +1295,11 @@ class Agent:
             blocked = self.blocked_now(o)
             route = self.nav.route(cur, tuple(o.pos), goal, surf=surf, cut=cut, taken=self.s["nav_taken"], blocked=blocked,
                                    entry=entry, goal_cells=cells)
+            if route and isinstance(self.nav, LearnedAtlas) and any(h.map == cur and h.x < 0 for h in route[1:]):
+                # the route leaves this map and comes back to "somewhere on it" through arrivals not known yet: it only
+                # says this part of the map does not reach the goal (full run 81: from Route 15's east part to Fuchsia
+                # round by Route 14, 13, 12, Lavender and Route 8, while Route 15's own gate was the way on)
+                route = []
             mark = self.s.setdefault("node_mark", {})
             if why not in ("heal", "train") and why not in mark:
                 mark[why] = len(self.s["visited"])           # the maps visited before this objective began
