@@ -1132,6 +1132,9 @@ def test_a_boulder_or_a_door_change_keeps_a_refusal_from_being_a_lasting_wall(tm
     agent.boulders(vr, o)
     dist, _ = agent.nav.reach(vr, (5, 1))
     assert (2, 1) not in dist and (4, 1) in dist
+    agent.nav.save()                                                      # kept across a chunk restart (Codex 15)
+    again = LearnedAtlas(tmp_path / "data" / "b.json", seed=tmp_path / "data" / "jev_atlas.json")
+    assert (2, 1) not in again.reach(vr, (5, 1))[0]
     # a terrain refusal once the boulder is gone: recorded with its origin, and dropped when the map changes
     o.grid = {(3, 1): ".", (4, 1): "."}                # a view without it
     agent.boulders(vr, o)

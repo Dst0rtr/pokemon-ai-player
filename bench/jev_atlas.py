@@ -85,7 +85,7 @@ class LearnedAtlas(WorldNav):
     def merge(self, other: dict) -> None:
         for k, m in (other.get("maps") or {}).items():
             mine = self.data["maps"].setdefault(k, {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
-            for key in ("cells", "warps", "conns", "outside", "seams"):
+            for key in ("cells", "warps", "conns", "outside", "seams", "boulders"):
                 if m.get(key):
                     mine[key] = m[key]
             for wk, arr in (m.get("arrivals") or {}).items():

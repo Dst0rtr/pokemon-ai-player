@@ -338,6 +338,8 @@ class Agent:
                 o.npcs, o.balls = m.npcs, m.balls
                 known[o.map] = [list(n) for n in o.npcs]
             self.remember_balls(o)
+            if map_id(o.map) is not None:
+                self.boulders(map_id(o.map), o)           # every view keeps the atlas's boulders current (Codex review 15)
             # hidden objects keep their sprite slot: a spot that answered "nothing to talk to here" is nobody
             said = self.s["said"].get(o.map, {})
             o.npcs = [n for n in o.npcs if not said.get(f"{n[0]},{n[1]}", "").startswith("nothing to talk to")]
@@ -1807,8 +1809,9 @@ class Agent:
             kept = [c for c in seen.get(o.map, []) if tuple(c) not in o.grid]
             seen[o.map] = sorted(kept + [[c[0], c[1]] for c, ch in o.grid.items() if ch == "B"])
             m = self.nav.data["maps"].get(str(cur)) if isinstance(self.nav, LearnedAtlas) and cur is not None else None
-            if m is not None:
+            if m is not None and m.get("boulders") != seen[o.map]:
                 m["boulders"] = seen[o.map]               # (the atlas routes around them: see LearnedAtlas.reach)
+                self.nav.dirty = True
         return {tuple(c) for c in seen.get(o.map or "", [])}
 
     def learn_noroute(self, o: Obs) -> None:
