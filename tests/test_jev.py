@@ -1449,6 +1449,12 @@ def test_without_surf_water_on_the_way_does_not_excuse_a_refusal(tmp_path):
                        J.parse("no walkable route from (4,1) to (1,1) on this map — water (~) needs Surf"), "")
     agent.learn_noroute(o)
     assert agent.nav.unreachable(sw, (4, 1), (1, 1))
+    # Codex review 14: HM03 in the bag with every member refused (run 87: Charizard at 6,288) is no Surf either
+    agent.party = [{"species": "Charizard", "level": 57, "hp": 186, "max_hp": 186, "moves": [{"name": "Slash", "pp": 20}]}]
+    agent.items = [("HM03", 1)]
+    assert agent.can_clear("Surf", "HM03")                                  # still to be taught: excused
+    agent.s["hm_no"] = ["HM03:Charizard"]
+    assert not agent.can_clear("Surf", "HM03")
 
 
 def test_route_across_water_offers_surf_from_the_shore(tmp_path):

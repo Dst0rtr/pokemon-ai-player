@@ -1733,6 +1733,17 @@ class Agent:
             pass
         return False
 
+    def can_clear(self, move: str, hm: str) -> bool:
+        """The party knows `move`, or holds its HM and has a member that has not refused it yet (a teach is still to
+        come). Holding the HM with every member refused is no way through (Codex review 14: run 87 carried HM03, Charizard
+        refused Surf at 6,288, and the refusals across water went on being excused)."""
+        if any(m["name"] == move for p in self.party for m in p.get("moves", [])):
+            return True
+        if not any(n == hm for n, _ in self.items):
+            return False
+        refused = set(self.s.get("hm_no", []))
+        return any(f"{hm}:{p['species']}" not in refused for p in self.party) if self.party else True
+
     def sleeper_gone(self, o: Obs, after: Obs) -> None:
         """A Snorlax woken (or beaten, or caught; the reply comes from a battle or its dialogue) on the map the player is
         on: its goal ends; another map's Snorlax keeps its own (Codex review 7)."""
@@ -1804,9 +1815,7 @@ class Agent:
                 cells = self.nav.map(cur)["cells"]
                 # (only what the party can clear: without Surf, water is a wall; full run 87 was refused ~100 times in a
                 # Safari Zone pocket walled off by an elevation step, each refusal excused as "Surf's job")
-                moves = {m["name"] for p in self.party for m in p.get("moves", [])} | \
-                    {mv for mv, hm in (("Cut", "HM01"), ("Surf", "HM03")) if any(n == hm for n, _ in self.items)}
-                clear = ({"T"} if "Cut" in moves else set()) | ({"~"} if "Surf" in moves else set())
+                clear = ({"T"} if self.can_clear("Cut", "HM01") else set()) | ({"~"} if self.can_clear("Surf", "HM03") else set())
                 tree = bool(clear) and any(0 <= y < len(cells) and 0 <= x < len(cells[y]) and cells[y][x] in clear
                                            for x, y in self.nav.path_cells(cur, frm, to, cut=True, surf=True))
             except KeyError:
