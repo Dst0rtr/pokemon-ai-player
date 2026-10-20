@@ -704,11 +704,12 @@ class PokemonGen1Profile(GameProfile):
                     self._type_chart[(chart[i], chart[i + 1])] = chart[i + 2] / 10
         return self._move_table
 
-    def _auto_move(self, target: str = "") -> str:
+    def _auto_move(self, target: str = "") -> Optional[str]:
         """The move battle('auto') uses: `target` if named, else the damaging move with the best expected
         damage this turn (Gen 1 formula from the battle structs' stats, STAB, type chart, accuracy, capped
         at the enemy's HP), skipping moves the enemy is immune to, two-turn moves at half value and
-        Self-Destruct/Explosion unless nothing else works; among equally good moves, the one with most PP."""
+        Self-Destruct/Explosion unless nothing else works; among equally good moves, the one with most PP.
+        None when no move with PP left can hurt the enemy (Normal moves against a Ghost)."""
         b = self.battle()
         if not b or not b["mine"]["moves"]:
             return ""
@@ -755,7 +756,7 @@ class PokemonGen1Profile(GameProfile):
 
         # equal value (typically: several moves knock out) -> the one with the most PP left
         best = max(dmg, key=lambda m: (round(score(m[1]), 1), m[2]))
-        return best[0] if score(best[1]) > 0 else fallback
+        return best[0] if score(best[1]) > 0 else None
 
     def battle_auto(self, emu, target: str = "") -> str:
         """Fight with damaging moves until the battle ends, a prompt appears, or HP gets low."""
@@ -777,7 +778,11 @@ class PokemonGen1Profile(GameProfile):
                     first_foe = foe
                 elif foe != first_foe and turn:
                     return " | ".join(logs) + f" — stopped: the trainer sent out {b['enemy']['species']} (L{b['enemy']['level']}); switch, use an item, or battle('auto') again"
-            r = self.battle_action(emu, "fight", self._auto_move(target) if b else "")
+            move = self._auto_move(target) if b else ""
+            if move is None:
+                # (Codex review 18: Flamethrower out of PP, Strength and Slash on Tower 6F's Gastly and Haunter, turn after turn)
+                return " | ".join(logs + [f"stopped: no move with PP left can affect {b['enemy']['species']}; switch, use an item, or run"])
+            r = self.battle_action(emu, "fight", move)
             logs.append(r)
             if b and b.get("kind") == "trainer" and re.search(r"Enemy [^|]*fainted", r) and self.in_battle() \
                     and "battle over" not in r:

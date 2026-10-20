@@ -451,6 +451,20 @@ def test_the_map_view_lists_elevation_steps(emu, monkeypatch):
     assert line == "elevation steps (no walking across): 0,0d 1,0d", line   # (2,1) is a wall: no step listed
 
 
+def test_auto_battle_hands_back_when_no_move_can_hit(emu, monkeypatch):
+    # Codex review 18: with every move left immune (Normal moves vs a Ghost), auto stops before spending a turn
+    prof = emu.profile
+    mon = lambda sp: {"species": sp, "nick": "", "level": 50, "hp": 90, "max_hp": 100, "status": "", "moves": []}  # noqa: E731
+    monkeypatch.setattr(prof, "in_battle", lambda: 1)
+    monkeypatch.setattr(prof, "in_safari_battle", lambda: False)
+    monkeypatch.setattr(prof, "battle", lambda: {"kind": "wild", "safari": False, "enemy": mon("Haunter"), "mine": mon("Charizard")})
+    monkeypatch.setattr(prof, "_auto_move", lambda target="": None)
+    acted = []
+    monkeypatch.setattr(prof, "battle_action", lambda emu_, action, target="": acted.append(target) or "turn done")
+    out = prof.battle_auto(emu)
+    assert not acted and "no move" in out and "Haunter" in out and "run" in out, out
+
+
 def test_auto_battle_hands_back_a_trainers_next_pokemon(emu, monkeypatch):
     # Codex review 15: one battle('auto') ran from Lorelei's Dewgong into her Cloyster and on; a new matchup now returns
     prof = emu.profile
@@ -852,6 +866,11 @@ def test_auto_move_uses_type_chart_and_skips_immune_moves(emu):
         _fake_battle(mem, D, (55, 10), (N, N), (N, N), foe_hp=4)     # both KO, both 100%: spare Water Gun's 3 PP
         mem[D.BATTLE_MON_PP] = 3
         assert p._auto_move() == "Scratch"
+        # Codex review 18 on Tower 6F: Flamethrower out of PP, auto used Strength/Slash on Gastly and Haunter again
+        # and again ("It doesn't affect"): with nothing that can hit, no move at all (auto hands back instead)
+        _fake_battle(mem, D, (33, 91), (N, N), (GH, FL))              # Tackle vs Ghost, Dig vs Flying: nothing hits
+        assert p._auto_move() is None
+        assert p._auto_move("tackle") == "Tackle"                   # (named, it is still used)
         _fake_battle(mem, D, (91, 33), (W, W), (FL, FL))
         p._move_table = {}                                          # a ROM without the tables: plain order
         assert p._auto_move() == "Dig"
