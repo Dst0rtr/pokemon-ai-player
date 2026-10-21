@@ -2018,6 +2018,14 @@ def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     assert agent.nav.data["maps"][str(f1)]["arrivals"]["4,2"]["seen"]                     # taken: learned like any warp
     assert agent.puzzle_stay(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]) == []   # not again
     assert agent.puzzle_stay(inside, leave, ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"]) == leave
+    # uncapped-1 (step ~8,500-9,500): every stair taken, the way out dropped, "talk to what you are facing" was all that
+    # was left (forced ~140 times) while a press had changed 2F and 3F: stairs to a changed floor are offered again
+    agent.s["floor_changed"] = ["Pokémon Mansion 2F"]
+    talk = J.Option("talk to what you are facing", "talk", {})
+    stay = agent.puzzle_stay(inside, leave + [talk], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])
+    assert "take the stairs: walk to the warp at (4,2) → Pokémon Mansion 2F" in [x.label for x in stay], stay
+    assert not any(x.label.startswith("explore the frontier") for x in stay)
+    agent.s["floor_changed"] = []
     agent.s["stairs_changed"] = [f"{f1}:4,2"]                 # a press elsewhere changed 2F since these stairs were taken
     agent.s["trod"]["Pokémon Mansion 1F#1"] = [[x, y] for x in range(1, 6) for y in (1, 2)]
     by = agent.floor_options(inside, [], ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion B1F"])

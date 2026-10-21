@@ -944,9 +944,13 @@ class Agent:
         near = {(h.x, h.y) for _, h, _ in trans if h.kind == "warp"}
         arr = self.nav.data["maps"].get(str(cur), {}).get("arrivals", {})
         stairs = []
+        changed = set(self.s.get("floor_changed", []))
         for i, (x, y, _, _) in enumerate(warps):
             dests = {D.map_name(d[0]) for d in self.nav.warp_dest(cur, i)}
-            if (x, y) not in near or not dests & set(targets) or dests == {o.map} or arr.get(f"{x},{y}", {}).get("seen") \
+            # stairs already taken only to a floor a press changed since it was seen (uncapped-1: every stair taken and
+            # the way out dropped left "talk to what you are facing", forced ~140 times, while 2F and 3F had changed)
+            taken = arr.get(f"{x},{y}", {}).get("seen") and not dests & changed
+            if (x, y) not in near or not dests & set(targets) or dests == {o.map} or taken \
                     or self.blocked_here(o, cur, x, y):   # (Codex review 3: puzzle helpers bypassed blocked hops)
                 continue                                  # (stairs already taken: volcano-leg-12 went 2F <-> 3F ~70 times)
             walk = self.hop_walk(cur, tuple(o.pos), x, y)
