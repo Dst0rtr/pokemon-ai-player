@@ -3713,3 +3713,32 @@ def test_a_strongest_pokemon_with_a_status_heals_before_a_gym_leader():
     assert why == "heal" and "PAR" in text and "Saffron Poké Center" in targets, (text, why)
     d.s["healing"], f.carry_status, d.s["healed_at"] = False, "", ["Saffron Poké Center"]
     assert d.objective(f, o)[2] != "heal"
+
+
+def test_out_of_pp_on_the_only_move_that_hits_means_healing(tmp_path):
+    """lavender-train-2 (028cf6d): on Tower 6F Charizard's Flamethrower was at 0 PP; Slash, Strength and Cut cannot touch a
+    Gastly, so each battle ended "no move with PP left can affect Gastly" and Jev ran (~25 times, no experience), while the
+    total attacking PP looked healthy. Twice in a row with a damaging move at 0 PP: heal (restores PP)."""
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()))
+    stop = "stopped: no move with PP left can affect Gastly; switch, use an item, or run"
+    agent.remember_outmatched(stop)
+    agent.remember_outmatched(stop)
+    d = agent.director
+    order = [n.id for n in SOLO.GRAPH]
+    d.s["visited"] = ["Lavender Town"]
+    d.s["healed_at"] = ["Lavender Poké Center"]
+    f = SOLO.Facts(badges=5, levels=[60, 5], hp_ratio=0.99, carry_ratio=0.99, carry_pp=60, attack_pp=60, carry_dry=True,
+                   manual_done=set(order[:order.index("sabrina")]))
+    o = J.parse("walked\nf1 Pokémon Tower 6F (16,8) facing up | C L60 200/202 | ¥3000 | 5 badges")
+    text, targets, why = d.objective(f, o)
+    assert why == "heal" and "Lavender Poké Center" in targets, (text, why)
+    d.s["healing"] = False
+    f.carry_dry = False                              # every move has PP: nothing a Poké Center can fix
+    assert d.objective(f, o)[2] != "heal"
+    agent.remember_outmatched("Your POKéMON are fighting fit!")
+    f.carry_dry = True
+    assert d.objective(f, o)[2] != "heal"            # healed: counted again from zero
+    p = {"species": "Charizard", "level": 60, "hp": 200, "max_hp": 202,
+         "moves": [{"name": "Flamethrower", "pp": 0}, {"name": "Slash", "pp": 20}]}
+    assert d.facts(o, [p], []).carry_dry

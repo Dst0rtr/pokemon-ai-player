@@ -98,6 +98,7 @@ class Facts:
     carry_ratio: float = 1.0                         # HP share of the strongest Pokémon (the one carrying the run)
     carry_pp: Optional[int] = None                   # PP left on its damaging moves (None: moves unknown)
     carry_status: str = ""                           # its status (PAR, SLP, PSN, BRN, FRZ), "" when none
+    carry_dry: bool = False                          # one of its damaging moves is out of PP
     attack_pp: Optional[int] = None      # PP left on damaging moves of the Pokémon that can still fight (None: unknown)
     manual_done: set = field(default_factory=set)
     explored: int = 0                    # learned atlas: warps and edges taken so far (exploring counts as progress)
@@ -311,6 +312,8 @@ class SoloDirector:
                      carry_ratio=(carry["hp"] / carry["max_hp"]) if carry and carry["max_hp"] else 1.0,
                      carry_pp=attack_pp([carry]) if carry and carry["hp"] > 0 else None,
                      carry_status=(carry.get("status") or "").split(" ")[0] if carry and carry["hp"] > 0 else "",
+                     carry_dry=bool(carry) and any(m.get("pp", 1) == 0 and not is_status_move(m["name"])
+                                                   for m in carry.get("moves", [])),
                      attack_pp=attack_pp(party),
                      manual_done=set(self.s["manual_done"]), came_from=self.s.get("came_from", ""),
                      elevator=self.s.get("elevator", ""), events=set(self.s.get("events", [])),
@@ -345,7 +348,10 @@ class SoloDirector:
         # (Codex review 15: run 88's Charizard ran out of attacking PP in Victory Road and "heal" came back regardless)
         stuck_heal = self.s.get("step", 0) - self.s.get("heal_noroute_step", -10**9) <= 20 and \
             min(f.hp_ratio, f.carry_ratio) >= 0.35
-        if f.levels and not league and not stuck_heal and (f.hp_ratio < 0.35 or no_pp or weak_carry or sick_carry or
+        # its only move that hits the wild Pokémon here is out of PP: battles end with nothing to attack with (lavender-
+        # train-2: Flamethrower at 0 against Tower 6F's Gastly, Slash/Strength/Cut plenty); a Poké Center restores PP
+        dry = f.carry_dry and self.s.get("outmatched", 0) >= 2
+        if f.levels and not league and not stuck_heal and (f.hp_ratio < 0.35 or no_pp or weak_carry or sick_carry or dry or
                          self.s.get("healing") and min(f.hp_ratio, f.carry_ratio) < 0.9):   # hysteresis: heal fully
             self.s["healing"] = True
             here = [POKE_CENTERS[o.map]] if o.map in POKE_CENTERS else []
@@ -353,7 +359,8 @@ class SoloDirector:
             if pcs:
                 weak = f"{round(100 * f.hp_ratio)}% HP" + (f", {f.attack_pp} PP left on attacking moves" if no_pp else "") + \
                     (f", your strongest Pokémon at {round(100 * f.carry_ratio)}%" if weak_carry else "") + \
-                    (f", your strongest Pokémon has {f.carry_status} before a gym leader" if sick_carry else "")
+                    (f", your strongest Pokémon has {f.carry_status} before a gym leader" if sick_carry else "") + \
+                    (", the only move that hits the wild Pokémon here is out of PP" if dry else "")
                 return (f"Your team is weak ({weak}): heal at a Poké Center (walk in, talk to the nurse, answer YES).",
                         list(dict.fromkeys(pcs)), "heal")   # every one: the agent routes to the nearest
             # (the two last visited were Cinnabar's and Saffron's in full run 90: from Victory Road it went for Cinnabar

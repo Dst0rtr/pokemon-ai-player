@@ -569,6 +569,7 @@ class Agent:
             self.director.trash_result(opt.label, reply, left=o.map == "Vermilion Gym" and after.map not in ("", o.map))
             self.director.heard(reply)
         self.remember_refusal(opt, reply)
+        self.remember_outmatched(reply)
         self.remember_choice(o, opt)
         if opt.tool == "manage" and opt.args.get("action") == "save":
             self.s["last_save_step"] = self.s["step"]
@@ -624,6 +625,14 @@ class Agent:
         return ""
 
     # ------------------------------------------------------------- navigation (static warp graph, no LLM)
+    def remember_outmatched(self, reply: str) -> None:
+        """Battles auto gave up on because no move with PP left can hit, since the last heal (SoloDirector.objective:
+        lavender-train-2 ran from Tower 6F's Gastly ~25 times with Flamethrower at 0 PP)."""
+        if "no move with PP left can affect" in reply:
+            self.s["outmatched"] = self.s.get("outmatched", 0) + 1
+        elif "fighting fit" in reply or "fully healed" in reply:
+            self.s["outmatched"] = 0
+
     def remember_refusal(self, opt: Option, reply: str) -> None:
         """'X is not compatible with CUT': this Pokémon cannot learn that HM, teach another one. Only that line counts:
         "can't learn more than 4 moves!" is the forget-a-move prompt (full run 45 marked Charizard refused on it)."""
