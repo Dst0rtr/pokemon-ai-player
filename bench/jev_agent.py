@@ -2070,6 +2070,19 @@ class Agent:
                 # (kept apart from the cells walked: as "walked" its radius hid the floor around it: Codex review 12)
                 self.s.setdefault("floor_refused", {}).setdefault(self.trod_key(o.map), []).append([int(fx[1]), int(fx[2])])
         cur = map_id(o.map)
+        if m and cur is not None and isinstance(self.nav, LearnedAtlas) and after.map and after.map != o.map \
+                and o.map.startswith("Pokémon Mansion") and after.map.startswith("Pokémon Mansion") and o.pos and after.pos:
+            # the target is a hole, not a warp (a known fall is offered as an "untaken warp"), and the moves stopped short
+            # of it: the floor gave way on the way there (uncapped-1: aiming for 3F's (19,14), a 2F drop, the player fell
+            # through (16,14) into 1F's part with the stairs to B1F; recorded as (19,14)'s arrival, that hole was never
+            # learned and after a heal no route led back)
+            x, y = o.pos
+            for d, n in re.findall(r"\b(up|down|left|right) (\d+)/\d+", after.head):
+                dx, dy = MOVES[d]
+                x, y = x + dx * int(n), y + dy * int(n)
+            warps = {(w[0], w[1]) for w in self.nav.data["maps"].get(str(cur), {}).get("warps", [])}
+            if (int(m[1]), int(m[2])) not in warps and (x, y) != (int(m[1]), int(m[2])):
+                m = None                                  # (so no warp is recorded at the target: the fall below is)
         if after.map and after.map != o.map and o.map.startswith("Pokémon Mansion") and \
                 after.map.startswith("Pokémon Mansion") and o.pos and after.pos and not m and cur is not None:
             # a fall through the floor during a walk (no warp was the target): the cell the moves reached is the hole

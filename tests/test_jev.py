@@ -3821,3 +3821,27 @@ def test_reach_is_cached_while_options_are_built(tmp_path):
     assert atlas.reach(mid, (1, 1), avoid=frozenset({(2, 1)})) is not atlas.reach(mid, (1, 1), avoid=frozenset({(2, 1)}))
     atlas.reach_cache = None
     assert atlas.reach(mid, (1, 1)) is not atlas.reach(mid, (1, 1))
+
+
+def test_a_fall_on_the_way_to_a_hole_is_learned_where_it_happened(tmp_path):
+    """uncapped-1, step 7,079: walking to Mansion 3F's hole (19,14) (a 2F drop, learned), the player fell through (16,14)
+    on the way into 1F's part with the stairs to B1F. That was recorded as the target's arrival, the (16,14) hole never,
+    and after a heal no route led back to B1F (~700 steps of switches). The cell the moves reached is the hole."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3, f2, f1 = map_id("Pokémon Mansion 3F"), map_id("Pokémon Mansion 2F"), map_id("Pokémon Mansion 1F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f3, _view("Pokémon Mansion 3F", ["#" * 22] + ["#" + "." * 20 + "#"] * 15 + ["#" * 22]),
+                  _warps_hex([(7, 10, 1, f2)]), [])
+    atlas.record_fall(f3, 19, 14, f2, 18, 14)
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    o = J.parse("walked\nf1 Pokémon Mansion 3F (13,11) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    opt = J.Option("explore the frontier: walk to the untaken warp at (19,14) → Pokémon Mansion 2F", "walk",
+                   {"path": "to 19,14"})
+    after = J.parse("went toward (19,14): right 3/3, down 3/3, right 0/3 — stopped: entered Pokémon Mansion 1F\n"
+                    "f1 Pokémon Mansion 1F (16,14) facing right | C L64 200/220 | ¥3000 | 6 badges")
+    agent.nav_feedback(o, opt, after, "")
+    falls = atlas.data["maps"][str(f3)]["falls"]
+    assert [16, 14, f1, 16, 14] in falls and [19, 14, f2, 18, 14] in falls, falls
+    assert "19,14" not in atlas.data["maps"][str(f3)].get("arrivals", {})
