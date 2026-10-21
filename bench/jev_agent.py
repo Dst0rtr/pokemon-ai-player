@@ -458,6 +458,8 @@ class Agent:
             if any(x.label.startswith("search the trash can") for x in opts):
                 # Lt. Surge's locked door: the cans are the way on, leaving the gym is not (full run 42 left ~600 times)
                 opts = [x for x in opts if not (x.tool == "walk" and ("warp at" in x.label or x.label.endswith("edge)")))]
+            if why not in ("train", "heal"):
+                self.s.pop("train_spot", None)            # kept for one training spell, healing trips included
             if why == "train" and self.nav:
                 train = self.train_options(o, facts)
                 if train:                                 # pace in real tall grass instead of blind walks
@@ -630,8 +632,8 @@ class Agent:
         lavender-train-2 ran from Tower 6F's Gastly ~25 times with Flamethrower at 0 PP)."""
         if "no move with PP left can affect" in reply:
             self.s["outmatched"] = self.s.get("outmatched", 0) + 1
-        elif "fighting fit" in reply or "fully healed" in reply:
-            self.s["outmatched"] = 0
+        elif "fighting fit" in reply or "fully healed" in reply or re.search(r"Enemy [^|]* fainted!", reply):
+            self.s["outmatched"] = 0                     # healed, or a fight won since: what it has still works
         fail = self.s.get("talk_fail")
         if not fail or fail[1] == self.s["step"]:        # (the stop's own reply: what was said comes next)
             return
@@ -1755,7 +1757,10 @@ class Agent:
         caps = caps or {}
         # the spot chosen stays good past the cut while training goes on (Codex review 18: Tower 6F's L30 fell under it at
         # L61 while the director wanted L62, and the search for grass started over)
+        # (unless a stronger one is known: Codex review 19, a L25 kept Viridian Forest's L6 while Mt. Moon's L11 was known)
         kept = self.s.get("train_spot")
+        if kept not in lv or lv[kept] < max(lv.values(), default=0):
+            kept = None
         good = sorted((v, n) for n, v in lv.items() if (v >= top * ratio or n == kept) and v > 0)
         if not good:
             return []

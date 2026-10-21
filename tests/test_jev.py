@@ -3739,6 +3739,10 @@ def test_out_of_pp_on_the_only_move_that_hits_means_healing(tmp_path):
     agent.remember_outmatched("Your POKéMON are fighting fit!")
     f.carry_dry = True
     assert d.objective(f, o)[2] != "heal"            # healed: counted again from zero
+    agent.remember_outmatched(stop)
+    agent.remember_outmatched(stop)
+    agent.remember_outmatched("Enemy CUBONE fainted! | AAAAAAAAAA gained 300 EXP. Points!")
+    assert d.objective(f, o)[2] != "heal"            # a won fight since: what it has still works (Codex review 19)
     p = {"species": "Charizard", "level": 60, "hp": 200, "max_hp": 202,
          "moves": [{"name": "Flamethrower", "pp": 0}, {"name": "Slash", "pp": 20}]}
     assert d.facts(o, [p], []).carry_dry
@@ -3773,3 +3777,27 @@ def test_a_walk_stopped_by_a_healing_floor_message_is_no_failed_hop(tmp_path):
         agent.s["step"] += 1
         agent.remember_outmatched("dialogue ended: Get out of my way!")
     assert key in agent.s["nav_blocked"]
+
+
+def test_a_kept_training_spot_never_hides_stronger_wild_pokemon(tmp_path):
+    """Codex review 19 on 883601b: `train_spot` was kept for good and passed the half-level cut on its own, so a L25 carry
+    kept training on Viridian Forest's L6 while Mt. Moon's L11 was known (the ratio-0 fallback never came)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    vf, mm = map_id("Viridian Forest"), map_id("Mt. Moon 1F")
+    atlas.observe(vf, _view("Viridian Forest", ["#.....#", "#,,,,,#", "#,,,,,#", "#######"]), _warps_hex([]),
+                  [("north", "Mt. Moon 1F")])
+    atlas.observe(mm, _view("Mt. Moon 1F", ["#######", "#.....#", "#.....#", "#.....#"]), _warps_hex([]),
+                  [("south", "Viridian Forest")])
+    atlas.record_edge(vf, "north", 2, 0, mm, 2, 3)
+    atlas.record_edge(mm, "south", 2, 3, vf, 2, 0)
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s["visited"] = ["Viridian Forest", "Mt. Moon 1F"]
+    agent.party = [{"species": "Charmeleon", "level": 25, "hp": 70, "max_hp": 70, "moves": []}]
+    agent.s["wild_levels"] = {"Viridian Forest": 6, "Mt. Moon 1F": 11}
+    agent.s["train_spot"] = "Viridian Forest"
+    o = J.parse("walked\nf1 Viridian Forest (2,1) facing up | C L25 70/70 | ¥3000 | 1 badges")
+    train = agent.train_options(o, None)
+    assert train and train[0].label.startswith("follow the map route to train on Mt. Moon 1F"), train
