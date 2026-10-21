@@ -1063,7 +1063,10 @@ class Agent:
     def learn_trod(self, o: Obs) -> None:
         """Cells the player has stood on, per map (for floor_options)."""
         if o.mode == "overworld" and o.map and o.pos and isinstance(self.nav, LearnedAtlas) and map_id(o.map) is not None:
-            self.nav.drop_fall(map_id(o.map), *o.pos)    # standing on a "hole": none there
+            here = [o.map, *o.pos]
+            if self.s.get("stood") == here:
+                self.nav.drop_fall(map_id(o.map), *o.pos)    # on a "hole" a whole step without falling: none there
+            self.s["stood"] = here                       # (once is not enough: the reply that steps on one shows it)
         if o.mode == "overworld" and o.map and o.pos:
             if o.map in self.s.get("floor_changed", []):
                 self.s["floor_changed"].remove(o.map)     # seen again (the atlas re-reads it on entry)

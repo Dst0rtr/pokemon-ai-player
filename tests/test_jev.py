@@ -3874,7 +3874,9 @@ def test_a_hole_is_only_learned_from_a_walk_that_fell_and_unlearned_when_stood_o
     agent.nav_feedback(o, named, after, "")
     assert not atlas.data["maps"][str(f2)].get("falls"), atlas.data["maps"][str(f2)].get("falls")
     atlas.record_fall(f2, 15, 7, f1, 5, 10)                    # (as the run had learned it)
-    agent.learn_trod(o)                                         # standing there, no fall: no hole
+    agent.learn_trod(o)                                         # on it once: the reply that walks onto a hole shows that
+    assert atlas.data["maps"][str(f2)]["falls"]                 # too (uncapped-1 lost 3F's real (19,14) that way)
+    agent.learn_trod(o)                                         # still standing there a step later: no hole
     assert not atlas.data["maps"][str(f2)].get("falls")
 
 
