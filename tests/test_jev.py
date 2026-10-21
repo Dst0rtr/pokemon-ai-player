@@ -3853,3 +3853,44 @@ def test_a_fall_on_the_way_to_a_hole_is_learned_where_it_happened(tmp_path):
     falls = atlas.data["maps"][str(f3)]["falls"]
     assert [16, 14, f1, 16, 14] in falls and [19, 14, f2, 18, 14] in falls, falls
     assert "19,14" not in atlas.data["maps"][str(f3)].get("arrivals", {})
+
+
+def test_a_hole_is_only_learned_from_a_walk_that_fell_and_unlearned_when_stood_on(tmp_path):
+    """uncapped-1, step 10,074: 'walk to Pokémon Mansion B1F' on 2F (15,7) let the server take 2F's stairs to 1F and stop
+    there ("no walkable route"); with no target warp and no moves the floor change was learned as a hole at (15,7), which
+    the frontier then offered as an untaken warp ~30 times (standing on it, nothing happened)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f2, f1 = map_id("Pokémon Mansion 2F"), map_id("Pokémon Mansion 1F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f2, _view("Pokémon Mansion 2F", ["#" * 20] + ["#" + "." * 18 + "#"] * 12 + ["#" * 20]),
+                  _warps_hex([(5, 10, 4, f1)]), [])
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    o = J.parse("walked\nf1 Pokémon Mansion 2F (15,7) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    named = J.Option("walk to Pokémon Mansion B1F", "walk", {"path": "to Pokémon Mansion B1F"})
+    after = J.parse("'Pokémon Mansion B1F' → (21,23): no walkable route from (5,10) to (21,23) on this map\n"
+                    "f1 Pokémon Mansion 1F (5,10) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    agent.nav_feedback(o, named, after, "")
+    assert not atlas.data["maps"][str(f2)].get("falls"), atlas.data["maps"][str(f2)].get("falls")
+    atlas.record_fall(f2, 15, 7, f1, 5, 10)                    # (as the run had learned it)
+    agent.learn_trod(o)                                         # standing there, no fall: no hole
+    assert not atlas.data["maps"][str(f2)].get("falls")
+
+
+def test_a_fall_with_no_entered_line_is_still_learned(tmp_path):
+    """(the real 2F drop at run step 6,345 ended "down 2/2 — could not get closer" on another floor)"""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3, f2 = map_id("Pokémon Mansion 3F"), map_id("Pokémon Mansion 2F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f3, _view("Pokémon Mansion 3F", ["#" * 30] + ["#" + "." * 28 + "#"] * 15 + ["#" * 30]),
+                  _warps_hex([(7, 10, 1, f2)]), [])
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    o = J.parse("walked\nf1 Pokémon Mansion 3F (26,10) facing down | C L60 200/220 | ¥3000 | 6 badges")
+    opt = J.Option("explore the unvisited floor at (19,14)", "walk", {"path": "to 19,14"})
+    after = J.parse("went toward (19,14): left 3/3, down 2/2, left 4/4, down 2/2 — could not get closer\n"
+                    "f1 Pokémon Mansion 2F (18,14) facing down | C L60 200/220 | ¥3000 | 6 badges")
+    agent.nav_feedback(o, opt, after, "")
+    assert [19, 14, f2, 18, 14] in atlas.data["maps"][str(f3)]["falls"]

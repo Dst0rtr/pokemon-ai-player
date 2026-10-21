@@ -167,6 +167,15 @@ class LearnedAtlas(WorldNav):
             self._maps.pop(mid, None)
             self.dirty = True
 
+    def drop_fall(self, mid: int, x: int, y: int) -> None:
+        """Standing on (x,y) without falling: it is no hole (a fall learned from a floor change that was not one)."""
+        m = self.data["maps"].get(str(mid)) or {}
+        falls = [f for f in m.get("falls", []) if (f[0], f[1]) != (x, y)]
+        if len(falls) != len(m.get("falls", [])):
+            m["falls"] = falls
+            self._maps.pop(mid, None)
+            self.dirty = True
+
     def record_noroute(self, mid: int, frm: tuple[int, int], to: tuple[int, int]) -> None:
         m = self.data["maps"].setdefault(str(mid), {"cells": [], "warps": [], "conns": [], "arrivals": {}, "visits": 0})
         rec = [frm[0], frm[1], to[0], to[1]]

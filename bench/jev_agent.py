@@ -1062,6 +1062,8 @@ class Agent:
 
     def learn_trod(self, o: Obs) -> None:
         """Cells the player has stood on, per map (for floor_options)."""
+        if o.mode == "overworld" and o.map and o.pos and isinstance(self.nav, LearnedAtlas) and map_id(o.map) is not None:
+            self.nav.drop_fall(map_id(o.map), *o.pos)    # standing on a "hole": none there
         if o.mode == "overworld" and o.map and o.pos:
             if o.map in self.s.get("floor_changed", []):
                 self.s["floor_changed"].remove(o.map)     # seen again (the atlas re-reads it on entry)
@@ -2088,7 +2090,11 @@ class Agent:
             if (int(m[1]), int(m[2])) not in warps and (x, y) != (int(m[1]), int(m[2])):
                 m = None                                  # (so no warp is recorded at the target: the fall below is)
         if after.map and after.map != o.map and o.map.startswith("Pokémon Mansion") and \
-                after.map.startswith("Pokémon Mansion") and o.pos and after.pos and not m and cur is not None:
+                after.map.startswith("Pokémon Mansion") and o.pos and after.pos and not m and cur is not None \
+                and re.search(r"\b(?:up|down|left|right) \d+/\d+", after.head) \
+                and not NAME_WALK_RE.match(opt.args.get("path", "")):
+            # (only a walk that itself ended on the other floor: "walk to <map>" crosses maps by their stairs inside the
+            # server, and uncapped-1 learned 2F's (15,7) as a hole from one that stopped on 1F with no moves at all)
             # a fall through the floor during a walk (no warp was the target): the cell the moves reached is the hole
             x, y = o.pos
             for d, n in re.findall(r"\b(up|down|left|right) (\d+)/\d+", after.head):
