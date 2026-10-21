@@ -3742,3 +3742,30 @@ def test_out_of_pp_on_the_only_move_that_hits_means_healing(tmp_path):
     p = {"species": "Charizard", "level": 60, "hp": 200, "max_hp": 202,
          "moves": [{"name": "Flamethrower", "pp": 0}, {"name": "Slash", "pp": 20}]}
     assert d.facts(o, [p], []).carry_dry
+
+
+def test_a_walk_stopped_by_a_healing_floor_message_is_no_failed_hop(tmp_path):
+    """lavender-train-3 (99513f1): every walk across Pokémon Tower 5F stops at the purified zone ("Entered purified,
+    protected zone! ... fully healed!"); counted as a person in the way, the stairs (3,9) were blocked, healing found no
+    route, and training went on with Flamethrower empty. A stop whose dialogue heals the party undoes that failure."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f5 = map_id("Pokémon Tower 5F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    o = J.parse("walked\nf1 Pokémon Tower 5F (18,9) facing down | C L60 181/202 | ¥3000 | 5 badges")
+    opt = J.Option("walk to the warp at (3,9) → Pokémon Tower 4F", "walk", {"path": "to 3,9"})
+    stop = J.parse("went toward (3,9): left 2/2, down 1/1, left 2/4 — stopped: dialogue appeared\n"
+                   "f1 Pokémon Tower 5F (12,10) facing left | C L60 181/202 | ¥3000 | 5 badges")
+    for _ in range(2):
+        agent.s["step"] += 1
+        agent.nav_feedback(o, opt, stop, "")
+        agent.remember_outmatched("dialogue ended: Entered purified, protected zone! | AAAAAAA's POKéMON are fully healed!")
+    key = f"{f5}:3,9"
+    assert key not in agent.s["nav_blocked"] and not agent.s.get("nav_fail_from", {}).get(key), agent.s["nav_blocked"]
+    for _ in range(2):                                  # a person who stops the walk each time still blocks it
+        agent.s["step"] += 1
+        agent.nav_feedback(o, opt, stop, "")
+        agent.remember_outmatched("dialogue ended: Get out of my way!")
+    assert key in agent.s["nav_blocked"]

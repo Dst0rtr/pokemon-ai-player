@@ -632,6 +632,18 @@ class Agent:
             self.s["outmatched"] = self.s.get("outmatched", 0) + 1
         elif "fighting fit" in reply or "fully healed" in reply:
             self.s["outmatched"] = 0
+        fail = self.s.pop("talk_fail", None)
+        if fail and "fully healed" in reply and self.s["step"] - fail[1] <= 2:
+            # the walk stopped for Pokémon Tower 5F's purified zone, not for a person (lavender-train-3: its stairs were
+            # blocked that way, healing found no route and training went on with Flamethrower empty)
+            key = fail[0]
+            fails = self.s.get("nav_fail_from", {}).get(key) or []
+            if fails and len(fails[-1]) > 2 and fails[-1][2] == fail[1]:
+                fails.pop()
+            if not fail[2]:
+                self.s["nav_blocked"].pop(key, None)
+            if self.s["nav_noroute"].get(key) == fail[1]:
+                self.s["nav_noroute"].pop(key)
 
     def remember_refusal(self, opt: Option, reply: str) -> None:
         """'X is not compatible with CUT': this Pokémon cannot learn that HM, teach another one. Only that line counts:
@@ -2152,6 +2164,9 @@ class Agent:
                     self.s.setdefault("nav_fail_from", {}).pop(key, None)
             else:
                 moved_on = False
+            if key and not clearable and not moved_on and "stopped: dialogue appeared" in after.head:
+                # what it says decides (remember_outmatched): a floor message that heals is no one in the way
+                self.s["talk_fail"] = [key, self.s["step"], key in self.s["nav_blocked"]]
             if key and not clearable and not moved_on:
                 # failed again from the same part of the map, lately (full run 82: refusals from B1F's east part, then
                 # a trainer stopping the walk from (23,11) once, blocked the far ladder in the part that reaches it;
