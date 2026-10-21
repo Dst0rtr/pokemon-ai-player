@@ -2147,7 +2147,11 @@ def test_floor_never_walked_on_is_offered_while_the_last_target_is_unknown(tmp_p
     assert [x.label for x in agent.floor_options(o, [], targets)] == []      # every cell stepped on
     agent.s["trod"]["Pokémon Mansion 3F#0"] = [[1, 1]]
     agent.nav.observe(map_id("Pokémon Mansion B1F"), _view("Pokémon Mansion B1F", ["###", "#P#", "###"]), _warps_hex([]), [])
+    assert agent.floor_options(o, [], targets) != []                         # known but no route from here: still search
+    agent.nav.record_fall(f3, 12, 1, map_id("Pokémon Mansion B1F"), 1, 1)
     assert agent.floor_options(o, [], targets) == []                         # the last target is known: routes do it
+    agent.nav.data["maps"][str(f3)]["falls"] = []
+    agent.nav._maps.pop(f3, None)
     assert agent.floor_options(o, [], targets[:2]) != []                     # ...unless this is it: the goal is on its floor
     fall = J.parse("went toward (12,1): right 6/11 — stopped: entered Pokémon Mansion 1F\n"
                    "f1 Pokémon Mansion 1F (16,14) facing right | C L60 200/207 | ¥3000 | 6 badges")
@@ -3896,3 +3900,68 @@ def test_a_fall_with_no_entered_line_is_still_learned(tmp_path):
                     "f1 Pokémon Mansion 2F (18,14) facing down | C L60 200/220 | ¥3000 | 6 badges")
     agent.nav_feedback(o, opt, after, "")
     assert [19, 14, f2, 18, 14] in atlas.data["maps"][str(f3)]["falls"]
+
+
+def test_unwalked_floor_is_explored_while_the_known_goal_floor_has_no_route(tmp_path):
+    """uncapped-1 after a heal trip out of B1F: floor_options only ran while the last target was unknown, and B1F was
+    known, so Mansion 3F's collapsed floor (the hole into 1F's part with the stairs to B1F) was never searched again and
+    ~5,000 steps went by on 1F-3F. Known but out of reach counts like unknown."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3, f2, b1 = map_id("Pokémon Mansion 3F"), map_id("Pokémon Mansion 2F"), map_id("Pokémon Mansion B1F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f3, _view("Pokémon Mansion 3F", ["##########", "#........#", "#........#", "#.::::::.#", "##########"]),
+                  _warps_hex([(1, 1, 1, f2)]), [])
+    atlas.observe(b1, _view("Pokémon Mansion B1F", ["#####", "#...#", "#####"]), _warps_hex([]), [])
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s.setdefault("trod", {})["Pokémon Mansion 3F#0"] = [[x, y] for x in range(1, 9) for y in (1, 2)]
+    agent.s["mansion_doors"] = 0
+    o = J.parse("walked\nf1 Pokémon Mansion 3F (2,2) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    targets = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
+    out = agent.floor_options(o, [], targets)
+    assert any(re.search(r"explore the \w+ floor at \(\d+,3\)", x.label) for x in out), out   # the broken floor
+
+
+def test_unvisited_floor_here_comes_before_finishing_a_revisit(tmp_path):
+    """uncapped-1: arriving on Mansion 3F's main part with a revisit to 2F pending, "go back to 2F" was the first kind
+    and was forced every time, so 3F's collapsed floor (now offered again) was never walked."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3, f2 = map_id("Pokémon Mansion 3F"), map_id("Pokémon Mansion 2F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f3, _view("Pokémon Mansion 3F", ["########", "#S.....#", "#......#", "########"]),
+                  _warps_hex([(6, 1, 1, f2)]), [])
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s["revisit"] = "Pokémon Mansion 2F"
+    o = J.parse("walked\nf1 Pokémon Mansion 3F (2,2) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    opts = [J.Option("go back to Pokémon Mansion 2F by the warp at (6,1)", "walk", {"path": "to 6,1"}),
+            J.Option("explore the unvisited floor at (5,2)", "walk", {"path": "to 5,2"})]
+    targets = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
+    assert agent.puzzle_pending(targets)
+    assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["explore the unvisited floor at (5,2)"]
+
+
+def test_a_switch_that_hides_broken_floor_comes_before_leaving_the_floor(tmp_path):
+    """uncapped-1: Mansion 3F's collapsed floor (":", the hole into 1F's part with the stairs to B1F) is only reachable in
+    one door state; with 3F's switch tried in both states, "go back to 2F" came first on every visit in the other state
+    and the doors were never flipped from 3F. Broken floor out of reach and never walked: this floor's switch first."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3, f2 = map_id("Pokémon Mansion 3F"), map_id("Pokémon Mansion 2F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f3, _view("Pokémon Mansion 3F", ["##########", "#..S..#::#", "#.....#::#", "##########"]),
+                  _warps_hex([(1, 1, 1, f2)]), [])
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s["mansion_doors"], agent.s["flips"] = 0, 4
+    agent.s["switch_tried"] = ["Pokémon Mansion 3F:3,1#0", "Pokémon Mansion 3F:3,1#1"]
+    agent.s.setdefault("trod", {})["Pokémon Mansion 3F#0"] = [[x, y] for x in range(1, 6) for y in (1, 2)]
+    o = J.parse("walked\nf1 Pokémon Mansion 3F (2,2) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    opts = [J.Option("go back to Pokémon Mansion 2F by the warp at (1,1)", "walk", {"path": "to 1,1"}),
+            J.Option("press the secret switch at (3,1) (from below)", "walk", {"path": "to 3,2"})]
+    targets = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
+    assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["press the secret switch at (3,1) (from below)"]
+    agent.s["trod"]["Pokémon Mansion 3F#1"] = [[7, 1], [8, 1], [7, 2], [8, 2]]      # walked in the other state: done
+    assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["go back to Pokémon Mansion 2F by the warp at (1,1)"]

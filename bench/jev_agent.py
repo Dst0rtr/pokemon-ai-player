@@ -999,7 +999,22 @@ class Agent:
         def fresh_switch(x: Option) -> bool:              # this floor's switch, not pressed yet in this door state
             w = re.match(r"press the secret switch at \((\d+),(\d+)\)", x.label)
             return bool(w) and o is not None and f"{o.map}:{w[1]},{w[2]}#{doors}" not in tried
-        kinds = (lambda x: bool(rv) and x.label.startswith(f"go back to {rv}"),   # a revisit begun is finished first
+        # ...unless this floor has floor never walked (uncapped-1: "go back to 2F" was forced on every arrival on 3F's main
+        # part, so its collapsed floor, the way to 1F's stairs to B1F, was never walked again)
+        unwalked = any(x.label.startswith("explore the unvisited floor") for x in opts)
+        # broken floor (":", where holes are) this door state does not reach and no state has walked: this floor's switch
+        # before leaving it (uncapped-1: 3F's collapsed floor opens in one state only; its switch was tried in both, so
+        # "go back to 2F" came first on every visit in the other state and the doors were never flipped from 3F)
+        hidden = False
+        if o is not None and dist is not None and map_id(o.map) is not None and o.map.startswith("Pokémon Mansion"):
+            try:
+                cells = self.nav.map(map_id(o.map))["cells"]
+            except (KeyError, IndexError):
+                cells = []
+            walked = {tuple(c) for k in (f"{o.map}#0", f"{o.map}#1") for c in self.s.get("trod", {}).get(k, [])}
+            hidden = any(c == ":" and (x, y) not in dist and (x, y) not in walked
+                         for y, row in enumerate(cells) for x, c in enumerate(row))
+        kinds = (lambda x: bool(rv) and not unwalked and x.label.startswith(f"go back to {rv}"),   # a revisit begun is finished first
                  # (Codex review 3: "go back to 2F" from B1F went by 1F, where the route to B1F turned it round)
                  lambda x: x.label.startswith("follow the map route"),   # the objective's own route first
                  # (volcano-leg-21 fell through 3F's hole next to 1F's stairs to B1F, and the order had no place for
@@ -1011,6 +1026,7 @@ class Agent:
                  # and never pressed 3F's switch: Codex review 12)
                  lambda x: not early and x.label.startswith("explore the untested floor"),
                  lambda x: not early and fresh_switch(x),
+                 lambda x: hidden and x.label.startswith("press the secret switch"),
                  lambda x: x.label.startswith(("go back to", "take the stairs")),
                  lambda x: early and x.label.startswith("press the secret switch"),
                  lambda x: x.label.startswith("explore the untested floor"),
@@ -1088,9 +1104,12 @@ class Agent:
             # Road 3F walked unwalked floor over eight push options, then left); a filled hole is floor to walk after
             return opts
         last = map_id(targets[-1])
-        if last is None or self.nav.known(last) and o.map != targets[-1]:
-            return opts                                   # (on the last map itself the goal lies somewhere on its floor)
         cur = map_id(o.map)
+        if last is None or self.nav.known(last) and o.map != targets[-1] and (
+                cur is None or self.nav.route(cur, tuple(o.pos), last) is not None):
+            # (on the last map itself the goal lies somewhere on its floor; a known last map with no route from here counts
+            # as unknown: uncapped-1 left B1F to heal and, B1F known, never searched 3F's collapsed floor again)
+            return opts
         try:
             cells = self.nav.map(cur)["cells"]
             dist, _ = self.nav.reach(cur, tuple(o.pos))
