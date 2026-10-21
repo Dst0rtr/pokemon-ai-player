@@ -692,6 +692,9 @@ class Emulator:
             return f"no state '{slot}'. available: {', '.join(slots) or 'none'}"
         self._load_slot(path.stem)
         self.pending_events = []               # events from before the reload belong to the abandoned timeline
+        if self.metrics.last_snapshot is not None:
+            # the loaded state is the next action's baseline: from a battle to an overworld state is no black-out
+            self.metrics.last_snapshot = self._safe_snapshot()
         self.metrics.mark_load(path.stem)     # reloads are visible in the benchmark timeline
         return f"loaded state '{path.stem}'"
 

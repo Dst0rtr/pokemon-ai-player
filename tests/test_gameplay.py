@@ -138,6 +138,19 @@ def test_save_and_load_state_roundtrip(emu):
     assert not list(emu.saves_dir.glob("*.tmp"))       # atomic write leaves no temp file
 
 
+def test_loading_a_state_during_a_battle_is_not_a_black_out(emu):
+    # Codex review 19: the snapshot before a load stayed the baseline, so loading an overworld checkpoint from a battle
+    # (Lorelei -> the Lobby) read as a battle that ended on another map, i.e. a black-out (028cf6d)
+    emu.save_state("t2")
+    emu.metrics.restart("loadcheck")
+    snap = emu._safe_snapshot()
+    emu.metrics.last_snapshot = {**snap, "map": 245, "in_battle": 2}         # as if fighting in Lorelei's room
+    emu.load_state("t2")
+    emu.wait(1)
+    names = [m.name for m in emu.metrics.milestones]
+    assert "blacked out (lost a battle)" not in names and any(n.startswith("loaded state") for n in names), names
+
+
 def test_memory_read_and_write_gate(emu):
     dump = emu.read_memory("D35E", 4)
     assert dump.startswith("D35E: 26")            # map 38 = 0x26
@@ -880,6 +893,11 @@ def test_auto_move_uses_type_chart_and_skips_immune_moves(emu):
         _fake_battle(mem, D, (33, 91), (N, N), (GH, FL))              # Tackle vs Ghost, Dig vs Flying: nothing hits
         assert p._auto_move() is None
         assert p._auto_move("tackle") == "Tackle"                   # (named, it is still used)
+        _fake_battle(mem, D, (52, 45), (F, F), (N, N))               # Ember out of PP, Growl left: no attack either
+        mem[D.BATTLE_MON_PP] = 0
+        assert p._auto_move() is None                               # (Codex review 19: it chose Growl)
+        mem[D.BATTLE_MON_PP + 1] = 0
+        assert p._auto_move() == ""                                 # nothing at all: the fight menu's Struggle
         _fake_battle(mem, D, (91, 33), (W, W), (FL, FL))
         p._move_table = {}                                          # a ROM without the tables: plain order
         assert p._auto_move() == "Dig"

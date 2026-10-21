@@ -709,7 +709,8 @@ class PokemonGen1Profile(GameProfile):
         damage this turn (Gen 1 formula from the battle structs' stats, STAB, type chart, accuracy, capped
         at the enemy's HP), skipping moves the enemy is immune to, two-turn moves at half value and
         Self-Destruct/Explosion unless nothing else works; among equally good moves, the one with most PP.
-        None when no move with PP left can hurt the enemy (Normal moves against a Ghost)."""
+        None when no move with PP left can hurt the enemy (Normal moves against a Ghost, or only status moves left);
+        "" when no move has PP at all (the fight menu then uses Struggle)."""
         b = self.battle()
         if not b or not b["mine"]["moves"]:
             return ""
@@ -720,6 +721,8 @@ class PokemonGen1Profile(GameProfile):
         dmg = [(n, mid, pp) for n, pp, mid in usable if n not in _STATUS_MOVES]
         fallback = wanted or (dmg[0][0] if dmg else (usable[0][0] if usable else ""))
         table = self._load_move_data()
+        if not wanted and not dmg and usable:
+            return None                                # only status moves have PP left: no attack (Codex review 19)
         if wanted or not dmg or not table:
             return fallback
         st = lambda base, k: self._u16(base + 17 + 2 * k)          # noqa: E731  attack, defense, speed, special
