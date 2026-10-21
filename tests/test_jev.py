@@ -1956,6 +1956,24 @@ def test_ordinary_warp_options_skip_a_blocked_warp(tmp_path):
     assert any("(5,1)" in x.label for x in opts)
 
 
+def test_a_switch_approach_cut_short_by_a_battle_is_no_press(tmp_path):
+    """uncapped-2 6765-6769 (Codex review 21): the walk to 3F's switch stood below it and a battle started while facing
+    it; the attempt was stamped like a press, so the switch rested 15 steps and the player left (next offered at 10270)."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f1 = map_id("Pokémon Mansion 1F")
+    (tmp_path / "data").mkdir()
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()),
+                  nav=LearnedAtlas(tmp_path / "data" / "jev_atlas.json"))
+    agent.nav.observe(f1, _view("Pokémon Mansion 1F", ["#######", "#.S##.#", "#.P.D##", "#######"]), _warps_hex([]), [])
+    o = J.parse("walked\nf1 Pokémon Mansion 1F (2,2) facing up | C L60 200/207 | ¥3000 | 6 badges")
+    sw = agent.switch_options(o, [])[0]
+    agent.remember_door(o, sw, "walked up 0/1 — stopped: battle started\nbattle: wild PONYTA L34")
+    assert agent.switch_options(o, [])[0].label == sw.label          # still offered after the battle
+    agent.remember_door(o, sw, "said: A secret switch! | Press it?")
+    assert not agent.switch_options(o, [])                             # a real press rests
+
+
 def test_mansion_switches_are_offered_and_a_press_forgets_every_floor(tmp_path):
     """Volcano-leg experiment: the Mansion's switches were walls in the map view and never pressed. S cells this part
     of the floor reaches are offered (stand below, face up, talk); "Who wouldn't?" (the YES answer) changes doors on
@@ -3419,6 +3437,24 @@ def test_badge_guards_stopping_the_walk_further_on_are_no_failed_hop(tmp_path):
     assert key in agent.s["nav_blocked"]
 
 
+def test_a_nearly_fainted_fighter_heals_before_attacking_a_healthy_trainer_pokemon():
+    """uncapped-2 10996-10998: Charizard L82 at 62/286 after Gyarados's Hydro Pump, Full Restores in the bag; Jev chose
+    auto-battle twice, Dragonair's Hyper Beam fainted it and the team blacked out (807 steps of retraining). Below a
+    quarter of its HP against a trainer Pokémon that is not nearly beaten, the best heal is the only choice."""
+    char = {"species": "Charizard", "level": 82, "hp": 62, "max_hp": 286, "moves": [{"name": "Flamethrower", "pp": 9}]}
+    lapras = {"species": "Lapras", "level": 15, "hp": 50, "max_hp": 50, "moves": [{"name": "Surf", "pp": 15}]}
+    b = {"kind": "trainer", "menu": "", "mine": dict(char),
+         "enemy": {"species": "Dragonair", "level": 54, "hp": 143, "max_hp": 143}}
+    items = [("Full Restore", 3), ("Fresh Water", 2), ("Revive", 1)]
+    assert [x.label for x in J.battle_options(b, [char, lapras], items)] == ["use Full Restore"]
+    b["enemy"] = dict(b["enemy"], hp=20)                       # one hit from fainting: finish it
+    assert "auto-battle" in [x.label for x in J.battle_options(b, [char, lapras], items)]
+    b["enemy"], b["kind"] = dict(b["enemy"], hp=143), "wild"   # a wild one can be run from
+    assert "auto-battle" in [x.label for x in J.battle_options(b, [char, lapras], items)]
+    b["kind"] = "trainer"
+    assert "auto-battle" in [x.label for x in J.battle_options(b, [char, lapras], [("Revive", 1)])]   # nothing to heal with
+
+
 def test_a_far_weaker_teammate_is_no_switch_for_a_fighter_still_standing():
     """Full run 90: Jev swapped L70 Charizard (110/227) for L15 Lapras twice against a Cooltrainer's Ivysaur; Lapras
     fainted and the team blacked out in Victory Road. Nearly fainted, or fainted, any teammate may still come in."""
@@ -3888,6 +3924,33 @@ def test_a_hole_is_only_learned_from_a_walk_that_fell_and_unlearned_when_stood_o
     assert not atlas.data["maps"][str(f2)].get("falls")
 
 
+def test_no_hole_from_a_named_walk_whose_floor_change_is_seen_after_a_battle(tmp_path):
+    """Codex review 21: a 'walk to <map>' that takes stairs and then starts a battle is first seen on the new floor a few
+    steps later; the one-step guard had expired and the floor change was learned as a hole at the start cell."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f2, f1 = map_id("Pokémon Mansion 2F"), map_id("Pokémon Mansion 1F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f2, _view("Pokémon Mansion 2F", ["#" * 20] + ["#" + "." * 18 + "#"] * 12 + ["#" * 20]),
+                  _warps_hex([(5, 10, 4, f1)]), [])
+    atlas.observe(f1, _view("Pokémon Mansion 1F", ["#" * 20] + ["#" + "." * 18 + "#"] * 12 + ["#" * 20]),
+                  _warps_hex([(15, 1, 0, f2)]), [])
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    o = J.parse("walked\nf1 Pokémon Mansion 2F (15,7) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    named = J.Option("walk to Pokémon Mansion 1F", "walk", {"path": "to Pokémon Mansion 1F"})
+    agent.learn_walked(o)
+    agent.nav_feedback(o, named, J.parse("went toward (5,10): left 10/10 — stopped: battle started"), "")
+    agent.s["step"] += 4                                        # three battle steps, then the first overworld reply
+    agent.learn_walked(J.parse("battle over\nf1 Pokémon Mansion 1F (5,10) facing down | C L64 200/220 | ¥3000 | 6 badges"))
+    assert not atlas.data["maps"][str(f2)].get("falls"), atlas.data["maps"][str(f2)].get("falls")
+    agent.s["step"] += 1                                        # a later fall after a coordinate walk is still learned
+    agent.learn_walked(J.parse("walked\nf1 Pokémon Mansion 1F (6,10) facing down | C L64 200/220 | ¥3000 | 6 badges"))
+    agent.s["step"] += 4
+    agent.learn_walked(J.parse("battle over\nf1 Pokémon Mansion 2F (15,7) facing down | C L64 200/220 | ¥3000 | 6 badges"))
+    assert atlas.data["maps"][str(f1)].get("falls")
+
+
 def test_a_fall_with_no_entered_line_is_still_learned(tmp_path):
     """(the real 2F drop at run step 6,345 ended "down 2/2 — could not get closer" on another floor)"""
     from bench.jev_atlas import LearnedAtlas
@@ -3983,6 +4046,37 @@ def test_a_switch_that_hides_broken_floor_comes_before_leaving_the_floor(tmp_pat
     assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["go back to Pokémon Mansion 2F by the warp at (1,1)"]
     agent.s["trod"]["Pokémon Mansion 3F#1"] = [[7, 1], [8, 1], [7, 2], [8, 2]]      # walked in the other state: done
     assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["go back to Pokémon Mansion 2F by the warp at (1,1)"]
+
+
+def test_broken_floor_seen_from_a_section_without_the_switch_does_not_end_the_switch_search(tmp_path):
+    """Codex review 21: hidden_seen was kept per floor and door state only, so broken floor out of reach from an isolated
+    stair landing in both states counted as 'the switch cannot expose it', and in the switch's own section a pending
+    revisit came first. What the switch can expose is judged from the switch's section only."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3, f2 = map_id("Pokémon Mansion 3F"), map_id("Pokémon Mansion 2F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f3, _view("Pokémon Mansion 3F", ["############", "#.#..S.#::.#", "#.#....#::.#", "############"]),
+                  _warps_hex([(1, 1, 1, f2), (6, 1, 2, f2)]), [])
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.s["flips"] = 4
+    agent.s["switch_tried"] = ["Pokémon Mansion 3F:5,1#0", "Pokémon Mansion 3F:5,1#1"]
+    agent.s["revisit"] = "Pokémon Mansion 2F"
+    targets = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
+    west = J.parse("walked\nf1 Pokémon Mansion 3F (1,2) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    back_w = [J.Option("go back to Pokémon Mansion 2F by the warp at (1,1)", "walk", {"path": "to 1,1"})]
+    for doors in (0, 1):                                        # the isolated landing, seen in both door states
+        agent.s["mansion_doors"] = doors
+        agent.puzzle_order(back_w, targets, west)
+    main = J.parse("walked\nf1 Pokémon Mansion 3F (4,2) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    opts = [J.Option("go back to Pokémon Mansion 2F by the warp at (6,1)", "walk", {"path": "to 6,1"}),
+            J.Option("press the secret switch at (5,1) (from below)", "walk", {"path": "to 5,2"})]
+    assert [x.label for x in agent.puzzle_order(opts, targets, main)] == ["press the secret switch at (5,1) (from below)"]
+    agent.s["mansion_doors"] = 0                                # the switch's own section in the other state: done
+    agent.puzzle_order(opts, targets, main)
+    agent.s["mansion_doors"] = 1
+    assert [x.label for x in agent.puzzle_order(opts, targets, main)] == ["go back to Pokémon Mansion 2F by the warp at (6,1)"]
 
 
 def test_floor_search_gate_routes_like_navigation(tmp_path):

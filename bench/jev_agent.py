@@ -1018,10 +1018,14 @@ class Agent:
             walked |= {(f[0], f[1]) for f in (self.nav.data["maps"].get(str(map_id(o.map))) or {}).get("falls", [])}
             out_of_reach = sorted([x, y] for y, row in enumerate(cells) for x, c in enumerate(row)
                                   if c == ":" and (x, y) not in dist and (x, y) not in walked)
+            # judged from a switch's own section only, kept per switch (doors can join two switches' sections in one state):
+            # a section without one cannot press it, and what an isolated stair landing cannot reach says nothing about
+            # what the switch exposes (Codex review 21)
             seen = self.s.setdefault("hidden_seen", {})
-            seen[f"{o.map}#{doors}"] = out_of_reach
-            other = {tuple(c) for c in seen.get(f"{o.map}#{1 - doors}", [])}
-            hidden = bool(out_of_reach) and not all(tuple(c) in other for c in out_of_reach)
+            for sw in (f"{x},{y}" for y, row in enumerate(cells) for x, c in enumerate(row) if c == "S" and (x, y + 1) in dist):
+                seen[f"{o.map}@{sw}#{doors}"] = out_of_reach
+                other = {tuple(c) for c in seen.get(f"{o.map}@{sw}#{1 - doors}", [])}
+                hidden = hidden or (bool(out_of_reach) and not all(tuple(c) in other for c in out_of_reach))
         kinds = (lambda x: bool(rv) and not unwalked and not hidden and x.label.startswith(f"go back to {rv}"),   # a revisit begun is finished first
                  # (Codex review 3: "go back to 2F" from B1F went by 1F, where the route to B1F turned it round)
                  lambda x: x.label.startswith("follow the map route"),   # the objective's own route first
@@ -1340,7 +1344,9 @@ class Agent:
             tp = self.s.setdefault("train_paces", {})
             tp[o.map] = tp.get(o.map, 0) + 1              # (see train_options: no wild Pokémon after 8 is no grass)
         sw = re.match(r"press the secret switch at \((\d+),(\d+)\)", opt.label)
-        if sw and o.map:
+        # (an approach cut short by a battle is no press: uncapped-2 6765 stood below 3F's switch, a battle started while
+        # facing it, and the switch rested while the player left; next offered ~3,500 steps later)
+        if sw and o.map and not interrupted:
             self.s.setdefault("switches", {}).setdefault(f"{o.map}:{sw[1]},{sw[2]}", []).append(self.s["step"])
             if "A secret switch" in reply:
                 self.s["switch_at"] = f"{o.map}:{sw[1]},{sw[2]}"   # (the YES that follows records it: see above)
@@ -1856,9 +1862,10 @@ class Agent:
         last, self.s["last_ow"] = self.s.get("last_ow"), [o.map, o.pos[0], o.pos[1], self.s["step"]]
         if last and last[0] != o.map and str(last[0]).startswith("Pokémon Mansion") and o.map.startswith("Pokémon Mansion") \
                 and not re.search(r"\b(?:up|down|left|right) \d+/\d+|loaded state|blacked out", o.head) \
-                and not re.match(r"'[^']+' → ", o.head) and self.s.get("named_walk_step") != self.s["step"] - 1 \
+                and not re.match(r"'[^']+' → ", o.head) and self.s.get("named_walk_step", -1) < last[3] \
                 and self.s["step"] - last[3] <= 12:
-            # (not after a "walk to <map>" the server took by stairs: it recreated 2F's false (15,7) hole: Codex review 20)
+            # (not after a "walk to <map>" the server took by stairs: it recreated 2F's false (15,7) hole: Codex review 20;
+            # any named walk since the last overworld reply, also one whose floor change is seen after a battle: review 21)
             # dropped to another floor with no walk in this reply: a hole stepped on before a battle (volcano-leg-26 fell
             # from 3F's (17,14) after the battle that cell started)
             self.record_fall(map_id(last[0]), (last[1], last[2]), o)

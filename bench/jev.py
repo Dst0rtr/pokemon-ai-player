@@ -195,6 +195,7 @@ MAP_ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS:BXH]+)$")
 WINDOW_RE = re.compile(r"window x(-?\d+)\.\.-?\d+ y(-?\d+)\.\.-?\d+")
 CONN_RE = re.compile(r"(north|south|east|west) edge→([^,\n]+)")
 HEAL_ITEMS = ("Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore", "Fresh Water", "Soda Pop", "Lemonade")
+STRONG_HEALS = ("Full Restore", "Max Potion", "Hyper Potion", "Lemonade", "Soda Pop", "Super Potion", "Fresh Water", "Potion")
 BALLS = ("Poké Ball", "Great Ball", "Ultra Ball")
 REFUSALS = ("bad path", "no path", "cannot", "no walkable", "route to", "unknown", "nothing to talk", "no move", "no PP",
             "could not", "not in a battle", "already in", "bad token", "too many", "no buttons", "not reset")
@@ -432,6 +433,13 @@ def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], all
                 Option("throw bait", "battle", {"action": "bait"}, "it flees less but is harder to catch"),
                 Option("throw a rock", "battle", {"action": "rock"}, "easier to catch but more likely to flee"),
                 Option("run away", "battle", {"action": "run"}, "leave the encounter")]
+    names = {n for n, _ in items}
+    # nearly fainted against a trainer Pokémon that is not nearly beaten: the best heal is the only choice (uncapped-2
+    # 10996-10998: Charizard L82 at 62/286 with Full Restores in the bag attacked twice, fainted to Dragonair's Hyper
+    # Beam and the team blacked out before Lance)
+    best = next((h for h in STRONG_HEALS if h in names), None)
+    if not only_switch and kind == "trainer" and best and 0 < _frac(mine) < 0.25 and _frac(b.get("enemy")) > 0.25:
+        return [Option(f"use {best}", "battle", {"action": "item", "target": best}, "heal before the next hit faints it")]
     if not only_switch:
         if allow_auto:
             opts.append(Option("auto-battle", "battle", {"action": "auto"},
@@ -456,7 +464,6 @@ def battle_options(b: dict, party: list[dict], items: list[tuple[str, int]], all
                            f"L{p['level']}, {p['hp']}/{p['max_hp']} HP, moves: " + ", ".join(m["name"] for m in p["moves"])))
     if only_switch:
         return _dedupe(opts)
-    names = {n for n, _ in items}
     if _frac(mine) < 0.5:
         for h in HEAL_ITEMS:
             if h in names:
