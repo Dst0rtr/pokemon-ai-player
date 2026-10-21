@@ -309,8 +309,23 @@ class LearnedAtlas(WorldNav):
     def _edge_arrival(self, side, dm, ya, xa, x, y, passable=frozenset({".", ",", ":", "X"})):
         return None                                          # handled in reach() from learned edge data
 
+    reach_cache: Optional[dict] = None                       # set by the agent while one step's options are built
+
     def reach(self, mid: int, start: tuple[int, int], surf: bool = False, cut: bool = False,
               avoid: frozenset = frozenset(), parents: Optional[dict] = None) -> tuple[dict, list]:
+        # the atlas does not change while one step's options are built: route() asks for the same arrival points again
+        # and again (uncapped-1 in the Pokémon Mansion: ~22,000 grid searches, 9-17 s a step)
+        key = (mid, tuple(start), surf, cut, self.card_key) if self.reach_cache is not None and not avoid \
+            and parents is None else None
+        if key is not None and key in self.reach_cache:
+            return self.reach_cache[key]
+        out = self._reach(mid, start, surf, cut, avoid, parents)
+        if key is not None:
+            self.reach_cache[key] = out
+        return out
+
+    def _reach(self, mid: int, start: tuple[int, int], surf: bool, cut: bool, avoid: frozenset,
+               parents: Optional[dict]) -> tuple[dict, list]:
         m = self.map(mid)
         if start == UNKNOWN:                                 # somewhere on this map: everything at a fixed cost
             trans = []

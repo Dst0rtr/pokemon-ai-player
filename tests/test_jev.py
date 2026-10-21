@@ -3801,3 +3801,23 @@ def test_a_kept_training_spot_never_hides_stronger_wild_pokemon(tmp_path):
     o = J.parse("walked\nf1 Viridian Forest (2,1) facing up | C L25 70/70 | ¥3000 | 1 badges")
     train = agent.train_options(o, None)
     assert train and train[0].label.startswith("follow the map route to train on Mt. Moon 1F"), train
+
+
+def test_reach_is_cached_while_options_are_built(tmp_path):
+    """uncapped-1 in the Pokémon Mansion: 58 routes per step, each up to 4,000 arrival points, every one a fresh grid
+    search (~22,000 per step, ~9-17 s a step). While the options of one step are built the atlas does not change: reach
+    is cached then (keyed by the card key too), and only then."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    atlas = LearnedAtlas(tmp_path / "jev_atlas.json")
+    mid = map_id("Pokémon Mansion 1F")
+    atlas.observe(mid, _view("Pokémon Mansion 1F", ["#####", "#...#", "#...#", "#####"]), _warps_hex([]), [])
+    assert atlas.reach(mid, (1, 1)) is not atlas.reach(mid, (1, 1))          # off: computed each time
+    atlas.reach_cache = {}
+    first = atlas.reach(mid, (1, 1))
+    assert atlas.reach(mid, (1, 1)) is first and atlas.reach(mid, (1, 2)) is not first
+    atlas.set_card_key(True)
+    assert atlas.reach(mid, (1, 1)) is not first                            # the card key changes what is open
+    assert atlas.reach(mid, (1, 1), avoid=frozenset({(2, 1)})) is not atlas.reach(mid, (1, 1), avoid=frozenset({(2, 1)}))
+    atlas.reach_cache = None
+    assert atlas.reach(mid, (1, 1)) is not atlas.reach(mid, (1, 1))

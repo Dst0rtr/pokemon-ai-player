@@ -296,6 +296,8 @@ class Agent:
         return st
 
     async def step(self) -> None:
+        if isinstance(self.nav, LearnedAtlas):
+            self.nav.reach_cache = None                   # (never left on by a step that ended early)
         o = parse(self.reply)
         self.route_hint = ""
         self.s["milestones"] += [e for e in o.events if e not in self.s["milestones"]]
@@ -424,6 +426,8 @@ class Agent:
             self.learn_walked(o)
             self.learn_trod(o)
             self.learn_noroute(o)
+            if isinstance(self.nav, LearnedAtlas):
+                self.nav.reach_cache = {}                 # until this step's options are built (cleared below)
             nav_opts, route_key = self.nav_options(o, targets, facts, why)
             if nav_opts:                                 # concrete warps replace "walk to <map>" (nearest-warp guesses)
                 quiet = (bool(route_key) or self.exploring) and self.s.get("recovery", 0) < 3   # blind walks dilute the choice
@@ -473,6 +477,8 @@ class Agent:
                     seen.add(x.label.lower())
                     uniq.append(x)
             opts = uniq
+        if isinstance(self.nav, LearnedAtlas):
+            self.nav.reach_cache = None                   # the action and what it teaches change the atlas
         forced = self.director.forced_recovery(self.s["step"]) if self.director and kind == "overworld" else None
         if not forced and self.director and kind == "overworld":
             forced = self.director.bag_option(self.items, self.party) or self.director.flute_option(self.items) or \
