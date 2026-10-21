@@ -3875,7 +3875,11 @@ def test_a_hole_is_only_learned_from_a_walk_that_fell_and_unlearned_when_stood_o
     named = J.Option("walk to Pokémon Mansion B1F", "walk", {"path": "to Pokémon Mansion B1F"})
     after = J.parse("'Pokémon Mansion B1F' → (21,23): no walkable route from (5,10) to (21,23) on this map\n"
                     "f1 Pokémon Mansion 1F (5,10) facing down | C L64 200/220 | ¥3000 | 6 badges")
+    agent.learn_walked(o)                                       # (as the agent runs: last overworld cell, then the walk)
     agent.nav_feedback(o, named, after, "")
+    assert not atlas.data["maps"][str(f2)].get("falls"), atlas.data["maps"][str(f2)].get("falls")
+    agent.s["step"] += 1
+    agent.learn_walked(after)                                   # the next step's delayed-fall rule (Codex review 20)
     assert not atlas.data["maps"][str(f2)].get("falls"), atlas.data["maps"][str(f2)].get("falls")
     atlas.record_fall(f2, 15, 7, f1, 5, 10)                    # (as the run had learned it)
     agent.learn_trod(o)                                         # on it once: the reply that walks onto a hole shows that
@@ -3963,5 +3967,43 @@ def test_a_switch_that_hides_broken_floor_comes_before_leaving_the_floor(tmp_pat
             J.Option("press the secret switch at (3,1) (from below)", "walk", {"path": "to 3,2"})]
     targets = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
     assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["press the secret switch at (3,1) (from below)"]
+    agent.s["revisit"] = "Pokémon Mansion 2F"                  # a revisit pending: the switch still first (Codex review 20)
+    assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["press the secret switch at (3,1) (from below)"]
+    agent.s.pop("revisit")
+    atlas.record_fall(f3, 7, 1, f2, 7, 1)                       # known holes and refused cells are no unknown floor
+    agent.s.setdefault("floor_refused", {})["Pokémon Mansion 3F#0"] = [[8, 1], [7, 2], [8, 2]]
+    assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["go back to Pokémon Mansion 2F by the warp at (1,1)"]
+    atlas.data["maps"][str(f3)]["falls"] = []
+    atlas._maps.pop(f3, None)
+    agent.s["floor_refused"] = {}
+    assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["press the secret switch at (3,1) (from below)"]
+    agent.s["mansion_doors"] = 1                                # the other state finds the same cells out of reach: done
+    assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["go back to Pokémon Mansion 2F by the warp at (1,1)"]
+    agent.s["mansion_doors"] = 0
+    assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["go back to Pokémon Mansion 2F by the warp at (1,1)"]
     agent.s["trod"]["Pokémon Mansion 3F#1"] = [[7, 1], [8, 1], [7, 2], [8, 2]]      # walked in the other state: done
     assert [x.label for x in agent.puzzle_order(opts, targets, o)] == ["go back to Pokémon Mansion 2F by the warp at (1,1)"]
+
+
+def test_floor_search_gate_routes_like_navigation(tmp_path):
+    """Codex review 20 on 266824d: the 'known goal floor but no route' gate used a bare route() (no Surf/Cut, no blocked
+    hops): a goal floor reachable by Surf looked unreachable and floor search came on for nothing."""
+    from bench.jev_atlas import LearnedAtlas
+    from bench.jev_nav import map_id
+    f3, b1 = map_id("Pokémon Mansion 3F"), map_id("Pokémon Mansion B1F")
+    (tmp_path / "data").mkdir()
+    atlas = LearnedAtlas(tmp_path / "data" / "jev_atlas.json")
+    atlas.observe(f3, _view("Pokémon Mansion 3F", ["#########", "#..~~...#", "#..~~.D.#", "#.:~~...#", "#########"]),
+                  _warps_hex([(6, 2, 0, b1)]), [])
+    atlas.observe(b1, _view("Pokémon Mansion B1F", ["#####", "#...#", "#####"]), _warps_hex([]), [])
+    atlas.record_warp(f3, 6, 2, b1, 2, 1)
+    agent = Agent(_agent_args(tmp_path, "solo"), FakeServer(), J.JevPolicy(J.MockJev()), nav=atlas)
+    agent.party = [{"species": "Lapras", "level": 40, "hp": 100, "max_hp": 100, "moves": [{"name": "Surf", "pp": 15}]}]
+    agent.s["badges"] = 6
+    agent.s.setdefault("trod", {})["Pokémon Mansion 3F#0"] = [[1, 1], [2, 1]]
+    agent.s["mansion_doors"] = 0
+    o = J.parse("walked\nf1 Pokémon Mansion 3F (1,1) facing down | C L40 100/100 | ¥3000 | 6 badges")
+    targets = ["Pokémon Mansion 1F", "Pokémon Mansion 2F", "Pokémon Mansion 3F", "Pokémon Mansion B1F"]
+    assert agent.floor_options(o, [], targets) == []                        # Surf reaches the stairs: routes do it
+    agent.party[0]["moves"] = []
+    assert agent.floor_options(o, [], targets) != []                        # without it, search the floor

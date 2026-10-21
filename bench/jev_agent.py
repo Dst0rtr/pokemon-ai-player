@@ -1012,9 +1012,17 @@ class Agent:
             except (KeyError, IndexError):
                 cells = []
             walked = {tuple(c) for k in (f"{o.map}#0", f"{o.map}#1") for c in self.s.get("trod", {}).get(k, [])}
-            hidden = any(c == ":" and (x, y) not in dist and (x, y) not in walked
-                         for y, row in enumerate(cells) for x, c in enumerate(row))
-        kinds = (lambda x: bool(rv) and not unwalked and x.label.startswith(f"go back to {rv}"),   # a revisit begun is finished first
+            # (not a known hole, nor a cell refused, nor cells the other door state found out of reach too: Codex review
+            # 20, an exhausted floor kept asking for its switch)
+            walked |= {tuple(c) for k in (f"{o.map}#0", f"{o.map}#1") for c in self.s.get("floor_refused", {}).get(k, [])}
+            walked |= {(f[0], f[1]) for f in (self.nav.data["maps"].get(str(map_id(o.map))) or {}).get("falls", [])}
+            out_of_reach = sorted([x, y] for y, row in enumerate(cells) for x, c in enumerate(row)
+                                  if c == ":" and (x, y) not in dist and (x, y) not in walked)
+            seen = self.s.setdefault("hidden_seen", {})
+            seen[f"{o.map}#{doors}"] = out_of_reach
+            other = {tuple(c) for c in seen.get(f"{o.map}#{1 - doors}", [])}
+            hidden = bool(out_of_reach) and not all(tuple(c) in other for c in out_of_reach)
+        kinds = (lambda x: bool(rv) and not unwalked and not hidden and x.label.startswith(f"go back to {rv}"),   # a revisit begun is finished first
                  # (Codex review 3: "go back to 2F" from B1F went by 1F, where the route to B1F turned it round)
                  lambda x: x.label.startswith("follow the map route"),   # the objective's own route first
                  # (volcano-leg-21 fell through 3F's hole next to 1F's stairs to B1F, and the order had no place for
@@ -1105,8 +1113,12 @@ class Agent:
             return opts
         last = map_id(targets[-1])
         cur = map_id(o.map)
-        if last is None or self.nav.known(last) and o.map != targets[-1] and (
-                cur is None or self.nav.route(cur, tuple(o.pos), last) is not None):
+        moves = {m["name"] for p in self.party for m in p.get("moves", [])}
+        badges = self.s.get("badges", 0) or 0
+        reach_last = lambda: cur is not None and self.route_ok(    # noqa: E731  (as navigation routes: Codex review 20)
+            cur, tuple(o.pos), last, surf="Surf" in moves and badges >= 5, cut="Cut" in moves and badges >= 2,
+            blocked=self.blocked_now(o)) is not None
+        if last is None or self.nav.known(last) and o.map != targets[-1] and (cur is None or reach_last()):
             # (on the last map itself the goal lies somewhere on its floor; a known last map with no route from here counts
             # as unknown: uncapped-1 left B1F to heal and, B1F known, never searched 3F's collapsed floor again)
             return opts
@@ -1844,7 +1856,9 @@ class Agent:
         last, self.s["last_ow"] = self.s.get("last_ow"), [o.map, o.pos[0], o.pos[1], self.s["step"]]
         if last and last[0] != o.map and str(last[0]).startswith("Pokémon Mansion") and o.map.startswith("Pokémon Mansion") \
                 and not re.search(r"\b(?:up|down|left|right) \d+/\d+|loaded state|blacked out", o.head) \
+                and not re.match(r"'[^']+' → ", o.head) and self.s.get("named_walk_step") != self.s["step"] - 1 \
                 and self.s["step"] - last[3] <= 12:
+            # (not after a "walk to <map>" the server took by stairs: it recreated 2F's false (15,7) hole: Codex review 20)
             # dropped to another floor with no walk in this reply: a hole stepped on before a battle (volcano-leg-26 fell
             # from 3F's (17,14) after the battle that cell started)
             self.record_fall(map_id(last[0]), (last[1], last[2]), o)
@@ -2069,6 +2083,8 @@ class Agent:
 
     def nav_feedback(self, o: Obs, opt: Option, after: Obs, route_key: str) -> None:
         """Per-dungeon memory: count warps taken since the last progress; block a route hop that failed."""
+        if opt.tool == "walk" and NAME_WALK_RE.match(opt.args.get("path", "")):
+            self.s["named_walk_step"] = self.s["step"]   # (learn_walked: no hole from the floor change it makes)
         # warp options carry their coordinates in the label (a warp you stand on is taken by stepping off and back)
         m = re.search(r"warp at \((\d+),(\d+)\)", opt.label) or re.fullmatch(r"to (\d+),(\d+)", opt.args.get("path", ""))
         if "sleeping POK" in after.head + "\n" + after.text and after.map and after.pos and after.facing in FACING_STEP:
