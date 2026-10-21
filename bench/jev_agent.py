@@ -632,8 +632,11 @@ class Agent:
             self.s["outmatched"] = self.s.get("outmatched", 0) + 1
         elif "fighting fit" in reply or "fully healed" in reply:
             self.s["outmatched"] = 0
-        fail = self.s.pop("talk_fail", None)
-        if fail and "fully healed" in reply and self.s["step"] - fail[1] <= 2:
+        fail = self.s.get("talk_fail")
+        if not fail or fail[1] == self.s["step"]:        # (the stop's own reply: what was said comes next)
+            return
+        self.s.pop("talk_fail")
+        if "fully healed" in reply and self.s["step"] - fail[1] <= 2:
             # the walk stopped for Pokémon Tower 5F's purified zone, not for a person (lavender-train-3: its stairs were
             # blocked that way, healing found no route and training went on with Flamethrower empty)
             key = fail[0]

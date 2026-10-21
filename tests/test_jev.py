@@ -3758,14 +3758,18 @@ def test_a_walk_stopped_by_a_healing_floor_message_is_no_failed_hop(tmp_path):
     opt = J.Option("walk to the warp at (3,9) → Pokémon Tower 4F", "walk", {"path": "to 3,9"})
     stop = J.parse("went toward (3,9): left 2/2, down 1/1, left 2/4 — stopped: dialogue appeared\n"
                    "f1 Pokémon Tower 5F (12,10) facing left | C L60 181/202 | ¥3000 | 5 badges")
-    for _ in range(2):
+    for _ in range(2):                                  # as the agent runs them: the stop's own reply first, the text next
         agent.s["step"] += 1
         agent.nav_feedback(o, opt, stop, "")
+        agent.remember_outmatched(stop.head)
+        agent.s["step"] += 1
         agent.remember_outmatched("dialogue ended: Entered purified, protected zone! | AAAAAAA's POKéMON are fully healed!")
     key = f"{f5}:3,9"
     assert key not in agent.s["nav_blocked"] and not agent.s.get("nav_fail_from", {}).get(key), agent.s["nav_blocked"]
     for _ in range(2):                                  # a person who stops the walk each time still blocks it
         agent.s["step"] += 1
         agent.nav_feedback(o, opt, stop, "")
+        agent.remember_outmatched(stop.head)
+        agent.s["step"] += 1
         agent.remember_outmatched("dialogue ended: Get out of my way!")
     assert key in agent.s["nav_blocked"]
