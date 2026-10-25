@@ -14,115 +14,127 @@ Jev (TypeSafe's System One model) answers typed questions; it cannot write text 
 
 Variants: **solo**: The final exam: Jev + code only, no LLM anywhere, stuck = fail. Code enumerates the legal actions every step, reads progress (badges, bag, moves, maps, milestones) and walks a whole-game objective graph; it also heals, trains to level targets, teaches HMs, clears obstacles and runs stuck recovery. Jev picks every action and answers yes/no checks ("stuck?", "objective done?" where code cannot see a story event). **assist**: jev-solo's scaffolding plus a safety net: when Jev's confidence is low or code detects stuck/looping, Claude Haiku picks that one action and a fallback event is logged; fallbacks per 1k steps should trend to 0 across self-improvement iterations (bench/improve.py). **hybrid**: Claude Haiku sets the objective (every N steps, on low Jev confidence, when Jev says stuck, after a badge); code enumerates the actions; Jev picks every action. **scripted**: A short code-side objective list (no rules, no recovery); code enumerates the actions; Jev picks every action. **battles**: The normal Claude Code run (same tools and prompt plus one line), except battle('auto') turns are picked by Jev from the legal moves/switches/items.
 
+### Jev full-game benchmark entries
+
+Jev full-game runs from power-on (jev-solo: no LLM). The label says how each was run. An entry outside the standard limits is not comparable with a capped run.
+
+| Entry | Variant | Badges | Furthest | Hall of Fame | Tool calls | Steps | Active h | Total cost | Exit |
+|---|---|---|---|---|---|---|---|---|---|
+| standard limits (12 h / 20,000 calls), unassisted, blank atlas, one seed: stopped by the call cap | jev-solo | 5 | reached: Silph Co. 1F | — | 20003 | 6563 | 2.2 | $0.28 | budget_calls |
+| unassisted (no interventions), blank atlas, one seed, OUTSIDE the standard 20,000-call cap (no call or time cap) | jev-solo | 8 | champion defeated (Hall of Fame) | 0:57 · 35360 | 35361 | 11868 | 1.0 | $0.34 | champion |
+
+### All Jev runs (iterations, segments and labelled experiments included)
+
 | # | Variant | Model | Maps | Segment | Badges | Furthest | Hall of Fame | Active h | Tool calls | Jev calls | Fallbacks (/1k steps) | Jev latency p50 / p95 ms | Jev cost | LLM cost | Total cost | Correct | ECE | Exit |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | jev-solo | `jev-latest` | learned (blank) | full game · it91 | 8 | champion defeated (Hall of Fame) | 0:59 · 24714 | 1.0 | 24715 | 6207 | — | 67 / 176 | $0.31 | $0.00 | $0.31 | 71% | 0.167 | champion |
-| 2 | jev-solo | `jev-latest` | learned (blank) — experiment | full game | 8 | champion defeated (Hall of Fame) | 2:30 · 53252 | 2.5 | 53253 | 9822 | — | 64 / 134 | $0.45 | $0.00 | $0.45 | 74% | 0.237 | champion |
-| 3 | jev-solo | `jev-latest` | learned (blank) | full game · it90 | 8 | reached: Victory Road 1F | — | 1.8 | 27339 | 7320 | — | 68 / 148 | $0.38 | $0.00 | $0.38 | 66% | 0.145 | manual |
-| 4 | jev-solo | `jev-latest` | learned (blank) | full game · it88 | 8 | reached: Victory Road 1F | — | 1.3 | 32634 | 8406 | — | 65 / 136 | $0.44 | $0.00 | $0.44 | 65% | 0.156 | manual |
-| 5 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | after-sabrina | 6 | reached: Pokémon Mansion 1F | — | 0.0 | 461 | 131 | — | 84 / 315 | $0.01 | $0.00 | $0.01 | 81% | 0.181 | segment_goal |
-| 6 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | cinnabar-island | 6 | reached: Pokémon Mansion 1F | — | 0.1 | 1243 | 359 | — | 82 / 307 | $0.02 | $0.00 | $0.02 | 66% | 0.248 | manual |
-| 7 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | cinnabar-island | 6 | reached: Pokémon Mansion 1F | — | 0.0 | 1275 | 381 | — | 86 / 332 | $0.02 | $0.00 | $0.02 | 58% | 0.131 | manual |
-| 8 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | cinnabar-island | 6 | reached: Pokémon Mansion 1F | — | 0.2 | 1356 | 408 | — | 84 / 207 | $0.02 | $0.00 | $0.02 | 64% | 0.213 | manual |
-| 9 | jev-solo | `jev-latest` | learned (blank) | full game · it85 | 6 | reached: Pokémon Mansion 1F | — | 1.1 | 21510 | 5685 | — | 61 / 136 | $0.28 | $0.00 | $0.28 | 71% | 0.185 | manual |
-| 10 | jev-solo | `jev-latest` | learned (blank) | full game · it86 | 6 | reached: Pokémon Mansion 1F | — | 1.0 | 28979 | 7317 | — | 61 / 136 | $0.39 | $0.00 | $0.39 | 68% | 0.206 | manual |
-| 11 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 6 | badge: Marsh | — | 2.8 | 22530 | 5885 | — | 76 / 327 | $0.30 | $0.00 | $0.30 | 63% | 0.133 | manual |
-| 12 | jev-solo | `jev-latest` | learned (blank) | full game · it75 | 6 | badge: Marsh | — | 5.2 | 51842 | 18428 | — | 112 / 224 | $1.05 | $0.00 | $1.05 | 61% | 0.213 | stuck |
-| 13 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | after-sabrina | 6 | reached: Silph Co. 1F | — | 0.1 | 422 | 120 | — | 80 / 333 | $0.01 | $0.00 | $0.01 | 57% | 0.122 | manual |
-| 14 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | after-sabrina | 6 | reached: Silph Co. 1F | — | 0.1 | 495 | 149 | — | 87 / 247 | $0.01 | $0.00 | $0.01 | 54% | 0.091 | manual |
-| 15 | jev-solo | `jev-latest` | learned (blank) — experiment | after-sabrina | 6 | reached: Silph Co. 1F | — | 0.0 | 2612 | 639 | — | 83 / 168 | $0.04 | $0.00 | $0.04 | 58% | 0.141 | manual |
-| 16 | jev-solo | `jev-latest` | learned (blank) | full game · it89 | 5 | reached: Silph Co. 1F | — | 1.1 | 19923 | 5260 | — | 67 / 140 | $0.27 | $0.00 | $0.27 | 65% | 0.138 | manual |
-| 17 | jev-solo | `jev-latest` | learned (blank) | full game | 5 | reached: Silph Co. 1F | — | 2.2 | 20003 | 5391 | — | 76 / 339 | $0.28 | $0.00 | $0.28 | 62% | 0.126 | budget_calls |
-| 18 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 5 | reached: Silph Co. 1F | — | 2.5 | 20911 | 5587 | — | 76 / 335 | $0.29 | $0.00 | $0.29 | 62% | 0.128 | manual |
-| 19 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 5 | reached: Silph Co. 1F | — | 2.6 | 21570 | 5704 | — | 76 / 331 | $0.30 | $0.00 | $0.30 | 62% | 0.130 | manual |
-| 20 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 5 | reached: Silph Co. 1F | — | 2.6 | 21572 | 5672 | — | 76 / 332 | $0.29 | $0.00 | $0.29 | 62% | 0.129 | manual |
-| 21 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 5 | reached: Silph Co. 1F | — | 2.6 | 23003 | 5925 | — | 75 / 326 | $0.31 | $0.00 | $0.31 | 63% | 0.133 | budget_calls |
-| 22 | jev-solo | `jev-latest` | learned (blank) | full game · it64 | 5 | reached: Silph Co. 1F | — | 1.3 | 28966 | 9155 | — | 81 / 297 | $0.46 | $0.00 | $0.46 | 63% | 0.188 | stuck |
-| 23 | jev-solo | `jev-latest` | learned (blank) | full game · it72 | 5 | reached: Silph Co. 1F | — | 0.8 | 33433 | 9801 | — | 76 / 143 | $0.50 | $0.00 | $0.50 | 59% | 0.159 | stuck |
-| 24 | jev-solo | `jev-latest` | learned (blank) | full game · it71 | 5 | reached: Silph Co. 1F | — | 4.6 | 33839 | 10774 | — | 78 / 148 | $0.60 | $0.00 | $0.60 | 55% | 0.170 | stuck |
-| 25 | jev-solo | `jev-latest` | learned (blank) | full game · it62 | 5 | reached: Silph Co. 1F | — | 1.9 | 38929 | 12306 | — | 80 / 307 | $0.65 | $0.00 | $0.65 | 57% | 0.185 | stuck |
-| 26 | jev-solo | `jev-latest` | learned (blank) | full game · it76 | 5 | reached: Silph Co. 1F | — | 2.2 | 39115 | 9528 | — | 80 / 230 | $0.49 | $0.00 | $0.49 | 64% | 0.156 | stuck |
-| 27 | jev-solo | `jev-latest` | learned (blank) | full game · it61 | 5 | reached: Silph Co. 1F | — | 1.7 | 39508 | 12277 | — | 77 / 299 | $0.62 | $0.00 | $0.62 | 57% | 0.164 | stuck |
-| 28 | jev-solo | `jev-latest` | learned (blank) | full game · it73 | 5 | reached: Silph Co. 1F | — | 1.8 | 45011 | 14516 | — | 80 / 148 | $0.74 | $0.00 | $0.74 | 80% | 0.307 | stuck |
-| 29 | jev-solo | `jev-latest` | learned (blank) | full game · it87 | 5 | badge: Soul | — | 0.6 | 19315 | 5072 | — | 60 / 133 | $0.25 | $0.00 | $0.25 | 65% | 0.140 | manual |
-| 30 | jev-solo | `jev-latest` | learned (blank) | full game · it63 | 5 | badge: Soul | — | 1.5 | 33039 | 10142 | — | 81 / 298 | $0.53 | $0.00 | $0.53 | 62% | 0.178 | stuck |
-| 31 | jev-solo | `jev-latest` | learned (blank) | full game · it59 | 5 | badge: Soul | — | 1.9 | 52493 | 15750 | — | 74 / 144 | $0.80 | $0.00 | $0.80 | 57% | 0.160 | stuck |
-| 32 | jev-solo | `jev-latest` | learned (blank) | full game · it84 | 4 | reached: Pokémon Tower 1F | — | 0.5 | 17626 | 4405 | — | 60 / 158 | $0.22 | $0.00 | $0.22 | 66% | 0.162 | manual |
-| 33 | jev-solo | `jev-latest` | learned (blank) | full game · it80 | 4 | reached: Pokémon Tower 1F | — | 0.6 | 20968 | 5499 | — | 63 / 284 | $0.28 | $0.00 | $0.28 | 64% | 0.156 | manual |
-| 34 | jev-solo | `jev-latest` | learned (blank) | full game · it77 | 4 | reached: Pokémon Tower 1F | — | 1.0 | 21644 | 6615 | — | 69 / 169 | $0.33 | $0.00 | $0.33 | 65% | 0.187 | manual |
-| 35 | jev-solo | `jev-latest` | learned (blank) | full game · it52 | 4 | reached: Pokémon Tower 1F | — | 0.8 | 23361 | 7192 | — | 79 / 176 | $0.39 | $0.00 | $0.39 | 62% | 0.152 | stuck |
-| 36 | jev-solo | `jev-latest` | learned (blank) | full game · it81 | 4 | reached: Pokémon Tower 1F | — | 1.0 | 23978 | 6890 | — | 62 / 168 | $0.36 | $0.00 | $0.36 | 65% | 0.158 | manual |
-| 37 | jev-solo | `jev-latest` | learned (blank) | full game · it70 | 4 | reached: Pokémon Tower 1F | — | 1.9 | 26198 | 7780 | — | 79 / 157 | $0.40 | $0.00 | $0.40 | 58% | 0.135 | stuck |
-| 38 | jev-solo | `jev-latest` | learned (blank) | full game · it56 | 4 | reached: Pokémon Tower 1F | — | 1.4 | 27137 | 7877 | — | 77 / 163 | $0.41 | $0.00 | $0.41 | 52% | 0.123 | stuck |
-| 39 | jev-solo | `jev-latest` | learned (blank) | full game · it74 | 4 | reached: Pokémon Tower 1F | — | 0.6 | 27164 | 7467 | — | 85 / 154 | $0.42 | $0.00 | $0.42 | 62% | 0.147 | stuck |
-| 40 | jev-solo | `jev-latest` | learned (blank) | full game · it67 | 4 | reached: Pokémon Tower 1F | — | 1.8 | 27671 | 8861 | — | 77 / 146 | $0.51 | $0.00 | $0.51 | 56% | 0.175 | stuck |
-| 41 | jev-solo | `jev-latest` | learned (blank) | full game · it49 | 4 | reached: Pokémon Tower 1F | — | 1.2 | 28012 | 8450 | — | 81 / 242 | $0.44 | $0.00 | $0.44 | 50% | 0.131 | stuck |
-| 42 | jev-solo | `jev-latest` | learned (blank) | full game · it65 | 4 | reached: Pokémon Tower 1F | — | 2.9 | 28722 | 9723 | — | 83 / 196 | $0.58 | $0.00 | $0.58 | 56% | 0.204 | stuck |
-| 43 | jev-solo | `jev-latest` | learned (blank) | full game · it47 | 4 | reached: Pokémon Tower 1F | — | 1.4 | 30552 | 9967 | — | 83 / 164 | $0.51 | $0.00 | $0.51 | 51% | 0.102 | stuck |
-| 44 | jev-solo | `jev-latest` | learned (blank) | full game · it55 | 4 | reached: Pokémon Tower 1F | — | 1.1 | 31665 | 9582 | — | 77 / 206 | $0.53 | $0.00 | $0.53 | 59% | 0.181 | stuck |
-| 45 | jev-solo | `jev-latest` | learned (blank) | full game · it54 | 4 | reached: Pokémon Tower 1F | — | 1.7 | 32849 | 10814 | — | 82 / 239 | $0.60 | $0.00 | $0.60 | 63% | 0.256 | stuck |
-| 46 | jev-solo | `jev-latest` | learned (blank) | full game · it48 | 4 | reached: Pokémon Tower 1F | — | 1.9 | 33501 | 11032 | — | 81 / 180 | $0.56 | $0.00 | $0.56 | 52% | 0.141 | stuck |
-| 47 | jev-solo | `jev-latest` | learned (blank) | full game · it68 | 4 | reached: Pokémon Tower 1F | — | 3.2 | 40510 | 14343 | — | 76 / 149 | $0.75 | $0.00 | $0.75 | 55% | 0.181 | stuck |
-| 48 | jev-solo | `jev-latest` | learned (blank) | full game · it57 | 4 | reached: Pokémon Tower 1F | — | 1.0 | 41250 | 11417 | — | 74 / 149 | $0.57 | $0.00 | $0.57 | 62% | 0.182 | stuck |
-| 49 | jev-solo | `jev-latest` | learned (blank) | full game · it53 | 3 | reached: Pokémon Tower 1F | — | 0.7 | 21789 | 5869 | — | 77 / 211 | $0.28 | $0.00 | $0.28 | 63% | 0.174 | stuck |
-| 50 | jev-solo | `jev-latest` | learned (blank) | full game · it60 | 3 | reached: Pokémon Tower 1F | — | 0.5 | 25114 | 6393 | — | 77 / 188 | $0.35 | $0.00 | $0.35 | 57% | 0.141 | stuck |
-| 51 | jev-solo | `jev-latest` | learned (blank) | full game · it44 | 3 | reached: Pokémon Tower 1F | — | 1.1 | 33081 | 8968 | — | 80 / 161 | $0.50 | $0.00 | $0.50 | 53% | 0.160 | stuck |
-| 52 | jev-solo | `jev-latest` | learned (blank) | full game · it82 | 3 | reached: Rock Tunnel 1F | — | 0.4 | 17340 | 4758 | — | 60 / 176 | $0.23 | $0.00 | $0.23 | 63% | 0.185 | manual |
-| 53 | jev-solo | `jev-latest` | learned (blank) | full game · it78 | 3 | reached: Rock Tunnel 1F | — | 0.8 | 19137 | 5315 | — | 70 / 201 | $0.26 | $0.00 | $0.26 | 67% | 0.204 | manual |
-| 54 | jev-solo | `jev-latest` | learned (blank) | full game · it79 | 3 | reached: Rock Tunnel 1F | — | 0.5 | 20441 | 5365 | — | 65 / 192 | $0.27 | $0.00 | $0.27 | 65% | 0.171 | manual |
-| 55 | jev-solo | `jev-latest` | learned (blank) | full game · it58 | 3 | reached: Rock Tunnel 1F | — | 1.5 | 28016 | 8594 | — | 76 / 151 | $0.45 | $0.00 | $0.45 | 67% | 0.248 | stuck |
-| 56 | jev-solo | `jev-latest` | learned (blank) | full game · it51 | 3 | reached: Rock Tunnel 1F | — | 1.6 | 28166 | 8434 | — | 80 / 178 | $0.43 | $0.00 | $0.43 | 69% | 0.241 | stuck |
-| 57 | jev-solo | `jev-latest` | learned (blank) | full game · it43 | 3 | badge: Thunder | — | 0.8 | 16900 | 5129 | — | 82 / 310 | $0.24 | $0.00 | $0.24 | 64% | 0.188 | stuck |
-| 58 | jev-solo | `jev-latest` | learned (blank) | full game · it41 | 2 | reached: Rock Tunnel 1F | — | 2.2 | 32543 | 10886 | — | 78 / 167 | $0.54 | $0.00 | $0.54 | 62% | 0.240 | stuck |
-| 59 | jev-solo | `jev-latest` | learned (blank) | bills-house · it35 | 2 | reached: Vermilion City | — | 0.0 | 696 | 183 | — | 74 / 161 | $0.01 | $0.00 | $0.01 | 60% | 0.111 | segment_goal |
-| 60 | jev-solo | `jev-latest` | learned (blank) | full game · it42 | 2 | reached: Vermilion City | — | 0.3 | 17731 | 4545 | — | 80 / 318 | $0.25 | $0.00 | $0.25 | 51% | 0.205 | stuck |
-| 61 | jev-solo | `jev-latest` | learned (blank) | full game · it40 | 2 | reached: Vermilion City | — | 1.1 | 19552 | 6036 | — | 80 / 147 | $0.30 | $0.00 | $0.30 | 53% | 0.161 | stuck |
-| 62 | jev-solo | `jev-latest` | learned (blank) | full game · it39 | 2 | reached: Vermilion City | — | 0.3 | 19987 | 4925 | — | 79 / 148 | $0.27 | $0.00 | $0.27 | 63% | 0.129 | stuck |
-| 63 | jev-solo | `jev-latest` | learned (blank) | full game · it45 | 2 | reached: Vermilion City | — | 1.0 | 21187 | 6805 | — | 81 / 165 | $0.33 | $0.00 | $0.33 | 64% | 0.218 | stuck |
-| 64 | jev-solo | `jev-latest` | learned (blank) | full game · it46 | 2 | reached: Vermilion City | — | 0.3 | 24548 | 6162 | — | 84 / 165 | $0.36 | $0.00 | $0.36 | 53% | 0.201 | stuck |
-| 65 | jev-solo | `jev-latest` | learned (blank) | cerulean · it21 | 2 | badge: Cascade | — | 0.0 | 3837 | 859 | — | 85 / 181 | $0.04 | $0.00 | $0.04 | 70% | 0.117 | segment_goal |
-| 66 | jev-solo | `jev-latest` | learned (blank) | full game · it24 | 2 | badge: Cascade | — | 0.2 | 16647 | 4250 | — | 80 / 211 | $0.23 | $0.00 | $0.23 | 47% | 0.182 | stuck |
-| 67 | jev-solo | `jev-latest` | learned (blank) | bills-house · it31 | 2 | reached: Cerulean City | — | 0.0 | 4362 | 37 | — | 97 / 338 | $0.00 | $0.00 | $0.00 | 57% | 0.207 | budget_time |
-| 68 | jev-solo | `jev-latest` | learned (blank) | bills-house · it34 | 2 | reached: Cerulean City | — | 0.1 | 4483 | 1552 | — | 76 / 148 | $0.08 | $0.00 | $0.08 | 40% | 0.158 | stuck |
-| 69 | jev-solo | `jev-latest` | learned (blank) | bills-house · it32 | 2 | reached: Cerulean City | — | 0.1 | 7165 | 2126 | — | 81 / 172 | $0.12 | $0.00 | $0.12 | 33% | 0.157 | stuck |
-| 70 | jev-solo | `jev-latest` | learned (blank) | bills-house · it33 | 2 | reached: Cerulean City | — | 0.1 | 7656 | 2211 | — | 82 / 190 | $0.13 | $0.00 | $0.13 | 27% | 0.183 | stuck |
-| 71 | jev-solo | `jev-latest` | learned (blank) | bills-house · it28 | 2 | reached: Cerulean City | — | 0.1 | 7995 | 2251 | — | 80 / 171 | $0.14 | $0.00 | $0.14 | 53% | 0.197 | stuck |
-| 72 | jev-solo | `jev-latest` | learned (blank) | bills-house · it30 | 2 | reached: Cerulean City | — | 0.1 | 8876 | 2676 | — | 82 / 236 | $0.14 | $0.00 | $0.14 | 36% | 0.112 | stuck |
-| 73 | jev-solo | `jev-latest` | learned (blank) | bills-house · it25 | 2 | reached: Cerulean City | — | 0.1 | 9489 | 2707 | — | 80 / 161 | $0.17 | $0.00 | $0.17 | 50% | 0.190 | stuck |
-| 74 | jev-solo | `jev-latest` | learned (blank) | bills-house · it29 | 2 | reached: Cerulean City | — | 0.2 | 15003 | 4513 | — | 83 / 188 | $0.25 | $0.00 | $0.25 | 34% | 0.137 | budget_calls |
-| 75 | jev-solo | `jev-latest` | learned (blank) | bills-house · it26 | 2 | game started | — | 0.1 | 4588 | 1982 | — | 81 / 191 | $0.12 | $0.00 | $0.12 | 61% | 0.324 | stuck |
-| 76 | jev-solo | `jev-latest` | learned (blank) | bills-house · it27 | 2 | game started | — | 0.1 | 5791 | 1912 | — | 84 / 206 | $0.11 | $0.00 | $0.11 | 39% | 0.170 | stuck |
-| 77 | jev-solo | `jev-latest` | rom | mt-moon · it8 | 1 | reached: Cerulean City | — | 0.0 | 139 | 50 | — | 106 / 198 | $0.00 | $0.00 | $0.00 | 88% | 0.171 | segment_goal |
-| 78 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it11 | 1 | reached: Cerulean City | — | 0.0 | 306 | 98 | — | 74 / 159 | $0.00 | $0.00 | $0.00 | 76% | 0.197 | segment_goal |
-| 79 | jev-solo | `jev-latest` | learned (carried atlas) | mt-moon · it9 | 1 | reached: Cerulean City | — | 0.0 | 2109 | 584 | — | 77 / 146 | $0.03 | $0.00 | $0.03 | 81% | 0.331 | segment_goal |
-| 80 | jev-solo | `jev-latest` | learned (blank) | cerulean · it17 | 1 | reached: Cerulean City | — | 0.1 | 5984 | 2721 | — | 83 / 178 | $0.14 | $0.00 | $0.14 | 51% | 0.186 | stuck |
-| 81 | jev-solo | `jev-latest` | learned (blank) | cerulean · it14 | 1 | reached: Cerulean City | — | 0.1 | 6214 | 2658 | — | 84 / 167 | $0.14 | $0.00 | $0.14 | 57% | 0.289 | stuck |
-| 82 | jev-solo | `jev-latest` | learned (blank) | cerulean · it12 | 1 | reached: Cerulean City | — | 0.1 | 6561 | 2677 | — | 79 / 150 | $0.14 | $0.00 | $0.14 | 61% | 0.302 | stuck |
-| 83 | jev-solo | `jev-latest` | learned (blank) | cerulean · it19 | 1 | reached: Cerulean City | — | 0.1 | 7557 | 1999 | — | 87 / 175 | $0.15 | $0.00 | $0.15 | 13% | 0.601 | stuck |
-| 84 | jev-solo | `jev-latest` | learned (blank) | cerulean · it15 | 1 | reached: Cerulean City | — | 0.1 | 7643 | 2023 | — | 78 / 138 | $0.11 | $0.00 | $0.11 | 62% | 0.283 | stuck |
-| 85 | jev-solo | `jev-latest` | learned (blank) | cerulean · it13 | 1 | reached: Cerulean City | — | 0.1 | 8000 | 2845 | — | 85 / 157 | $0.15 | $0.00 | $0.15 | 64% | 0.295 | budget_calls |
-| 86 | jev-solo | `jev-latest` | learned (blank) | cerulean · it18 | 1 | reached: Cerulean City | — | 0.1 | 8128 | 2540 | — | 80 / 155 | $0.13 | $0.00 | $0.13 | 75% | 0.447 | stuck |
-| 87 | jev-solo | `jev-latest` | learned (blank) | full game · it38 | 1 | reached: Cerulean City | — | 0.2 | 11821 | 3352 | — | 81 / 162 | $0.21 | $0.00 | $0.21 | 59% | 0.176 | stuck |
-| 88 | jev-solo | `jev-latest` | learned (blank) | cerulean · it16 | 1 | reached: Cerulean City | — | 0.1 | 12000 | 2099 | — | 85 / 174 | $0.11 | $0.00 | $0.11 | 55% | 0.185 | budget_calls |
-| 89 | jev-solo | `jev-latest` | learned (blank) | full game · it37 | 1 | reached: Cerulean City | — | 0.2 | 13115 | 3577 | — | 75 / 145 | $0.22 | $0.00 | $0.22 | 62% | 0.193 | stuck |
-| 90 | jev-solo | `jev-latest` | learned (blank) | cerulean · it20 | 1 | reached: Cerulean City | — | 0.2 | 15000 | 4479 | — | 78 / 174 | $0.25 | $0.00 | $0.25 | 54% | 0.174 | budget_calls |
-| 91 | jev-solo | `jev-latest` | learned (blank) | full game · it50 | 1 | reached: Cerulean City | — | 0.2 | 15239 | 3874 | — | 81 / 160 | $0.22 | $0.00 | $0.22 | 63% | 0.189 | stuck |
-| 92 | jev-solo | `jev-latest` | rom | mt-moon · it3 | 1 | reached: Mt. Moon 1F | — | 0.1 | 4000 | 1549 | — | 85 / 215 | $0.08 | $0.00 | $0.08 | 55% | 0.238 | budget_calls |
-| 93 | jev-solo | `jev-latest` | rom | mt-moon · it4 | 1 | reached: Mt. Moon 1F | — | 0.1 | 4000 | 1570 | — | 81 / 162 | $0.07 | $0.00 | $0.07 | 67% | 0.271 | budget_calls |
-| 94 | jev-solo | `jev-latest` | rom | mt-moon · it5 | 1 | reached: Mt. Moon 1F | — | 0.1 | 4001 | 922 | — | 84 / 172 | $0.04 | $0.00 | $0.04 | 82% | 0.183 | budget_calls |
-| 95 | jev-assist | `jev-latest + claude-haiku-4-5-20251001 fallback` | rom | after-brock · it2 | 1 | reached: Mt. Moon 1F | — | 1.6 | 4296 | 1339 | 375 (145.91) | 92 / 191 | $0.06 | $4.39 | $4.45 | 71% | 0.309 | manual |
-| 96 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it10 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1743 | — | 76 / 144 | $0.09 | $0.00 | $0.09 | 72% | 0.297 | budget_calls |
-| 97 | jev-solo | `jev-latest` | rom | mt-moon · it6 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1973 | — | 82 / 158 | $0.09 | $0.00 | $0.09 | 84% | 0.188 | budget_calls |
-| 98 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it6 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1884 | — | 95 / 213 | $0.10 | $0.00 | $0.10 | 67% | 0.283 | budget_calls |
-| 99 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it7 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 2345 | — | 77 / 144 | $0.12 | $0.00 | $0.12 | 59% | 0.165 | budget_calls |
-| 100 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it8 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1733 | — | 80 / 153 | $0.08 | $0.00 | $0.08 | 81% | 0.296 | budget_calls |
-| 101 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it9 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1351 | — | 74 / 142 | $0.07 | $0.00 | $0.07 | 78% | 0.349 | budget_calls |
-| 102 | jev-solo | `jev-latest` | rom | mt-moon · it7 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6001 | 1929 | — | 80 / 148 | $0.09 | $0.00 | $0.09 | 82% | 0.183 | budget_calls |
-| 103 | jev-solo | `jev-latest` | learned (blank) | full game · it83 | 1 | reached: Mt. Moon 1F | — | 0.2 | 7870 | 2134 | — | 59 / 171 | $0.10 | $0.00 | $0.10 | 57% | 0.180 | manual |
-| 104 | jev-solo | `jev-latest` | learned (blank) | full game · it36 | 1 | reached: Mt. Moon 1F | — | 1.1 | 50797 | 21816 | — | 75 / 154 | $0.94 | $0.00 | $0.94 | 44% | 0.192 | stuck |
-| 105 | jev-solo | `jev-latest` | learned (blank) | power-on · it23 | 1 | badge: Boulder | — | 0.0 | 2187 | 567 | — | 88 / 245 | $0.02 | $0.00 | $0.02 | 77% | 0.194 | segment_goal |
-| 106 | jev-solo | `jev-latest` | learned (blank) | full game · it69 | 0 | reached: Viridian City | — | 0.4 | 22996 | 10100 | — | 76 / 159 | $0.45 | $0.00 | $0.45 | 62% | 0.298 | stuck |
-| 107 | jev-solo | `jev-latest` | learned (blank) | power-on · it22 | 0 | game started | — | 0.1 | 4083 | 2019 | — | 85 / 211 | $0.11 | $0.00 | $0.11 | 26% | 0.187 | stuck |
+| 1 | jev-solo | `jev-latest` | learned (blank) — outside the 20k cap | full game | 8 | champion defeated (Hall of Fame) | 0:57 · 35360 | 1.0 | 35361 | 7173 | — | 151 / 495 | $0.34 | $0.00 | $0.34 | 72% | 0.192 | champion |
+| 2 | jev-solo | `jev-latest` | learned (blank) | full game · it91 | 8 | champion defeated (Hall of Fame) | 0:59 · 24714 | 1.0 | 24715 | 6207 | — | 67 / 176 | $0.31 | $0.00 | $0.31 | 71% | 0.167 | champion |
+| 3 | jev-solo | `jev-latest` | learned (blank) — experiment | full game | 8 | champion defeated (Hall of Fame) | 2:30 · 53252 | 2.5 | 53253 | 9822 | — | 64 / 134 | $0.45 | $0.00 | $0.45 | 74% | 0.237 | champion |
+| 4 | jev-solo | `jev-latest` | learned (blank) | full game · it90 | 8 | reached: Victory Road 1F | — | 1.8 | 27339 | 7320 | — | 68 / 148 | $0.38 | $0.00 | $0.38 | 66% | 0.145 | manual |
+| 5 | jev-solo | `jev-latest` | learned (blank) | full game · it88 | 8 | reached: Victory Road 1F | — | 1.3 | 32634 | 8406 | — | 65 / 136 | $0.44 | $0.00 | $0.44 | 65% | 0.156 | manual |
+| 6 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | after-sabrina | 6 | reached: Pokémon Mansion 1F | — | 0.0 | 461 | 131 | — | 84 / 315 | $0.01 | $0.00 | $0.01 | 81% | 0.181 | segment_goal |
+| 7 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | cinnabar-island | 6 | reached: Pokémon Mansion 1F | — | 0.1 | 1243 | 359 | — | 82 / 307 | $0.02 | $0.00 | $0.02 | 66% | 0.248 | manual |
+| 8 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | cinnabar-island | 6 | reached: Pokémon Mansion 1F | — | 0.0 | 1275 | 381 | — | 86 / 332 | $0.02 | $0.00 | $0.02 | 58% | 0.131 | manual |
+| 9 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | cinnabar-island | 6 | reached: Pokémon Mansion 1F | — | 0.2 | 1356 | 408 | — | 84 / 207 | $0.02 | $0.00 | $0.02 | 64% | 0.213 | manual |
+| 10 | jev-solo | `jev-latest` | learned (blank) | full game · it85 | 6 | reached: Pokémon Mansion 1F | — | 1.1 | 21510 | 5685 | — | 61 / 136 | $0.28 | $0.00 | $0.28 | 71% | 0.185 | manual |
+| 11 | jev-solo | `jev-latest` | learned (blank) | full game · it86 | 6 | reached: Pokémon Mansion 1F | — | 1.0 | 28979 | 7317 | — | 61 / 136 | $0.39 | $0.00 | $0.39 | 68% | 0.206 | manual |
+| 12 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 6 | badge: Marsh | — | 2.8 | 22530 | 5885 | — | 76 / 327 | $0.30 | $0.00 | $0.30 | 63% | 0.133 | manual |
+| 13 | jev-solo | `jev-latest` | learned (blank) | full game · it75 | 6 | badge: Marsh | — | 5.2 | 51842 | 18428 | — | 112 / 224 | $1.05 | $0.00 | $1.05 | 61% | 0.213 | stuck |
+| 14 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | after-sabrina | 6 | reached: Silph Co. 1F | — | 0.1 | 422 | 120 | — | 80 / 333 | $0.01 | $0.00 | $0.01 | 57% | 0.122 | manual |
+| 15 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | after-sabrina | 6 | reached: Silph Co. 1F | — | 0.1 | 495 | 149 | — | 87 / 247 | $0.01 | $0.00 | $0.01 | 54% | 0.091 | manual |
+| 16 | jev-solo | `jev-latest` | learned (blank) — experiment | after-sabrina | 6 | reached: Silph Co. 1F | — | 0.0 | 2612 | 639 | — | 83 / 168 | $0.04 | $0.00 | $0.04 | 58% | 0.141 | manual |
+| 17 | jev-solo | `jev-latest` | learned (blank) | full game · it89 | 5 | reached: Silph Co. 1F | — | 1.1 | 19923 | 5260 | — | 67 / 140 | $0.27 | $0.00 | $0.27 | 65% | 0.138 | manual |
+| 18 | jev-solo | `jev-latest` | learned (blank) | full game | 5 | reached: Silph Co. 1F | — | 2.2 | 20003 | 5391 | — | 76 / 339 | $0.28 | $0.00 | $0.28 | 62% | 0.126 | budget_calls |
+| 19 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 5 | reached: Silph Co. 1F | — | 2.5 | 20911 | 5587 | — | 76 / 335 | $0.29 | $0.00 | $0.29 | 62% | 0.128 | manual |
+| 20 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 5 | reached: Silph Co. 1F | — | 2.6 | 21570 | 5704 | — | 76 / 331 | $0.30 | $0.00 | $0.30 | 62% | 0.130 | manual |
+| 21 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 5 | reached: Silph Co. 1F | — | 2.6 | 21572 | 5672 | — | 76 / 332 | $0.29 | $0.00 | $0.29 | 62% | 0.129 | manual |
+| 22 | jev-solo | `jev-latest` | learned (carried atlas) — experiment | full game | 5 | reached: Silph Co. 1F | — | 2.6 | 23003 | 5925 | — | 75 / 326 | $0.31 | $0.00 | $0.31 | 63% | 0.133 | budget_calls |
+| 23 | jev-solo | `jev-latest` | learned (blank) | full game · it64 | 5 | reached: Silph Co. 1F | — | 1.3 | 28966 | 9155 | — | 81 / 297 | $0.46 | $0.00 | $0.46 | 63% | 0.188 | stuck |
+| 24 | jev-solo | `jev-latest` | learned (blank) | full game · it72 | 5 | reached: Silph Co. 1F | — | 0.8 | 33433 | 9801 | — | 76 / 143 | $0.50 | $0.00 | $0.50 | 59% | 0.159 | stuck |
+| 25 | jev-solo | `jev-latest` | learned (blank) | full game · it71 | 5 | reached: Silph Co. 1F | — | 4.6 | 33839 | 10774 | — | 78 / 148 | $0.60 | $0.00 | $0.60 | 55% | 0.170 | stuck |
+| 26 | jev-solo | `jev-latest` | learned (blank) | full game · it62 | 5 | reached: Silph Co. 1F | — | 1.9 | 38929 | 12306 | — | 80 / 307 | $0.65 | $0.00 | $0.65 | 57% | 0.185 | stuck |
+| 27 | jev-solo | `jev-latest` | learned (blank) | full game · it76 | 5 | reached: Silph Co. 1F | — | 2.2 | 39115 | 9528 | — | 80 / 230 | $0.49 | $0.00 | $0.49 | 64% | 0.156 | stuck |
+| 28 | jev-solo | `jev-latest` | learned (blank) | full game · it61 | 5 | reached: Silph Co. 1F | — | 1.7 | 39508 | 12277 | — | 77 / 299 | $0.62 | $0.00 | $0.62 | 57% | 0.164 | stuck |
+| 29 | jev-solo | `jev-latest` | learned (blank) | full game · it73 | 5 | reached: Silph Co. 1F | — | 1.8 | 45011 | 14516 | — | 80 / 148 | $0.74 | $0.00 | $0.74 | 80% | 0.307 | stuck |
+| 30 | jev-solo | `jev-latest` | learned (blank) | full game · it87 | 5 | badge: Soul | — | 0.6 | 19315 | 5072 | — | 60 / 133 | $0.25 | $0.00 | $0.25 | 65% | 0.140 | manual |
+| 31 | jev-solo | `jev-latest` | learned (blank) | full game · it63 | 5 | badge: Soul | — | 1.5 | 33039 | 10142 | — | 81 / 298 | $0.53 | $0.00 | $0.53 | 62% | 0.178 | stuck |
+| 32 | jev-solo | `jev-latest` | learned (blank) | full game · it59 | 5 | badge: Soul | — | 1.9 | 52493 | 15750 | — | 74 / 144 | $0.80 | $0.00 | $0.80 | 57% | 0.160 | stuck |
+| 33 | jev-solo | `jev-latest` | learned (blank) | full game · it84 | 4 | reached: Pokémon Tower 1F | — | 0.5 | 17626 | 4405 | — | 60 / 158 | $0.22 | $0.00 | $0.22 | 66% | 0.162 | manual |
+| 34 | jev-solo | `jev-latest` | learned (blank) | full game · it80 | 4 | reached: Pokémon Tower 1F | — | 0.6 | 20968 | 5499 | — | 63 / 284 | $0.28 | $0.00 | $0.28 | 64% | 0.156 | manual |
+| 35 | jev-solo | `jev-latest` | learned (blank) | full game · it77 | 4 | reached: Pokémon Tower 1F | — | 1.0 | 21644 | 6615 | — | 69 / 169 | $0.33 | $0.00 | $0.33 | 65% | 0.187 | manual |
+| 36 | jev-solo | `jev-latest` | learned (blank) | full game · it52 | 4 | reached: Pokémon Tower 1F | — | 0.8 | 23361 | 7192 | — | 79 / 176 | $0.39 | $0.00 | $0.39 | 62% | 0.152 | stuck |
+| 37 | jev-solo | `jev-latest` | learned (blank) | full game · it81 | 4 | reached: Pokémon Tower 1F | — | 1.0 | 23978 | 6890 | — | 62 / 168 | $0.36 | $0.00 | $0.36 | 65% | 0.158 | manual |
+| 38 | jev-solo | `jev-latest` | learned (blank) | full game · it70 | 4 | reached: Pokémon Tower 1F | — | 1.9 | 26198 | 7780 | — | 79 / 157 | $0.40 | $0.00 | $0.40 | 58% | 0.135 | stuck |
+| 39 | jev-solo | `jev-latest` | learned (blank) | full game · it56 | 4 | reached: Pokémon Tower 1F | — | 1.4 | 27137 | 7877 | — | 77 / 163 | $0.41 | $0.00 | $0.41 | 52% | 0.123 | stuck |
+| 40 | jev-solo | `jev-latest` | learned (blank) | full game · it74 | 4 | reached: Pokémon Tower 1F | — | 0.6 | 27164 | 7467 | — | 85 / 154 | $0.42 | $0.00 | $0.42 | 62% | 0.147 | stuck |
+| 41 | jev-solo | `jev-latest` | learned (blank) | full game · it67 | 4 | reached: Pokémon Tower 1F | — | 1.8 | 27671 | 8861 | — | 77 / 146 | $0.51 | $0.00 | $0.51 | 56% | 0.175 | stuck |
+| 42 | jev-solo | `jev-latest` | learned (blank) | full game · it49 | 4 | reached: Pokémon Tower 1F | — | 1.2 | 28012 | 8450 | — | 81 / 242 | $0.44 | $0.00 | $0.44 | 50% | 0.131 | stuck |
+| 43 | jev-solo | `jev-latest` | learned (blank) | full game · it65 | 4 | reached: Pokémon Tower 1F | — | 2.9 | 28722 | 9723 | — | 83 / 196 | $0.58 | $0.00 | $0.58 | 56% | 0.204 | stuck |
+| 44 | jev-solo | `jev-latest` | learned (blank) | full game · it47 | 4 | reached: Pokémon Tower 1F | — | 1.4 | 30552 | 9967 | — | 83 / 164 | $0.51 | $0.00 | $0.51 | 51% | 0.102 | stuck |
+| 45 | jev-solo | `jev-latest` | learned (blank) | full game · it55 | 4 | reached: Pokémon Tower 1F | — | 1.1 | 31665 | 9582 | — | 77 / 206 | $0.53 | $0.00 | $0.53 | 59% | 0.181 | stuck |
+| 46 | jev-solo | `jev-latest` | learned (blank) | full game · it54 | 4 | reached: Pokémon Tower 1F | — | 1.7 | 32849 | 10814 | — | 82 / 239 | $0.60 | $0.00 | $0.60 | 63% | 0.256 | stuck |
+| 47 | jev-solo | `jev-latest` | learned (blank) | full game · it48 | 4 | reached: Pokémon Tower 1F | — | 1.9 | 33501 | 11032 | — | 81 / 180 | $0.56 | $0.00 | $0.56 | 52% | 0.141 | stuck |
+| 48 | jev-solo | `jev-latest` | learned (blank) | full game · it68 | 4 | reached: Pokémon Tower 1F | — | 3.2 | 40510 | 14343 | — | 76 / 149 | $0.75 | $0.00 | $0.75 | 55% | 0.181 | stuck |
+| 49 | jev-solo | `jev-latest` | learned (blank) | full game · it57 | 4 | reached: Pokémon Tower 1F | — | 1.0 | 41250 | 11417 | — | 74 / 149 | $0.57 | $0.00 | $0.57 | 62% | 0.182 | stuck |
+| 50 | jev-solo | `jev-latest` | learned (blank) | full game · it53 | 3 | reached: Pokémon Tower 1F | — | 0.7 | 21789 | 5869 | — | 77 / 211 | $0.28 | $0.00 | $0.28 | 63% | 0.174 | stuck |
+| 51 | jev-solo | `jev-latest` | learned (blank) | full game · it60 | 3 | reached: Pokémon Tower 1F | — | 0.5 | 25114 | 6393 | — | 77 / 188 | $0.35 | $0.00 | $0.35 | 57% | 0.141 | stuck |
+| 52 | jev-solo | `jev-latest` | learned (blank) | full game · it44 | 3 | reached: Pokémon Tower 1F | — | 1.1 | 33081 | 8968 | — | 80 / 161 | $0.50 | $0.00 | $0.50 | 53% | 0.160 | stuck |
+| 53 | jev-solo | `jev-latest` | learned (blank) | full game · it82 | 3 | reached: Rock Tunnel 1F | — | 0.4 | 17340 | 4758 | — | 60 / 176 | $0.23 | $0.00 | $0.23 | 63% | 0.185 | manual |
+| 54 | jev-solo | `jev-latest` | learned (blank) | full game · it78 | 3 | reached: Rock Tunnel 1F | — | 0.8 | 19137 | 5315 | — | 70 / 201 | $0.26 | $0.00 | $0.26 | 67% | 0.204 | manual |
+| 55 | jev-solo | `jev-latest` | learned (blank) | full game · it79 | 3 | reached: Rock Tunnel 1F | — | 0.5 | 20441 | 5365 | — | 65 / 192 | $0.27 | $0.00 | $0.27 | 65% | 0.171 | manual |
+| 56 | jev-solo | `jev-latest` | learned (blank) | full game · it58 | 3 | reached: Rock Tunnel 1F | — | 1.5 | 28016 | 8594 | — | 76 / 151 | $0.45 | $0.00 | $0.45 | 67% | 0.248 | stuck |
+| 57 | jev-solo | `jev-latest` | learned (blank) | full game · it51 | 3 | reached: Rock Tunnel 1F | — | 1.6 | 28166 | 8434 | — | 80 / 178 | $0.43 | $0.00 | $0.43 | 69% | 0.241 | stuck |
+| 58 | jev-solo | `jev-latest` | learned (blank) | full game · it43 | 3 | badge: Thunder | — | 0.8 | 16900 | 5129 | — | 82 / 310 | $0.24 | $0.00 | $0.24 | 64% | 0.188 | stuck |
+| 59 | jev-solo | `jev-latest` | learned (blank) | full game · it41 | 2 | reached: Rock Tunnel 1F | — | 2.2 | 32543 | 10886 | — | 78 / 167 | $0.54 | $0.00 | $0.54 | 62% | 0.240 | stuck |
+| 60 | jev-solo | `jev-latest` | learned (blank) | bills-house · it35 | 2 | reached: Vermilion City | — | 0.0 | 696 | 183 | — | 74 / 161 | $0.01 | $0.00 | $0.01 | 60% | 0.111 | segment_goal |
+| 61 | jev-solo | `jev-latest` | learned (blank) | full game · it42 | 2 | reached: Vermilion City | — | 0.3 | 17731 | 4545 | — | 80 / 318 | $0.25 | $0.00 | $0.25 | 51% | 0.205 | stuck |
+| 62 | jev-solo | `jev-latest` | learned (blank) | full game · it40 | 2 | reached: Vermilion City | — | 1.1 | 19552 | 6036 | — | 80 / 147 | $0.30 | $0.00 | $0.30 | 53% | 0.161 | stuck |
+| 63 | jev-solo | `jev-latest` | learned (blank) | full game · it39 | 2 | reached: Vermilion City | — | 0.3 | 19987 | 4925 | — | 79 / 148 | $0.27 | $0.00 | $0.27 | 63% | 0.129 | stuck |
+| 64 | jev-solo | `jev-latest` | learned (blank) | full game · it45 | 2 | reached: Vermilion City | — | 1.0 | 21187 | 6805 | — | 81 / 165 | $0.33 | $0.00 | $0.33 | 64% | 0.218 | stuck |
+| 65 | jev-solo | `jev-latest` | learned (blank) | full game · it46 | 2 | reached: Vermilion City | — | 0.3 | 24548 | 6162 | — | 84 / 165 | $0.36 | $0.00 | $0.36 | 53% | 0.201 | stuck |
+| 66 | jev-solo | `jev-latest` | learned (blank) | cerulean · it21 | 2 | badge: Cascade | — | 0.0 | 3837 | 859 | — | 85 / 181 | $0.04 | $0.00 | $0.04 | 70% | 0.117 | segment_goal |
+| 67 | jev-solo | `jev-latest` | learned (blank) | full game · it24 | 2 | badge: Cascade | — | 0.2 | 16647 | 4250 | — | 80 / 211 | $0.23 | $0.00 | $0.23 | 47% | 0.182 | stuck |
+| 68 | jev-solo | `jev-latest` | learned (blank) | bills-house · it31 | 2 | reached: Cerulean City | — | 0.0 | 4362 | 37 | — | 97 / 338 | $0.00 | $0.00 | $0.00 | 57% | 0.207 | budget_time |
+| 69 | jev-solo | `jev-latest` | learned (blank) | bills-house · it34 | 2 | reached: Cerulean City | — | 0.1 | 4483 | 1552 | — | 76 / 148 | $0.08 | $0.00 | $0.08 | 40% | 0.158 | stuck |
+| 70 | jev-solo | `jev-latest` | learned (blank) | bills-house · it32 | 2 | reached: Cerulean City | — | 0.1 | 7165 | 2126 | — | 81 / 172 | $0.12 | $0.00 | $0.12 | 33% | 0.157 | stuck |
+| 71 | jev-solo | `jev-latest` | learned (blank) | bills-house · it33 | 2 | reached: Cerulean City | — | 0.1 | 7656 | 2211 | — | 82 / 190 | $0.13 | $0.00 | $0.13 | 27% | 0.183 | stuck |
+| 72 | jev-solo | `jev-latest` | learned (blank) | bills-house · it28 | 2 | reached: Cerulean City | — | 0.1 | 7995 | 2251 | — | 80 / 171 | $0.14 | $0.00 | $0.14 | 53% | 0.197 | stuck |
+| 73 | jev-solo | `jev-latest` | learned (blank) | bills-house · it30 | 2 | reached: Cerulean City | — | 0.1 | 8876 | 2676 | — | 82 / 236 | $0.14 | $0.00 | $0.14 | 36% | 0.112 | stuck |
+| 74 | jev-solo | `jev-latest` | learned (blank) | bills-house · it25 | 2 | reached: Cerulean City | — | 0.1 | 9489 | 2707 | — | 80 / 161 | $0.17 | $0.00 | $0.17 | 50% | 0.190 | stuck |
+| 75 | jev-solo | `jev-latest` | learned (blank) | bills-house · it29 | 2 | reached: Cerulean City | — | 0.2 | 15003 | 4513 | — | 83 / 188 | $0.25 | $0.00 | $0.25 | 34% | 0.137 | budget_calls |
+| 76 | jev-solo | `jev-latest` | learned (blank) | bills-house · it26 | 2 | game started | — | 0.1 | 4588 | 1982 | — | 81 / 191 | $0.12 | $0.00 | $0.12 | 61% | 0.324 | stuck |
+| 77 | jev-solo | `jev-latest` | learned (blank) | bills-house · it27 | 2 | game started | — | 0.1 | 5791 | 1912 | — | 84 / 206 | $0.11 | $0.00 | $0.11 | 39% | 0.170 | stuck |
+| 78 | jev-solo | `jev-latest` | rom | mt-moon · it8 | 1 | reached: Cerulean City | — | 0.0 | 139 | 50 | — | 106 / 198 | $0.00 | $0.00 | $0.00 | 88% | 0.171 | segment_goal |
+| 79 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it11 | 1 | reached: Cerulean City | — | 0.0 | 306 | 98 | — | 74 / 159 | $0.00 | $0.00 | $0.00 | 76% | 0.197 | segment_goal |
+| 80 | jev-solo | `jev-latest` | learned (carried atlas) | mt-moon · it9 | 1 | reached: Cerulean City | — | 0.0 | 2109 | 584 | — | 77 / 146 | $0.03 | $0.00 | $0.03 | 81% | 0.331 | segment_goal |
+| 81 | jev-solo | `jev-latest` | learned (blank) | cerulean · it17 | 1 | reached: Cerulean City | — | 0.1 | 5984 | 2721 | — | 83 / 178 | $0.14 | $0.00 | $0.14 | 51% | 0.186 | stuck |
+| 82 | jev-solo | `jev-latest` | learned (blank) | cerulean · it14 | 1 | reached: Cerulean City | — | 0.1 | 6214 | 2658 | — | 84 / 167 | $0.14 | $0.00 | $0.14 | 57% | 0.289 | stuck |
+| 83 | jev-solo | `jev-latest` | learned (blank) | cerulean · it12 | 1 | reached: Cerulean City | — | 0.1 | 6561 | 2677 | — | 79 / 150 | $0.14 | $0.00 | $0.14 | 61% | 0.302 | stuck |
+| 84 | jev-solo | `jev-latest` | learned (blank) | cerulean · it19 | 1 | reached: Cerulean City | — | 0.1 | 7557 | 1999 | — | 87 / 175 | $0.15 | $0.00 | $0.15 | 13% | 0.601 | stuck |
+| 85 | jev-solo | `jev-latest` | learned (blank) | cerulean · it15 | 1 | reached: Cerulean City | — | 0.1 | 7643 | 2023 | — | 78 / 138 | $0.11 | $0.00 | $0.11 | 62% | 0.283 | stuck |
+| 86 | jev-solo | `jev-latest` | learned (blank) | cerulean · it13 | 1 | reached: Cerulean City | — | 0.1 | 8000 | 2845 | — | 85 / 157 | $0.15 | $0.00 | $0.15 | 64% | 0.295 | budget_calls |
+| 87 | jev-solo | `jev-latest` | learned (blank) | cerulean · it18 | 1 | reached: Cerulean City | — | 0.1 | 8128 | 2540 | — | 80 / 155 | $0.13 | $0.00 | $0.13 | 75% | 0.447 | stuck |
+| 88 | jev-solo | `jev-latest` | learned (blank) | full game · it38 | 1 | reached: Cerulean City | — | 0.2 | 11821 | 3352 | — | 81 / 162 | $0.21 | $0.00 | $0.21 | 59% | 0.176 | stuck |
+| 89 | jev-solo | `jev-latest` | learned (blank) | cerulean · it16 | 1 | reached: Cerulean City | — | 0.1 | 12000 | 2099 | — | 85 / 174 | $0.11 | $0.00 | $0.11 | 55% | 0.185 | budget_calls |
+| 90 | jev-solo | `jev-latest` | learned (blank) | full game · it37 | 1 | reached: Cerulean City | — | 0.2 | 13115 | 3577 | — | 75 / 145 | $0.22 | $0.00 | $0.22 | 62% | 0.193 | stuck |
+| 91 | jev-solo | `jev-latest` | learned (blank) | cerulean · it20 | 1 | reached: Cerulean City | — | 0.2 | 15000 | 4479 | — | 78 / 174 | $0.25 | $0.00 | $0.25 | 54% | 0.174 | budget_calls |
+| 92 | jev-solo | `jev-latest` | learned (blank) | full game · it50 | 1 | reached: Cerulean City | — | 0.2 | 15239 | 3874 | — | 81 / 160 | $0.22 | $0.00 | $0.22 | 63% | 0.189 | stuck |
+| 93 | jev-solo | `jev-latest` | rom | mt-moon · it3 | 1 | reached: Mt. Moon 1F | — | 0.1 | 4000 | 1549 | — | 85 / 215 | $0.08 | $0.00 | $0.08 | 55% | 0.238 | budget_calls |
+| 94 | jev-solo | `jev-latest` | rom | mt-moon · it4 | 1 | reached: Mt. Moon 1F | — | 0.1 | 4000 | 1570 | — | 81 / 162 | $0.07 | $0.00 | $0.07 | 67% | 0.271 | budget_calls |
+| 95 | jev-solo | `jev-latest` | rom | mt-moon · it5 | 1 | reached: Mt. Moon 1F | — | 0.1 | 4001 | 922 | — | 84 / 172 | $0.04 | $0.00 | $0.04 | 82% | 0.183 | budget_calls |
+| 96 | jev-assist | `jev-latest + claude-haiku-4-5-20251001 fallback` | rom | after-brock · it2 | 1 | reached: Mt. Moon 1F | — | 1.6 | 4296 | 1339 | 375 (145.91) | 92 / 191 | $0.06 | $4.39 | $4.45 | 71% | 0.309 | manual |
+| 97 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it10 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1743 | — | 76 / 144 | $0.09 | $0.00 | $0.09 | 72% | 0.297 | budget_calls |
+| 98 | jev-solo | `jev-latest` | rom | mt-moon · it6 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1973 | — | 82 / 158 | $0.09 | $0.00 | $0.09 | 84% | 0.188 | budget_calls |
+| 99 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it6 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1884 | — | 95 / 213 | $0.10 | $0.00 | $0.10 | 67% | 0.283 | budget_calls |
+| 100 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it7 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 2345 | — | 77 / 144 | $0.12 | $0.00 | $0.12 | 59% | 0.165 | budget_calls |
+| 101 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it8 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1733 | — | 80 / 153 | $0.08 | $0.00 | $0.08 | 81% | 0.296 | budget_calls |
+| 102 | jev-solo | `jev-latest` | learned (blank) | mt-moon · it9 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6000 | 1351 | — | 74 / 142 | $0.07 | $0.00 | $0.07 | 78% | 0.349 | budget_calls |
+| 103 | jev-solo | `jev-latest` | rom | mt-moon · it7 | 1 | reached: Mt. Moon 1F | — | 0.1 | 6001 | 1929 | — | 80 / 148 | $0.09 | $0.00 | $0.09 | 82% | 0.183 | budget_calls |
+| 104 | jev-solo | `jev-latest` | learned (blank) | full game · it83 | 1 | reached: Mt. Moon 1F | — | 0.2 | 7870 | 2134 | — | 59 / 171 | $0.10 | $0.00 | $0.10 | 57% | 0.180 | manual |
+| 105 | jev-solo | `jev-latest` | learned (blank) | full game · it36 | 1 | reached: Mt. Moon 1F | — | 1.1 | 50797 | 21816 | — | 75 / 154 | $0.94 | $0.00 | $0.94 | 44% | 0.192 | stuck |
+| 106 | jev-solo | `jev-latest` | learned (blank) | power-on · it23 | 1 | badge: Boulder | — | 0.0 | 2187 | 567 | — | 88 / 245 | $0.02 | $0.00 | $0.02 | 77% | 0.194 | segment_goal |
+| 107 | jev-solo | `jev-latest` | learned (blank) | full game · it69 | 0 | reached: Viridian City | — | 0.4 | 22996 | 10100 | — | 76 / 159 | $0.45 | $0.00 | $0.45 | 62% | 0.298 | stuck |
+| 108 | jev-solo | `jev-latest` | learned (blank) | power-on · it22 | 0 | game started | — | 0.1 | 4083 | 2019 | — | 85 / 211 | $0.11 | $0.00 | $0.11 | 26% | 0.187 | stuck |
 
 ### Self-improvement iterations (jev-assist → bench/improve.py → next iteration; goal: 0 fallbacks, then pass jev-solo)
 
@@ -569,6 +581,144 @@ Variants: **solo**: The final exam: Jev + code only, no LLM anywhere, stuck = fa
 - Final session assessment - Game mathematically unwinnable
 
 **CLI chunks:** 2210 (the CLI is restarted whenever the model ends its turn, a chunk rotates, stalls or is rate-limited): 2202 exited, 7 rate_limited, 1 budget_calls; median 0.1 min, longest 25 min.
+
+### jev-solo: jev-latest (jev-solo-exp-uncapped-2__full_game_from_power-on__blank_atlas__no_call_or_time_cap__monitored__UNASSISTED__no_interventions___402e35e__jev-latest_20261021_101119)
+
+- CLI: `jev-agent` jev_agent.py v2 · server commit `69ef71e` · prompt `49106d19e201a25e`
+- Started 2026-10-21T10:11:19 · ended 2026-10-21T11:09:27 · active 0:57 h · wall 0:58 h · paused 0:00 h · exit: **champion**
+- Tool calls 35361 · images 3479 · reloads 0 · black-outs 6 · in-game playtime 20:57:55 · Pokédex 5 owned · maps visited 161
+- Tokens uncached in / cache reads / out: 8.2M / 0.0M / 1372k · cost $0.34 · chunks 1
+
+**Final team**
+
+| # | Pokémon | Lv | HP | Atk | Def | Spd | Spc | Moves |
+|---|---|---|---|---|---|---|---|---|
+| 1 | AAAAAAAAAA (Charizard) | 87 | 225/304 | 232 | 209 | 239 | 214 | Strength, Slash, Flamethrower, Cut |
+| 2 | AAAAAAAAAA (Lapras) | 15 | 67/67 | 35 | 31 | 23 | 36 | Water Gun, Thunderbolt, Surf, Ice Beam |
+| 3 | AAAAAAAAAA (Machop) | 24 | 70/70 | 45 | 34 | 25 | 26 | Karate Chop, Low Kick, Fire Blast |
+| 4 | AAAAAAAAAA (Machop) | 24 | 67/67 | 48 | 30 | 21 | 26 | Karate Chop, Low Kick |
+
+**Milestones** (first occurrence; time is active server time)
+
+| Time | Calls | Playtime | Milestone |
+|---|---|---|---|
+| 0:00 | 72 | 0:00:00 | game started |
+| 0:00 | 89 | 0:00:17 | reached: Pallet Town |
+| 0:00 | 131 | 0:02:32 | obtained: Charmander |
+| 0:00 | 131 | 0:02:32 | starter: Charmander |
+| 0:00 | 159 | 0:04:30 | reached: Route 1 |
+| 0:00 | 170 | 0:05:33 | reached: Viridian City |
+| 0:00 | 282 | 0:11:02 | reached: Route 2 |
+| 0:00 | 375 | 0:16:56 | reached: Pewter City |
+| 0:00 | 1022 | 0:41:16 | blacked out (lost a battle) |
+| 0:01 | 1710 | 0:58:12 | evolved: Charmander → Charmeleon |
+| 0:02 | 4451 | 2:06:04 | badge: Boulder |
+| 0:02 | 4460 | 2:06:25 | reached: Route 3 |
+| 0:02 | 4555 | 2:12:51 | reached: Route 4 |
+| 0:02 | 4559 | 2:12:59 | reached: Mt. Moon 1F |
+| 0:03 | 5001 | 2:32:35 | reached: Route 22 |
+| 0:03 | 5019 | 2:33:30 | reached: Route 23 |
+| 0:03 | 5487 | 2:59:27 | reached: Cerulean City |
+| 0:06 | 9672 | 5:31:54 | badge: Cascade |
+| 0:06 | 9702 | 5:34:09 | reached: Route 24 |
+| 0:06 | 9821 | 5:40:41 | reached: Route 25 |
+| 0:06 | 9892 | 5:45:34 | evolved: Charmeleon → Charizard |
+| 0:06 | 10051 | 5:51:46 | reached: Route 5 |
+| 0:06 | 10069 | 5:52:18 | reached: Route 6 |
+| 0:06 | 10114 | 5:54:56 | reached: Vermilion City |
+| 0:06 | 10147 | 5:56:08 | reached: Vermilion Dock |
+| 0:06 | 10525 | 6:13:31 | badge: Thunder |
+| 0:06 | 10573 | 6:15:04 | reached: Route 9 |
+| 0:06 | 10632 | 6:18:32 | reached: Route 10 |
+| 0:06 | 10636 | 6:18:50 | reached: Rock Tunnel 1F |
+| 0:06 | 10665 | 6:20:28 | reached: Rock Tunnel B1F |
+| 0:07 | 11350 | 6:47:03 | reached: Route 11 |
+| 0:11 | 12552 | 7:39:00 | reached: Route 12 |
+| 0:12 | 13173 | 8:08:40 | reached: Lavender Town |
+| 0:12 | 13250 | 8:10:31 | reached: Route 8 |
+| 0:12 | 13309 | 8:14:01 | reached: Route 7 |
+| 0:12 | 13316 | 8:14:10 | reached: Celadon City |
+| 0:12 | 13511 | 8:24:55 | badge: Rainbow |
+| 0:13 | 13610 | 8:28:44 | reached: Rocket Hideout B1F |
+| 0:17 | 14856 | 9:10:52 | reached: Pokémon Tower 1F |
+| 0:21 | 16223 | 10:06:22 | reached: Route 13 |
+| 0:22 | 16348 | 10:14:03 | reached: Route 14 |
+| 0:22 | 16425 | 10:18:12 | reached: Route 15 |
+| 0:22 | 16438 | 10:18:37 | reached: Fuchsia City |
+| 0:22 | 16628 | 10:30:52 | badge: Soul |
+| 0:22 | 16654 | 10:31:58 | reached: Safari Zone Gate |
+| 0:22 | 16661 | 10:32:19 | reached: Safari Zone Center |
+| 0:22 | 16668 | 10:32:30 | reached: Safari Zone East |
+| 0:22 | 16688 | 10:33:29 | reached: Safari Zone North |
+| 0:22 | 16692 | 10:33:46 | reached: Safari Zone West |
+| 0:26 | 17944 | 11:21:55 | reached: Saffron City |
+| 0:26 | 17973 | 11:22:55 | reached: Silph Co. 1F |
+| 0:28 | 18870 | 12:08:52 | badge: Marsh |
+| 0:28 | 18940 | 12:11:48 | obtained: Lapras |
+| 0:28 | 19095 | 12:18:27 | reached: Route 21 |
+| 0:28 | 19179 | 12:23:19 | reached: Cinnabar Island |
+| 0:28 | 19201 | 12:24:01 | reached: Pokémon Mansion 1F |
+| 0:52 | 31032 | 18:14:45 | badge: Volcano |
+| 0:53 | 31387 | 18:36:56 | badge: Earth |
+| 0:53 | 31478 | 18:42:28 | reached: Victory Road 1F |
+| 0:53 | 31546 | 18:46:58 | reached: Victory Road 2F |
+| 0:53 | 31560 | 18:47:44 | reached: Victory Road 3F |
+| 0:54 | 31852 | 19:00:53 | reached: Indigo Plateau |
+| 0:54 | 31857 | 19:00:59 | reached: Indigo Plateau Lobby |
+| 0:54 | 31985 | 19:07:08 | reached: Lorelei's Room |
+| 0:54 | 32008 | 19:09:09 | defeated: Lorelei |
+| 0:54 | 32016 | 19:09:19 | reached: Bruno's Room |
+| 0:54 | 32039 | 19:11:07 | defeated: Bruno |
+| 0:54 | 32048 | 19:11:14 | reached: Agatha's Room |
+| 0:54 | 32072 | 19:13:25 | defeated: Agatha |
+| 0:54 | 32080 | 19:13:36 | reached: Lance's Room |
+| 0:55 | 32632 | 19:28:41 | obtained: Machop |
+| 0:57 | 35314 | 20:52:27 | defeated: Lance |
+| 0:57 | 35331 | 20:53:34 | reached: Champion's Room |
+| 0:57 | 35352 | 20:56:34 | defeated: Champion |
+| 0:57 | 35353 | 20:57:30 | reached: Hall of Fame |
+| 0:57 | 35360 | 20:57:55 | champion defeated (Hall of Fame) |
+
+**CLI chunks:** 1 (the CLI is restarted whenever the model ends its turn, a chunk rotates, stalls or is rate-limited): 1 exited; median 58.1 min, longest 58 min.
+
+<details><summary>Chunks</summary>
+
+| # | Started | Minutes | Exit | Tool calls seen | Tokens in / cached / out |
+|---|---|---|---|---|---|
+| 1 | 2026-10-21T10:11:19 | 58 | exited | 35361 | 8.2M / 0.0M / 1372k |
+
+</details>
+
+**Jev (solo)** — The final exam: Jev + code only, no LLM anywhere, stuck = fail. Code enumerates the legal actions every step, reads progress (badges, bag, moves, maps, milestones) and walks a whole-game objective graph; it also heals, trains to level targets, teaches HMs, clears obstacles and runs stuck recovery. Jev picks every action and answers yes/no checks ("stuck?", "objective done?" where code cannot see a story event).
+
+- Decisions 11868 (asked Jev 7173, forced by code 4695, labelled 7173) · models jev-1.13.0 · input tokens 8173205 · Jev $0.3433
+- Jev latency mean 221 ms · p50 151 · p95 495 · max 13498
+- Fallbacks: none (variant without a safety net)
+- Full game from power-on
+- Planner calls 0 ($0.0000, errors 0) · objective changes 122 · objectives Jev marked done 0 · final objective: Beat the Elite Four and the Champion: next, Champion in Champion's Room (talk to them).
+
+| Decision kind | Labelled | Correct | Mean confidence |
+|---|---|---|---|
+| battle | 1545 | 97% | 0.63 |
+| faint_switch | 1 | 0% | 0.20 |
+| intro | 52 | 52% | 0.42 |
+| overworld | 5286 | 66% | 0.54 |
+| prompt | 289 | 43% | 0.47 |
+
+**Confidence vs. correctness** ("correct" = the chosen action was accepted and did what it is for: a move that hurt the foe at least as much as the turn hurt us, a walk that moved or started something new, a press that changed the screen; ECE against p(choice) = 0.1917)
+
+| Jev confidence | Decisions | Mean confidence | Mean p(choice) | Correct | |
+|---|---|---|---|---|---|
+| 0.0–0.1 | 150 | 0.06 | 0.39 | 74% | `███████████████     ` |
+| 0.1–0.2 | 636 | 0.15 | 0.29 | 57% | `███████████         ` |
+| 0.2–0.3 | 920 | 0.24 | 0.36 | 63% | `█████████████       ` |
+| 0.3–0.4 | 815 | 0.34 | 0.45 | 62% | `████████████        ` |
+| 0.4–0.5 | 739 | 0.44 | 0.53 | 68% | `██████████████      ` |
+| 0.5–0.6 | 616 | 0.54 | 0.62 | 77% | `███████████████     ` |
+| 0.6–0.7 | 633 | 0.64 | 0.70 | 83% | `█████████████████   ` |
+| 0.7–0.8 | 772 | 0.74 | 0.78 | 89% | `██████████████████  ` |
+| 0.8–0.9 | 655 | 0.84 | 0.87 | 89% | `██████████████████  ` |
+| 0.9–1.0 | 1237 | 0.96 | 0.96 | 66% | `█████████████       ` |
 
 ### jev-solo: jev-latest (jev-solo_it91_jev-latest_20261020_123511)
 

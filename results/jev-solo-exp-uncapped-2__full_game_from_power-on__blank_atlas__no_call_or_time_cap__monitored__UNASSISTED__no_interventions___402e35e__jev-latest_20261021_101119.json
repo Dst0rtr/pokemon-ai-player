@@ -1,0 +1,661 @@
+{
+ "schema": 1,
+ "run_id": "jev-solo-exp-uncapped-2__full_game_from_power-on__blank_atlas__no_call_or_time_cap__monitored__UNASSISTED__no_interventions___402e35e__jev-latest_20261021_101119",
+ "harness": {
+  "chunks": [
+  {"n": 1, "started": "2026-10-21T10:11:19", "seconds": 3485.4, "exit_code": 0, "exit_reason": "exited", "cli_session": "jev-solo-exp-uncapped-2__full_game_from_power-on__blank_atlas__no_call_or_time_cap__monitored__UNASSISTED__no_interventions___402e35e__jev-latest_20261021_101119", "fresh": true, "tool_calls_seen": 35361, "tokens": {"input": 8173205, "cached_input": 0, "cache_write": 0, "output": 1371732, "reasoning": 0}, "cost_usd": 0.343275, "turns": 11868, "errors": [], "rate_limited": false, "mcp_servers": [], "server_tool_calls_total": 35361, "milestones_total": 84}
+ ],
+  "provider": "jev",
+  "cli": "jev-agent",
+  "cli_version": "jev_agent.py v2",
+  "model": "jev-latest",
+  "started": "2026-10-21T10:11:19",
+  "ended": "2026-10-21T11:09:27",
+  "server_commit": "69ef71e",
+  "budget": {
+   "hours": 48.0,
+   "max_calls": 1000000
+  },
+  "active_seconds": 3485.4224197864532,
+  "paused_seconds": 0.0,
+  "exit_reason": "champion",
+  "cli_session": "jev-solo-exp-uncapped-2__full_game_from_power-on__blank_atlas__no_call_or_time_cap__monitored__UNASSISTED__no_interventions___402e35e__jev-latest_20261021_101119",
+  "config": {
+   "provider": "jev",
+   "model": "jev-latest",
+   "mode": "jev-solo",
+   "variant": "solo",
+   "mock": false,
+   "jev_model": "jev-latest",
+   "fallback_model": "claude-haiku-4-5-20251001",
+   "map_source": "learned",
+   "atlas": null,
+   "segment": null,
+   "experiment": "uncapped-2: full game from power-on, blank atlas, no call or time cap, monitored, UNASSISTED (no interventions) (402e35e)",
+   "iteration": null,
+   "budget": {
+    "hours": 48.0,
+    "max_calls": 1000000
+   },
+   "agent_args": [
+    "--replan-every=40",
+    "--confidence-threshold=0.3",
+    "--fallback-threshold=0.3",
+    "--stuck-fail-steps=2000",
+    "--fallback-budget-usd=25.0",
+    "--max-fallbacks=0",
+    "--map-source=learned"
+   ],
+   "planner_model": null
+  },
+  "mode": "jev-solo",
+  "experiment": "uncapped-2: full game from power-on, blank atlas, no call or time cap, monitored, UNASSISTED (no interventions) (402e35e)",
+  "map_source": {
+   "source": "learned",
+   "atlas_seed": null,
+   "start": "blank"
+  },
+  "track": "jev",
+  "variant": "solo",
+  "display_model": "jev-latest",
+  "mock": false,
+  "jev_model": "jev-latest",
+  "prompt_sha256": "49106d19e201a25e",
+  "tokens": {
+   "input": 8173205,
+   "cached_input": 0,
+   "cache_write": 0,
+   "output": 1371732,
+   "reasoning": 0
+  },
+  "cost_usd": 0.3433,
+  "cost_estimated": false,
+  "jev": {
+   "decisions": 11868,
+   "jev_calls": 7173,
+   "forced": 4695,
+   "scored": 7173,
+   "accuracy": 0.718,
+   "input_tokens": 8173205,
+   "jev_cost_usd": 0.343274,
+   "latency_ms": {
+    "mean": 220.8,
+    "p50": 151.1,
+    "p95": 495.1,
+    "max": 13498.2
+   },
+   "calibration": [
+    {
+     "lo": 0.0,
+     "hi": 0.1,
+     "n": 150,
+     "mean_conf": 0.056,
+     "mean_p": 0.391,
+     "accuracy": 0.74
+    },
+    {
+     "lo": 0.1,
+     "hi": 0.2,
+     "n": 636,
+     "mean_conf": 0.152,
+     "mean_p": 0.291,
+     "accuracy": 0.572
+    },
+    {
+     "lo": 0.2,
+     "hi": 0.3,
+     "n": 920,
+     "mean_conf": 0.245,
+     "mean_p": 0.357,
+     "accuracy": 0.629
+    },
+    {
+     "lo": 0.3,
+     "hi": 0.4,
+     "n": 815,
+     "mean_conf": 0.343,
+     "mean_p": 0.446,
+     "accuracy": 0.623
+    },
+    {
+     "lo": 0.4,
+     "hi": 0.5,
+     "n": 739,
+     "mean_conf": 0.442,
+     "mean_p": 0.534,
+     "accuracy": 0.682
+    },
+    {
+     "lo": 0.5,
+     "hi": 0.6,
+     "n": 616,
+     "mean_conf": 0.544,
+     "mean_p": 0.617,
+     "accuracy": 0.768
+    },
+    {
+     "lo": 0.6,
+     "hi": 0.7,
+     "n": 633,
+     "mean_conf": 0.643,
+     "mean_p": 0.702,
+     "accuracy": 0.831
+    },
+    {
+     "lo": 0.7,
+     "hi": 0.8,
+     "n": 772,
+     "mean_conf": 0.743,
+     "mean_p": 0.783,
+     "accuracy": 0.887
+    },
+    {
+     "lo": 0.8,
+     "hi": 0.9,
+     "n": 655,
+     "mean_conf": 0.843,
+     "mean_p": 0.867,
+     "accuracy": 0.887
+    },
+    {
+     "lo": 0.9,
+     "hi": 1.0,
+     "n": 1237,
+     "mean_conf": 0.959,
+     "mean_p": 0.964,
+     "accuracy": 0.663
+    }
+   ],
+   "ece": 0.1917,
+   "by_kind": {
+    "battle": {
+     "n": 1545,
+     "accuracy": 0.97,
+     "mean_conf": 0.631
+    },
+    "faint_switch": {
+     "n": 1,
+     "accuracy": 0.0,
+     "mean_conf": 0.2
+    },
+    "intro": {
+     "n": 52,
+     "accuracy": 0.519,
+     "mean_conf": 0.421
+    },
+    "overworld": {
+     "n": 5286,
+     "accuracy": 0.662,
+     "mean_conf": 0.541
+    },
+    "prompt": {
+     "n": 289,
+     "accuracy": 0.433,
+     "mean_conf": 0.47
+    }
+   },
+   "models": [
+    "jev-1.13.0"
+   ],
+   "planner_calls": 0,
+   "planner_cost_usd": 0,
+   "planner_errors": 0,
+   "objective_changes": 122,
+   "jev_marked_done": 0,
+   "steps": 11868,
+   "final_objective": "Beat the Elite Four and the Champion: next, Champion in Champion's Room (talk to them)."
+  },
+  "wall_seconds": 3488.0,
+  "benchmark_entry": {
+   "label": "unassisted (no interventions), blank atlas, one seed, OUTSIDE the standard 20,000-call cap (no call or time cap)",
+   "standard": false
+  }
+ },
+ "metrics": {
+  "milestones": [
+  {"name": "game started", "frame": 9850, "elapsed_s": 8.9, "tool_calls": 72, "at": "2026-10-21T10:11:30", "snapshot": {"started": true, "playtime": "0:00:00", "badges": 0, "badge_bits": 0, "dex_owned": 0, "dex_seen": 0, "party_count": 0, "max_level": 0, "party": [], "team": [], "surfing": false, "money": 3000, "map": 38, "map_name": "Red's House 2F", "maps_visited": 2, "hall_of_fame": 0, "battles": 0, "in_battle": 0}},
+  {"name": "reached: Pallet Town", "frame": 10893, "elapsed_s": 9.5, "tool_calls": 89, "at": "2026-10-21T10:11:31", "snapshot": {"started": true, "playtime": "0:00:17", "badges": 0, "badge_bits": 0, "dex_owned": 0, "dex_seen": 0, "party_count": 0, "max_level": 0, "party": [], "team": [], "surfing": false, "money": 3000, "map": 0, "map_name": "Pallet Town", "maps_visited": 3, "hall_of_fame": 0, "battles": 0, "in_battle": 0}},
+  {"name": "obtained: Charmander", "frame": 18982, "elapsed_s": 12.6, "tool_calls": 131, "at": "2026-10-21T10:11:34", "snapshot": {"started": true, "playtime": "0:02:32", "badges": 0, "badge_bits": 0, "dex_owned": 1, "dex_seen": 1, "party_count": 1, "max_level": 5, "party": ["Charmander L5"], "team": [{"species": "Charmander", "nick": "AAAAAAAAAA", "level": 5, "hp": 19, "max_hp": 19, "status": "", "types": ["Fire"], "moves": [["Scratch", 35], ["Growl", 40]], "stats": [11, 10, 11, 10]}], "surfing": false, "money": 3000, "map": 40, "map_name": "Oak's Lab", "maps_visited": 4, "hall_of_fame": 0, "battles": 0, "in_battle": 0}},
+  {"name": "starter: Charmander", "frame": 18982, "elapsed_s": 12.6, "tool_calls": 131, "at": "2026-10-21T10:11:34", "snapshot": {"started": true, "playtime": "0:02:32", "badges": 0, "badge_bits": 0, "dex_owned": 1, "dex_seen": 1, "party_count": 1, "max_level": 5, "party": ["Charmander L5"], "team": [{"species": "Charmander", "nick": "AAAAAAAAAA", "level": 5, "hp": 19, "max_hp": 19, "status": "", "types": ["Fire"], "moves": [["Scratch", 35], ["Growl", 40]], "stats": [11, 10, 11, 10]}], "surfing": false, "money": 3000, "map": 40, "map_name": "Oak's Lab", "maps_visited": 4, "hall_of_fame": 0, "battles": 0, "in_battle": 0}},
+  {"name": "reached: Route 1", "frame": 26105, "elapsed_s": 13.7, "tool_calls": 159, "at": "2026-10-21T10:11:35", "snapshot": {"started": true, "playtime": "0:04:30", "badges": 0, "badge_bits": 0, "dex_owned": 1, "dex_seen": 2, "party_count": 1, "max_level": 6, "party": ["Charmander L6"], "team": [{"species": "Charmander", "nick": "AAAAAAAAAA", "level": 6, "hp": 21, "max_hp": 21, "status": "", "types": ["Fire"], "moves": [["Scratch", 35], ["Growl", 40]], "stats": [13, 11, 13, 11]}], "surfing": false, "money": 3175, "map": 12, "map_name": "Route 1", "maps_visited": 5, "hall_of_fame": 0, "battles": 1, "in_battle": 0}},
+  {"name": "reached: Viridian City", "frame": 29837, "elapsed_s": 14.4, "tool_calls": 170, "at": "2026-10-21T10:11:35", "snapshot": {"started": true, "playtime": "0:05:33", "badges": 0, "badge_bits": 0, "dex_owned": 1, "dex_seen": 3, "party_count": 1, "max_level": 7, "party": ["Charmander L7"], "team": [{"species": "Charmander", "nick": "AAAAAAAAAA", "level": 7, "hp": 16, "max_hp": 24, "status": "", "types": ["Fire"], "moves": [["Scratch", 32], ["Growl", 40]], "stats": [14, 12, 14, 12]}], "surfing": false, "money": 3175, "map": 1, "map_name": "Viridian City", "maps_visited": 6, "hall_of_fame": 0, "battles": 2, "in_battle": 0}},
+  {"name": "reached: Route 2", "frame": 49649, "elapsed_s": 18.9, "tool_calls": 282, "at": "2026-10-21T10:11:40", "snapshot": {"started": true, "playtime": "0:11:02", "badges": 0, "badge_bits": 0, "dex_owned": 1, "dex_seen": 4, "party_count": 1, "max_level": 7, "party": ["Charmander L7"], "team": [{"species": "Charmander", "nick": "AAAAAAAAAA", "level": 7, "hp": 18, "max_hp": 24, "status": "", "types": ["Fire"], "moves": [["Scratch", 30], ["Growl", 40]], "stats": [14, 12, 14, 12]}], "surfing": false, "money": 3175, "map": 13, "map_name": "Route 2", "maps_visited": 9, "hall_of_fame": 0, "battles": 4, "in_battle": 0}},
+  {"name": "reached: Pewter City", "frame": 70967, "elapsed_s": 23.6, "tool_calls": 375, "at": "2026-10-21T10:11:45", "snapshot": {"started": true, "playtime": "0:16:56", "badges": 0, "badge_bits": 0, "dex_owned": 1, "dex_seen": 6, "party_count": 1, "max_level": 9, "party": ["Charmander L9"], "team": [{"species": "Charmander", "nick": "AAAAAAAAAA", "level": 9, "hp": 12, "max_hp": 28, "status": "", "types": ["Fire"], "moves": [["Scratch", 20], ["Growl", 40], ["Ember", 22]], "stats": [17, 14, 17, 14]}], "surfing": false, "money": 3325, "map": 2, "map_name": "Pewter City", "maps_visited": 13, "hall_of_fame": 0, "battles": 8, "in_battle": 0}},
+  {"name": "blacked out (lost a battle)", "frame": 158936, "elapsed_s": 48.0, "tool_calls": 1022, "at": "2026-10-21T10:12:09", "snapshot": {"started": true, "playtime": "0:41:16", "badges": 0, "badge_bits": 0, "dex_owned": 1, "dex_seen": 13, "party_count": 1, "max_level": 14, "party": ["Charmander L14"], "team": [{"species": "Charmander", "nick": "AAAAAAAAAA", "level": 14, "hp": 38, "max_hp": 38, "status": "", "types": ["Fire"], "moves": [["Scratch", 35], ["Growl", 40], ["Ember", 25]], "stats": [24, 20, 25, 21]}], "surfing": false, "money": 1772, "map": 2, "map_name": "Pewter City", "maps_visited": 16, "hall_of_fame": 0, "battles": 25, "in_battle": 0}},
+  {"name": "evolved: Charmander → Charmeleon", "frame": 220275, "elapsed_s": 73.2, "tool_calls": 1710, "at": "2026-10-21T10:12:34", "snapshot": {"started": true, "playtime": "0:58:12", "badges": 0, "badge_bits": 0, "dex_owned": 2, "dex_seen": 14, "party_count": 1, "max_level": 16, "party": ["Charmeleon L16"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 16, "hp": 49, "max_hp": 49, "status": "", "types": ["Fire"], "moves": [["Scratch", 18], ["Growl", 40], ["Ember", 16], ["Leer", 30]], "stats": [31, 27, 33, 28]}], "surfing": false, "money": 1772, "map": 51, "map_name": "Viridian Forest", "maps_visited": 16, "hall_of_fame": 0, "battles": 49, "in_battle": 0}},
+  {"name": "blacked out (lost a battle)", "frame": 271912, "elapsed_s": 94.4, "tool_calls": 2240, "at": "2026-10-21T10:12:55", "snapshot": {"started": true, "playtime": "1:12:28", "badges": 0, "badge_bits": 0, "dex_owned": 2, "dex_seen": 14, "party_count": 1, "max_level": 17, "party": ["Charmeleon L17"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 17, "hp": 52, "max_hp": 52, "status": "", "types": ["Fire"], "moves": [["Scratch", 35], ["Growl", 40], ["Ember", 25], ["Leer", 30]], "stats": [33, 29, 35, 30]}], "surfing": false, "money": 886, "map": 2, "map_name": "Pewter City", "maps_visited": 16, "hall_of_fame": 0, "battles": 67, "in_battle": 0}},
+  {"name": "badge: Boulder", "frame": 465941, "elapsed_s": 169.8, "tool_calls": 4451, "at": "2026-10-21T10:14:11", "snapshot": {"started": true, "playtime": "2:06:04", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 14, "party_count": 1, "max_level": 20, "party": ["Charmeleon L20"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 20, "hp": 54, "max_hp": 60, "status": "", "types": ["Fire"], "moves": [["Scratch", 27], ["Growl", 40], ["Ember", 20], ["Leer", 29]], "stats": [39, 35, 42, 35]}], "surfing": false, "money": 2272, "map": 54, "map_name": "Pewter Gym", "maps_visited": 16, "hall_of_fame": 0, "battles": 126, "in_battle": 0}},
+  {"name": "reached: Route 3", "frame": 467244, "elapsed_s": 170.2, "tool_calls": 4460, "at": "2026-10-21T10:14:11", "snapshot": {"started": true, "playtime": "2:06:25", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 14, "party_count": 1, "max_level": 20, "party": ["Charmeleon L20"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 20, "hp": 54, "max_hp": 60, "status": "", "types": ["Fire"], "moves": [["Scratch", 27], ["Growl", 40], ["Ember", 20], ["Leer", 29]], "stats": [39, 35, 42, 35]}], "surfing": false, "money": 2272, "map": 14, "map_name": "Route 3", "maps_visited": 17, "hall_of_fame": 0, "battles": 126, "in_battle": 0}},
+  {"name": "reached: Route 4", "frame": 490421, "elapsed_s": 175.0, "tool_calls": 4555, "at": "2026-10-21T10:14:16", "snapshot": {"started": true, "playtime": "2:12:51", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 17, "party_count": 1, "max_level": 22, "party": ["Charmeleon L22"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 22, "hp": 57, "max_hp": 66, "status": "", "types": ["Fire"], "moves": [["Scratch", 20], ["Growl", 40], ["Ember", 10], ["Leer", 29]], "stats": [43, 38, 45, 38]}], "surfing": false, "money": 3097, "map": 15, "map_name": "Route 4", "maps_visited": 18, "hall_of_fame": 0, "battles": 132, "in_battle": 0}},
+  {"name": "reached: Mt. Moon 1F", "frame": 490931, "elapsed_s": 175.2, "tool_calls": 4559, "at": "2026-10-21T10:14:16", "snapshot": {"started": true, "playtime": "2:12:59", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 17, "party_count": 1, "max_level": 22, "party": ["Charmeleon L22"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 22, "hp": 57, "max_hp": 66, "status": "", "types": ["Fire"], "moves": [["Scratch", 20], ["Growl", 40], ["Ember", 10], ["Leer", 29]], "stats": [43, 38, 45, 38]}], "surfing": false, "money": 3097, "map": 59, "map_name": "Mt. Moon 1F", "maps_visited": 19, "hall_of_fame": 0, "battles": 132, "in_battle": 0}},
+  {"name": "reached: Route 22", "frame": 561886, "elapsed_s": 198.1, "tool_calls": 5001, "at": "2026-10-21T10:14:39", "snapshot": {"started": true, "playtime": "2:32:35", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 22, "party_count": 1, "max_level": 23, "party": ["Charmeleon L23"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 23, "hp": 65, "max_hp": 68, "status": "", "types": ["Fire"], "moves": [["Scratch", 26], ["Growl", 40], ["Ember", 21], ["Leer", 30]], "stats": [45, 39, 47, 40]}], "surfing": false, "money": 3962, "map": 33, "map_name": "Route 22", "maps_visited": 28, "hall_of_fame": 0, "battles": 152, "in_battle": 0}},
+  {"name": "reached: Route 23", "frame": 565189, "elapsed_s": 199.0, "tool_calls": 5019, "at": "2026-10-21T10:14:40", "snapshot": {"started": true, "playtime": "2:33:30", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 22, "party_count": 1, "max_level": 23, "party": ["Charmeleon L23"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 23, "hp": 65, "max_hp": 68, "status": "", "types": ["Fire"], "moves": [["Scratch", 25], ["Growl", 40], ["Ember", 21], ["Leer", 30]], "stats": [45, 39, 47, 40]}], "surfing": false, "money": 3962, "map": 34, "map_name": "Route 23", "maps_visited": 30, "hall_of_fame": 0, "battles": 153, "in_battle": 0}},
+  {"name": "reached: Cerulean City", "frame": 658935, "elapsed_s": 222.7, "tool_calls": 5487, "at": "2026-10-21T10:15:04", "snapshot": {"started": true, "playtime": "2:59:27", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 25, "party_count": 1, "max_level": 24, "party": ["Charmeleon L24"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 24, "hp": 59, "max_hp": 71, "status": "", "types": ["Fire"], "moves": [["Scratch", 19], ["Growl", 40], ["Ember", 14], ["Leer", 30]], "stats": [47, 41, 50, 41]}], "surfing": false, "money": 4262, "map": 3, "map_name": "Cerulean City", "maps_visited": 33, "hall_of_fame": 0, "battles": 175, "in_battle": 0}},
+  {"name": "blacked out (lost a battle)", "frame": 680159, "elapsed_s": 227.4, "tool_calls": 5582, "at": "2026-10-21T10:15:08", "snapshot": {"started": true, "playtime": "3:05:20", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 30, "party_count": 1, "max_level": 25, "party": ["Charmeleon L25"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 25, "hp": 74, "max_hp": 74, "status": "", "types": ["Fire"], "moves": [["Scratch", 35], ["Growl", 40], ["Ember", 25], ["Leer", 30]], "stats": [49, 43, 52, 43]}], "surfing": false, "money": 2361, "map": 3, "map_name": "Cerulean City", "maps_visited": 35, "hall_of_fame": 0, "battles": 178, "in_battle": 0}},
+  {"name": "blacked out (lost a battle)", "frame": 811141, "elapsed_s": 263.3, "tool_calls": 6657, "at": "2026-10-21T10:15:44", "snapshot": {"started": true, "playtime": "3:41:33", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 31, "party_count": 1, "max_level": 28, "party": ["Charmeleon L28"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 28, "hp": 82, "max_hp": 82, "status": "", "types": ["Fire"], "moves": [["Scratch", 35], ["Growl", 40], ["Ember", 25], ["Leer", 30]], "stats": [56, 48, 59, 49]}], "surfing": false, "money": 1180, "map": 3, "map_name": "Cerulean City", "maps_visited": 35, "hall_of_fame": 0, "battles": 238, "in_battle": 0}},
+  {"name": "blacked out (lost a battle)", "frame": 989205, "elapsed_s": 308.6, "tool_calls": 7956, "at": "2026-10-21T10:16:30", "snapshot": {"started": true, "playtime": "4:30:45", "badges": 1, "badge_bits": 1, "dex_owned": 2, "dex_seen": 31, "party_count": 1, "max_level": 31, "party": ["Charmeleon L31"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 31, "hp": 91, "max_hp": 91, "status": "", "types": ["Fire"], "moves": [["Scratch", 35], ["Growl", 40], ["Ember", 25], ["Leer", 30]], "stats": [63, 54, 66, 55]}], "surfing": false, "money": 590, "map": 3, "map_name": "Cerulean City", "maps_visited": 35, "hall_of_fame": 0, "battles": 329, "in_battle": 0}},
+  {"name": "badge: Cascade", "frame": 1210472, "elapsed_s": 366.7, "tool_calls": 9672, "at": "2026-10-21T10:17:28", "snapshot": {"started": true, "playtime": "5:31:54", "badges": 2, "badge_bits": 3, "dex_owned": 2, "dex_seen": 31, "party_count": 1, "max_level": 34, "party": ["Charmeleon L34"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 34, "hp": 64, "max_hp": 101, "status": "", "types": ["Fire"], "moves": [["Scratch", 8], ["Slash", 6], ["Ember", 8], ["Leer", 28]], "stats": [71, 60, 75, 61]}], "surfing": false, "money": 2669, "map": 65, "map_name": "Cerulean Gym", "maps_visited": 35, "hall_of_fame": 0, "battles": 438, "in_battle": 0}},
+  {"name": "reached: Route 24", "frame": 1218564, "elapsed_s": 368.1, "tool_calls": 9702, "at": "2026-10-21T10:17:29", "snapshot": {"started": true, "playtime": "5:34:09", "badges": 2, "badge_bits": 3, "dex_owned": 2, "dex_seen": 33, "party_count": 1, "max_level": 34, "party": ["Charmeleon L34"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 34, "hp": 59, "max_hp": 101, "status": "", "types": ["Fire"], "moves": [["Scratch", 7], ["Slash", 4], ["Ember", 7], ["Leer", 28]], "stats": [71, 60, 75, 61]}], "surfing": false, "money": 3264, "map": 35, "map_name": "Route 24", "maps_visited": 36, "hall_of_fame": 0, "battles": 439, "in_battle": 0}},
+  {"name": "reached: Route 25", "frame": 1242145, "elapsed_s": 373.6, "tool_calls": 9821, "at": "2026-10-21T10:17:35", "snapshot": {"started": true, "playtime": "5:40:41", "badges": 2, "badge_bits": 3, "dex_owned": 2, "dex_seen": 35, "party_count": 1, "max_level": 35, "party": ["Charmeleon L35"], "team": [{"species": "Charmeleon", "nick": "AAAAAAAAAA", "level": 35, "hp": 103, "max_hp": 103, "status": "", "types": ["Fire"], "moves": [["Scratch", 32], ["Slash", 20], ["Ember", 25], ["Leer", 30]], "stats": [73, 62, 77, 63]}], "surfing": false, "money": 4874, "map": 36, "map_name": "Route 25", "maps_visited": 37, "hall_of_fame": 0, "battles": 445, "in_battle": 0}},
+  {"name": "evolved: Charmeleon → Charizard", "frame": 1259822, "elapsed_s": 376.8, "tool_calls": 9892, "at": "2026-10-21T10:17:38", "snapshot": {"started": true, "playtime": "5:45:34", "badges": 2, "badge_bits": 3, "dex_owned": 3, "dex_seen": 37, "party_count": 1, "max_level": 36, "party": ["Charizard L36"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 36, "hp": 111, "max_hp": 121, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 22], ["Slash", 20], ["Ember", 22], ["Leer", 30]], "stats": [89, 79, 93, 79]}], "surfing": false, "money": 6324, "map": 36, "map_name": "Route 25", "maps_visited": 37, "hall_of_fame": 0, "battles": 450, "in_battle": 0}},
+  {"name": "reached: Route 5", "frame": 1282185, "elapsed_s": 384.2, "tool_calls": 10051, "at": "2026-10-21T10:17:45", "snapshot": {"started": true, "playtime": "5:51:46", "badges": 2, "badge_bits": 3, "dex_owned": 3, "dex_seen": 38, "party_count": 1, "max_level": 36, "party": ["Charizard L36"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 36, "hp": 107, "max_hp": 121, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 20], ["Slash", 20], ["Ember", 21], ["Leer", 30]], "stats": [89, 79, 93, 79]}], "surfing": false, "money": 6834, "map": 16, "map_name": "Route 5", "maps_visited": 42, "hall_of_fame": 0, "battles": 451, "in_battle": 0}},
+  {"name": "reached: Route 6", "frame": 1284162, "elapsed_s": 384.9, "tool_calls": 10069, "at": "2026-10-21T10:17:46", "snapshot": {"started": true, "playtime": "5:52:18", "badges": 2, "badge_bits": 3, "dex_owned": 3, "dex_seen": 38, "party_count": 1, "max_level": 36, "party": ["Charizard L36"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 36, "hp": 107, "max_hp": 121, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 20], ["Slash", 20], ["Ember", 21], ["Leer", 30]], "stats": [89, 79, 93, 79]}], "surfing": false, "money": 6834, "map": 17, "map_name": "Route 6", "maps_visited": 46, "hall_of_fame": 0, "battles": 451, "in_battle": 0}},
+  {"name": "reached: Vermilion City", "frame": 1293644, "elapsed_s": 386.9, "tool_calls": 10114, "at": "2026-10-21T10:17:48", "snapshot": {"started": true, "playtime": "5:54:56", "badges": 2, "badge_bits": 3, "dex_owned": 3, "dex_seen": 40, "party_count": 1, "max_level": 36, "party": ["Charizard L36"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 36, "hp": 99, "max_hp": 121, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 18], ["Slash", 18], ["Ember", 19], ["Leer", 30]], "stats": [89, 79, 93, 79]}], "surfing": false, "money": 7674, "map": 5, "map_name": "Vermilion City", "maps_visited": 47, "hall_of_fame": 0, "battles": 454, "in_battle": 0}},
+  {"name": "reached: Vermilion Dock", "frame": 1297967, "elapsed_s": 388.5, "tool_calls": 10147, "at": "2026-10-21T10:17:50", "snapshot": {"started": true, "playtime": "5:56:08", "badges": 2, "badge_bits": 3, "dex_owned": 3, "dex_seen": 40, "party_count": 1, "max_level": 36, "party": ["Charizard L36"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 36, "hp": 121, "max_hp": 121, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 35], ["Slash", 20], ["Ember", 25], ["Leer", 30]], "stats": [89, 79, 93, 79]}], "surfing": false, "money": 7674, "map": 94, "map_name": "Vermilion Dock", "maps_visited": 49, "hall_of_fame": 0, "battles": 454, "in_battle": 0}},
+  {"name": "badge: Thunder", "frame": 1360688, "elapsed_s": 406.5, "tool_calls": 10525, "at": "2026-10-21T10:18:08", "snapshot": {"started": true, "playtime": "6:13:31", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 44, "party_count": 1, "max_level": 38, "party": ["Charizard L38"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 38, "hp": 113, "max_hp": 127, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 23], ["Slash", 17], ["Ember", 23], ["Cut", 30]], "stats": [95, 83, 99, 84]}], "surfing": false, "money": 14090, "map": 92, "map_name": "Vermilion Gym", "maps_visited": 53, "hall_of_fame": 0, "battles": 459, "in_battle": 0}},
+  {"name": "reached: Route 9", "frame": 1366286, "elapsed_s": 408.7, "tool_calls": 10573, "at": "2026-10-21T10:18:10", "snapshot": {"started": true, "playtime": "6:15:04", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 44, "party_count": 1, "max_level": 38, "party": ["Charizard L38"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 38, "hp": 113, "max_hp": 127, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 23], ["Slash", 17], ["Ember", 23], ["Cut", 30]], "stats": [95, 83, 99, 84]}], "surfing": false, "money": 14090, "map": 20, "map_name": "Route 9", "maps_visited": 54, "hall_of_fame": 0, "battles": 459, "in_battle": 0}},
+  {"name": "reached: Route 10", "frame": 1378798, "elapsed_s": 411.9, "tool_calls": 10632, "at": "2026-10-21T10:18:13", "snapshot": {"started": true, "playtime": "6:18:32", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 46, "party_count": 1, "max_level": 38, "party": ["Charizard L38"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 38, "hp": 113, "max_hp": 127, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 19], ["Slash", 17], ["Ember", 19], ["Cut", 30]], "stats": [95, 83, 99, 84]}], "surfing": false, "money": 15110, "map": 21, "map_name": "Route 10", "maps_visited": 55, "hall_of_fame": 0, "battles": 462, "in_battle": 0}},
+  {"name": "reached: Rock Tunnel 1F", "frame": 1379896, "elapsed_s": 412.1, "tool_calls": 10636, "at": "2026-10-21T10:18:13", "snapshot": {"started": true, "playtime": "6:18:50", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 46, "party_count": 1, "max_level": 38, "party": ["Charizard L38"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 38, "hp": 113, "max_hp": 127, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 19], ["Slash", 17], ["Ember", 19], ["Cut", 30]], "stats": [95, 83, 99, 84]}], "surfing": false, "money": 15110, "map": 82, "map_name": "Rock Tunnel 1F", "maps_visited": 56, "hall_of_fame": 0, "battles": 462, "in_battle": 0}},
+  {"name": "reached: Rock Tunnel B1F", "frame": 1385810, "elapsed_s": 413.7, "tool_calls": 10665, "at": "2026-10-21T10:18:15", "snapshot": {"started": true, "playtime": "6:20:28", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 48, "party_count": 1, "max_level": 38, "party": ["Charizard L38"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 38, "hp": 113, "max_hp": 127, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 17], ["Slash", 16], ["Ember", 18], ["Cut", 30]], "stats": [95, 83, 99, 84]}], "surfing": false, "money": 16260, "map": 232, "map_name": "Rock Tunnel B1F", "maps_visited": 57, "hall_of_fame": 0, "battles": 465, "in_battle": 0}},
+  {"name": "reached: Route 11", "frame": 1481801, "elapsed_s": 478.4, "tool_calls": 11350, "at": "2026-10-21T10:19:19", "snapshot": {"started": true, "playtime": "6:47:03", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 50, "party_count": 1, "max_level": 39, "party": ["Charizard L39"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 39, "hp": 117, "max_hp": 131, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 15], ["Slash", 14], ["Ember", 15], ["Cut", 30]], "stats": [97, 85, 101, 86]}], "surfing": false, "money": 18120, "map": 22, "map_name": "Route 11", "maps_visited": 64, "hall_of_fame": 0, "battles": 470, "in_battle": 0}},
+  {"name": "reached: Route 12", "frame": 1669544, "elapsed_s": 687.4, "tool_calls": 12552, "at": "2026-10-21T10:22:48", "snapshot": {"started": true, "playtime": "7:39:00", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 53, "party_count": 1, "max_level": 41, "party": ["Charizard L41"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 41, "hp": 77, "max_hp": 137, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 0], ["Slash", 0], ["Ember", 0], ["Cut", 30]], "stats": [102, 90, 107, 91]}], "surfing": false, "money": 25035, "map": 23, "map_name": "Route 12", "maps_visited": 77, "hall_of_fame": 0, "battles": 500, "in_battle": 0}},
+  {"name": "reached: Lavender Town", "frame": 1776789, "elapsed_s": 749.0, "tool_calls": 13173, "at": "2026-10-21T10:23:50", "snapshot": {"started": true, "playtime": "8:08:40", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 54, "party_count": 1, "max_level": 43, "party": ["Charizard L43"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 43, "hp": 138, "max_hp": 144, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 21], ["Slash", 18], ["Ember", 20], ["Cut", 30]], "stats": [108, 95, 112, 96]}], "surfing": false, "money": 28410, "map": 4, "map_name": "Lavender Town", "maps_visited": 78, "hall_of_fame": 0, "battles": 533, "in_battle": 0}},
+  {"name": "reached: Route 8", "frame": 1783467, "elapsed_s": 755.9, "tool_calls": 13250, "at": "2026-10-21T10:23:57", "snapshot": {"started": true, "playtime": "8:10:31", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 54, "party_count": 1, "max_level": 43, "party": ["Charizard L43"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 43, "hp": 144, "max_hp": 144, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 35], ["Slash", 20], ["Ember", 25], ["Cut", 30]], "stats": [108, 95, 112, 96]}], "surfing": false, "money": 28410, "map": 19, "map_name": "Route 8", "maps_visited": 80, "hall_of_fame": 0, "battles": 533, "in_battle": 0}},
+  {"name": "reached: Route 7", "frame": 1796181, "elapsed_s": 761.1, "tool_calls": 13309, "at": "2026-10-21T10:24:02", "snapshot": {"started": true, "playtime": "8:14:01", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 55, "party_count": 1, "max_level": 43, "party": ["Charizard L43"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 43, "hp": 136, "max_hp": 144, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 31], ["Slash", 19], ["Ember", 23], ["Cut", 30]], "stats": [108, 95, 112, 96]}], "surfing": false, "money": 30280, "map": 18, "map_name": "Route 7", "maps_visited": 84, "hall_of_fame": 0, "battles": 535, "in_battle": 0}},
+  {"name": "reached: Celadon City", "frame": 1796722, "elapsed_s": 761.3, "tool_calls": 13316, "at": "2026-10-21T10:24:02", "snapshot": {"started": true, "playtime": "8:14:10", "badges": 3, "badge_bits": 7, "dex_owned": 3, "dex_seen": 55, "party_count": 1, "max_level": 43, "party": ["Charizard L43"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 43, "hp": 136, "max_hp": 144, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 31], ["Slash", 19], ["Ember", 23], ["Cut", 30]], "stats": [108, 95, 112, 96]}], "surfing": false, "money": 30280, "map": 6, "map_name": "Celadon City", "maps_visited": 85, "hall_of_fame": 0, "battles": 535, "in_battle": 0}},
+  {"name": "badge: Rainbow", "frame": 1835507, "elapsed_s": 779.2, "tool_calls": 13511, "at": "2026-10-21T10:24:20", "snapshot": {"started": true, "playtime": "8:24:55", "badges": 4, "badge_bits": 15, "dex_owned": 3, "dex_seen": 62, "party_count": 1, "max_level": 45, "party": ["Charizard L45"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 45, "hp": 150, "max_hp": 151, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 27], ["Slash", 17], ["Ember", 18], ["Cut", 30]], "stats": [113, 100, 118, 101]}], "surfing": false, "money": 38451, "map": 134, "map_name": "Celadon Gym", "maps_visited": 87, "hall_of_fame": 0, "battles": 542, "in_battle": 0}},
+  {"name": "reached: Rocket Hideout B1F", "frame": 1849276, "elapsed_s": 798.6, "tool_calls": 13610, "at": "2026-10-21T10:24:40", "snapshot": {"started": true, "playtime": "8:28:44", "badges": 4, "badge_bits": 15, "dex_owned": 3, "dex_seen": 62, "party_count": 1, "max_level": 45, "party": ["Charizard L45"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 45, "hp": 150, "max_hp": 151, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 25], ["Slash", 17], ["Ember", 18], ["Cut", 30]], "stats": [113, 100, 118, 101]}], "surfing": false, "money": 39051, "map": 199, "map_name": "Rocket Hideout B1F", "maps_visited": 90, "hall_of_fame": 0, "battles": 543, "in_battle": 0}},
+  {"name": "reached: Pokémon Tower 1F", "frame": 2001462, "elapsed_s": 1034.5, "tool_calls": 14856, "at": "2026-10-21T10:28:35", "snapshot": {"started": true, "playtime": "9:10:52", "badges": 4, "badge_bits": 15, "dex_owned": 3, "dex_seen": 66, "party_count": 1, "max_level": 47, "party": ["Charizard L47"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 47, "hp": 146, "max_hp": 158, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 11], ["Slash", 11], ["Flamethrower", 11], ["Cut", 30]], "stats": [119, 105, 123, 106]}], "surfing": false, "money": 46017, "map": 142, "map_name": "Pokémon Tower 1F", "maps_visited": 95, "hall_of_fame": 0, "battles": 551, "in_battle": 0}},
+  {"name": "reached: Route 13", "frame": 2201897, "elapsed_s": 1316.9, "tool_calls": 16223, "at": "2026-10-21T10:33:18", "snapshot": {"started": true, "playtime": "10:06:22", "badges": 4, "badge_bits": 15, "dex_owned": 3, "dex_seen": 74, "party_count": 1, "max_level": 51, "party": ["Charizard L51"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 51, "hp": 161, "max_hp": 172, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 15], ["Slash", 12], ["Flamethrower", 6], ["Cut", 30]], "stats": [129, 114, 135, 116]}], "surfing": false, "money": 59707, "map": 24, "map_name": "Route 13", "maps_visited": 108, "hall_of_fame": 0, "battles": 593, "in_battle": 0}},
+  {"name": "reached: Route 14", "frame": 2229616, "elapsed_s": 1328.4, "tool_calls": 16348, "at": "2026-10-21T10:33:29", "snapshot": {"started": true, "playtime": "10:14:03", "badges": 4, "badge_bits": 15, "dex_owned": 3, "dex_seen": 74, "party_count": 1, "max_level": 52, "party": ["Charizard L52"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 52, "hp": 150, "max_hp": 175, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 4], ["Slash", 5], ["Flamethrower", 5], ["Cut", 30]], "stats": [132, 117, 138, 119]}], "surfing": false, "money": 64727, "map": 25, "map_name": "Route 14", "maps_visited": 109, "hall_of_fame": 0, "battles": 599, "in_battle": 0}},
+  {"name": "reached: Route 15", "frame": 2244611, "elapsed_s": 1337.3, "tool_calls": 16425, "at": "2026-10-21T10:33:38", "snapshot": {"started": true, "playtime": "10:18:12", "badges": 4, "badge_bits": 15, "dex_owned": 3, "dex_seen": 77, "party_count": 1, "max_level": 52, "party": ["Charizard L52"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 52, "hp": 150, "max_hp": 175, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 4], ["Slash", 1], ["Flamethrower", 0], ["Cut", 30]], "stats": [132, 117, 138, 119]}], "surfing": false, "money": 67377, "map": 26, "map_name": "Route 15", "maps_visited": 110, "hall_of_fame": 0, "battles": 603, "in_battle": 0}},
+  {"name": "reached: Fuchsia City", "frame": 2246161, "elapsed_s": 1338.4, "tool_calls": 16438, "at": "2026-10-21T10:33:39", "snapshot": {"started": true, "playtime": "10:18:37", "badges": 4, "badge_bits": 15, "dex_owned": 3, "dex_seen": 77, "party_count": 1, "max_level": 52, "party": ["Charizard L52"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 52, "hp": 150, "max_hp": 175, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 4], ["Slash", 1], ["Flamethrower", 0], ["Cut", 30]], "stats": [132, 117, 138, 119]}], "surfing": false, "money": 67377, "map": 7, "map_name": "Fuchsia City", "maps_visited": 112, "hall_of_fame": 0, "battles": 603, "in_battle": 0}},
+  {"name": "badge: Soul", "frame": 2290295, "elapsed_s": 1357.3, "tool_calls": 16628, "at": "2026-10-21T10:33:58", "snapshot": {"started": true, "playtime": "10:30:52", "badges": 5, "badge_bits": 31, "dex_owned": 3, "dex_seen": 79, "party_count": 1, "max_level": 54, "party": ["Charizard L54"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 54, "hp": 45, "max_hp": 182, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 28], ["Slash", 10], ["Flamethrower", 9], ["Cut", 30]], "stats": [138, 122, 144, 124]}], "surfing": false, "money": 79109, "map": 157, "map_name": "Fuchsia Gym", "maps_visited": 114, "hall_of_fame": 0, "battles": 610, "in_battle": 0}},
+  {"name": "reached: Safari Zone Gate", "frame": 2294283, "elapsed_s": 1360.1, "tool_calls": 16654, "at": "2026-10-21T10:34:01", "snapshot": {"started": true, "playtime": "10:31:58", "badges": 5, "badge_bits": 31, "dex_owned": 3, "dex_seen": 79, "party_count": 1, "max_level": 54, "party": ["Charizard L54"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 54, "hp": 182, "max_hp": 182, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 35], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [138, 122, 144, 124]}], "surfing": false, "money": 79109, "map": 156, "map_name": "Safari Zone Gate", "maps_visited": 115, "hall_of_fame": 0, "battles": 610, "in_battle": 0}},
+  {"name": "reached: Safari Zone Center", "frame": 2295549, "elapsed_s": 1361.4, "tool_calls": 16661, "at": "2026-10-21T10:34:02", "snapshot": {"started": true, "playtime": "10:32:19", "badges": 5, "badge_bits": 31, "dex_owned": 3, "dex_seen": 79, "party_count": 1, "max_level": 54, "party": ["Charizard L54"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 54, "hp": 182, "max_hp": 182, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 35], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [138, 122, 144, 124]}], "surfing": false, "money": 78609, "map": 220, "map_name": "Safari Zone Center", "maps_visited": 116, "hall_of_fame": 0, "battles": 610, "in_battle": 0}},
+  {"name": "reached: Safari Zone East", "frame": 2296230, "elapsed_s": 1361.8, "tool_calls": 16668, "at": "2026-10-21T10:34:03", "snapshot": {"started": true, "playtime": "10:32:30", "badges": 5, "badge_bits": 31, "dex_owned": 3, "dex_seen": 79, "party_count": 1, "max_level": 54, "party": ["Charizard L54"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 54, "hp": 182, "max_hp": 182, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 35], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [138, 122, 144, 124]}], "surfing": false, "money": 78609, "map": 217, "map_name": "Safari Zone East", "maps_visited": 117, "hall_of_fame": 0, "battles": 610, "in_battle": 0}},
+  {"name": "reached: Safari Zone North", "frame": 2299790, "elapsed_s": 1364.3, "tool_calls": 16688, "at": "2026-10-21T10:34:05", "snapshot": {"started": true, "playtime": "10:33:29", "badges": 5, "badge_bits": 31, "dex_owned": 3, "dex_seen": 79, "party_count": 1, "max_level": 54, "party": ["Charizard L54"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 54, "hp": 182, "max_hp": 182, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 35], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [138, 122, 144, 124]}], "surfing": false, "money": 78609, "map": 218, "map_name": "Safari Zone North", "maps_visited": 118, "hall_of_fame": 0, "battles": 612, "in_battle": 0}},
+  {"name": "reached: Safari Zone West", "frame": 2300828, "elapsed_s": 1365.3, "tool_calls": 16692, "at": "2026-10-21T10:34:06", "snapshot": {"started": true, "playtime": "10:33:46", "badges": 5, "badge_bits": 31, "dex_owned": 3, "dex_seen": 79, "party_count": 1, "max_level": 54, "party": ["Charizard L54"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 54, "hp": 182, "max_hp": 182, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 35], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [138, 122, 144, 124]}], "surfing": false, "money": 78609, "map": 219, "map_name": "Safari Zone West", "maps_visited": 119, "hall_of_fame": 0, "battles": 612, "in_battle": 0}},
+  {"name": "reached: Saffron City", "frame": 2474546, "elapsed_s": 1603.2, "tool_calls": 17944, "at": "2026-10-21T10:38:04", "snapshot": {"started": true, "playtime": "11:21:55", "badges": 5, "badge_bits": 31, "dex_owned": 3, "dex_seen": 82, "party_count": 1, "max_level": 56, "party": ["Charizard L56"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 56, "hp": 189, "max_hp": 189, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 21], ["Slash", 11], ["Flamethrower", 11], ["Cut", 30]], "stats": [143, 127, 150, 129]}], "surfing": false, "money": 83289, "map": 10, "map_name": "Saffron City", "maps_visited": 128, "hall_of_fame": 0, "battles": 621, "in_battle": 0}},
+  {"name": "reached: Silph Co. 1F", "frame": 2478187, "elapsed_s": 1606.5, "tool_calls": 17973, "at": "2026-10-21T10:38:07", "snapshot": {"started": true, "playtime": "11:22:55", "badges": 5, "badge_bits": 31, "dex_owned": 3, "dex_seen": 82, "party_count": 1, "max_level": 56, "party": ["Charizard L56"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 56, "hp": 189, "max_hp": 189, "status": "", "types": ["Fire", "Flying"], "moves": [["Scratch", 35], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [143, 127, 150, 129]}], "surfing": false, "money": 83289, "map": 181, "map_name": "Silph Co. 1F", "maps_visited": 130, "hall_of_fame": 0, "battles": 621, "in_battle": 0}},
+  {"name": "badge: Marsh", "frame": 2644075, "elapsed_s": 1694.3, "tool_calls": 18870, "at": "2026-10-21T10:39:35", "snapshot": {"started": true, "playtime": "12:08:52", "badges": 6, "badge_bits": 63, "dex_owned": 3, "dex_seen": 89, "party_count": 1, "max_level": 59, "party": ["Charizard L59"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 59, "hp": 135, "max_hp": 199, "status": "PSN", "types": ["Fire", "Flying"], "moves": [["Strength", 3], ["Slash", 4], ["Flamethrower", 5], ["Cut", 30]], "stats": [151, 134, 158, 137]}], "surfing": false, "money": 103675, "map": 178, "map_name": "Saffron Gym", "maps_visited": 141, "hall_of_fame": 0, "battles": 634, "in_battle": 0}},
+  {"name": "obtained: Lapras", "frame": 2654713, "elapsed_s": 1702.4, "tool_calls": 18940, "at": "2026-10-21T10:39:43", "snapshot": {"started": true, "playtime": "12:11:48", "badges": 6, "badge_bits": 63, "dex_owned": 4, "dex_seen": 90, "party_count": 2, "max_level": 59, "party": ["Charizard L59", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 59, "hp": 199, "max_hp": 199, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 15], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [151, 134, 158, 137]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Growl", 40]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 103675, "map": 212, "map_name": "Silph Co. 7F", "maps_visited": 141, "hall_of_fame": 0, "battles": 634, "in_battle": 0}},
+  {"name": "reached: Route 21", "frame": 2678750, "elapsed_s": 1723.5, "tool_calls": 19095, "at": "2026-10-21T10:40:04", "snapshot": {"started": true, "playtime": "12:18:27", "badges": 6, "badge_bits": 63, "dex_owned": 4, "dex_seen": 90, "party_count": 2, "max_level": 59, "party": ["Charizard L59", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 59, "hp": 199, "max_hp": 199, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 15], ["Slash", 17], ["Flamethrower", 15], ["Cut", 30]], "stats": [151, 134, 158, 137]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Growl", 40], ["Surf", 15]], "stats": [35, 31, 23, 36]}], "surfing": true, "money": 103675, "map": 32, "map_name": "Route 21", "maps_visited": 142, "hall_of_fame": 0, "battles": 637, "in_battle": 0}},
+  {"name": "reached: Cinnabar Island", "frame": 2696356, "elapsed_s": 1732.5, "tool_calls": 19179, "at": "2026-10-21T10:40:13", "snapshot": {"started": true, "playtime": "12:23:19", "badges": 6, "badge_bits": 63, "dex_owned": 4, "dex_seen": 91, "party_count": 2, "max_level": 60, "party": ["Charizard L60", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 60, "hp": 196, "max_hp": 203, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 13], ["Slash", 13], ["Flamethrower", 13], ["Cut", 30]], "stats": [155, 137, 161, 139]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Growl", 40], ["Surf", 15]], "stats": [35, 31, 23, 36]}], "surfing": true, "money": 104820, "map": 8, "map_name": "Cinnabar Island", "maps_visited": 143, "hall_of_fame": 0, "battles": 640, "in_battle": 0}},
+  {"name": "reached: Pokémon Mansion 1F", "frame": 2698883, "elapsed_s": 1735.1, "tool_calls": 19201, "at": "2026-10-21T10:40:16", "snapshot": {"started": true, "playtime": "12:24:01", "badges": 6, "badge_bits": 63, "dex_owned": 4, "dex_seen": 91, "party_count": 2, "max_level": 60, "party": ["Charizard L60", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 60, "hp": 203, "max_hp": 203, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 15], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [155, 137, 161, 139]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Growl", 40], ["Surf", 15]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 104820, "map": 165, "map_name": "Pokémon Mansion 1F", "maps_visited": 145, "hall_of_fame": 0, "battles": 640, "in_battle": 0}},
+  {"name": "badge: Volcano", "frame": 3967932, "elapsed_s": 3172.8, "tool_calls": 31032, "at": "2026-10-21T11:04:14", "snapshot": {"started": true, "playtime": "18:14:45", "badges": 7, "badge_bits": 127, "dex_owned": 4, "dex_seen": 96, "party_count": 2, "max_level": 77, "party": ["Charizard L77", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 77, "hp": 238, "max_hp": 267, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 0], ["Slash", 0], ["Flamethrower", 0], ["Cut", 25]], "stats": [205, 185, 212, 189]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 125083, "map": 166, "map_name": "Cinnabar Gym", "maps_visited": 149, "hall_of_fame": 0, "battles": 1094, "in_battle": 0}},
+  {"name": "badge: Earth", "frame": 4047954, "elapsed_s": 3197.4, "tool_calls": 31387, "at": "2026-10-21T11:04:38", "snapshot": {"started": true, "playtime": "18:36:56", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 101, "party_count": 2, "max_level": 78, "party": ["Charizard L78", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 78, "hp": 262, "max_hp": 271, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 13], ["Slash", 13], ["Flamethrower", 12], ["Cut", 30]], "stats": [208, 188, 214, 192]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 140573, "map": 45, "map_name": "Viridian Gym", "maps_visited": 150, "hall_of_fame": 0, "battles": 1106, "in_battle": 0}},
+  {"name": "reached: Victory Road 1F", "frame": 4067884, "elapsed_s": 3211.3, "tool_calls": 31478, "at": "2026-10-21T11:04:52", "snapshot": {"started": true, "playtime": "18:42:28", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 101, "party_count": 2, "max_level": 78, "party": ["Charizard L78", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 78, "hp": 174, "max_hp": 271, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 10], ["Slash", 10], ["Flamethrower", 11], ["Cut", 30]], "stats": [208, 188, 214, 192]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 144018, "map": 108, "map_name": "Victory Road 1F", "maps_visited": 151, "hall_of_fame": 0, "battles": 1107, "in_battle": 0}},
+  {"name": "reached: Victory Road 2F", "frame": 4084176, "elapsed_s": 3221.6, "tool_calls": 31546, "at": "2026-10-21T11:05:03", "snapshot": {"started": true, "playtime": "18:46:58", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 101, "party_count": 2, "max_level": 79, "party": ["Charizard L79", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 79, "hp": 178, "max_hp": 275, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 7], ["Slash", 8], ["Flamethrower", 8], ["Cut", 30]], "stats": [211, 190, 217, 194]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 144018, "map": 194, "map_name": "Victory Road 2F", "maps_visited": 152, "hall_of_fame": 0, "battles": 1115, "in_battle": 0}},
+  {"name": "reached: Victory Road 3F", "frame": 4086937, "elapsed_s": 3224.3, "tool_calls": 31560, "at": "2026-10-21T11:05:05", "snapshot": {"started": true, "playtime": "18:47:44", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 101, "party_count": 2, "max_level": 79, "party": ["Charizard L79", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 79, "hp": 178, "max_hp": 275, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 7], ["Slash", 8], ["Flamethrower", 8], ["Cut", 30]], "stats": [211, 190, 217, 194]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 144018, "map": 198, "map_name": "Victory Road 3F", "maps_visited": 153, "hall_of_fame": 0, "battles": 1115, "in_battle": 0}},
+  {"name": "reached: Indigo Plateau", "frame": 4134610, "elapsed_s": 3271.9, "tool_calls": 31852, "at": "2026-10-21T11:05:53", "snapshot": {"started": true, "playtime": "19:00:53", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 101, "party_count": 2, "max_level": 79, "party": ["Charizard L79", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 79, "hp": 178, "max_hp": 275, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 2], ["Slash", 3], ["Flamethrower", 1], ["Cut", 30]], "stats": [211, 190, 217, 194]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 144018, "map": 9, "map_name": "Indigo Plateau", "maps_visited": 154, "hall_of_fame": 0, "battles": 1133, "in_battle": 0}},
+  {"name": "reached: Indigo Plateau Lobby", "frame": 4134959, "elapsed_s": 3272.1, "tool_calls": 31857, "at": "2026-10-21T11:05:53", "snapshot": {"started": true, "playtime": "19:00:59", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 101, "party_count": 2, "max_level": 79, "party": ["Charizard L79", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 79, "hp": 178, "max_hp": 275, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 2], ["Slash", 3], ["Flamethrower", 1], ["Cut", 30]], "stats": [211, 190, 217, 194]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 144018, "map": 174, "map_name": "Indigo Plateau Lobby", "maps_visited": 155, "hall_of_fame": 0, "battles": 1133, "in_battle": 0}},
+  {"name": "reached: Lorelei's Room", "frame": 4157160, "elapsed_s": 3287.0, "tool_calls": 31985, "at": "2026-10-21T11:06:08", "snapshot": {"started": true, "playtime": "19:07:08", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 101, "party_count": 2, "max_level": 81, "party": ["Charizard L81", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 81, "hp": 282, "max_hp": 282, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 15], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [216, 195, 222, 200]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 100218, "map": 245, "map_name": "Lorelei's Room", "maps_visited": 156, "hall_of_fame": 0, "battles": 1133, "in_battle": 0}},
+  {"name": "defeated: Lorelei", "frame": 4164455, "elapsed_s": 3289.0, "tool_calls": 32008, "at": "2026-10-21T11:06:10", "snapshot": {"started": true, "playtime": "19:09:09", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 104, "party_count": 2, "max_level": 81, "party": ["Charizard L81", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 81, "hp": 282, "max_hp": 282, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 14], ["Slash", 15], ["Flamethrower", 14], ["Cut", 30]], "stats": [216, 195, 222, 200]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 105762, "map": 245, "map_name": "Lorelei's Room", "maps_visited": 156, "hall_of_fame": 0, "battles": 1134, "in_battle": 0}},
+  {"name": "reached: Bruno's Room", "frame": 4165035, "elapsed_s": 3289.3, "tool_calls": 32016, "at": "2026-10-21T11:06:10", "snapshot": {"started": true, "playtime": "19:09:19", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 104, "party_count": 2, "max_level": 81, "party": ["Charizard L81", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 81, "hp": 282, "max_hp": 282, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 14], ["Slash", 15], ["Flamethrower", 14], ["Cut", 30]], "stats": [216, 195, 222, 200]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 105762, "map": 246, "map_name": "Bruno's Room", "maps_visited": 157, "hall_of_fame": 0, "battles": 1134, "in_battle": 0}},
+  {"name": "defeated: Bruno", "frame": 4171533, "elapsed_s": 3291.6, "tool_calls": 32039, "at": "2026-10-21T11:06:13", "snapshot": {"started": true, "playtime": "19:11:07", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 107, "party_count": 2, "max_level": 81, "party": ["Charizard L81", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 81, "hp": 282, "max_hp": 282, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 13], ["Slash", 13], ["Flamethrower", 12], ["Cut", 30]], "stats": [216, 195, 222, 200]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 111504, "map": 246, "map_name": "Bruno's Room", "maps_visited": 157, "hall_of_fame": 0, "battles": 1135, "in_battle": 0}},
+  {"name": "reached: Agatha's Room", "frame": 4171945, "elapsed_s": 3291.9, "tool_calls": 32048, "at": "2026-10-21T11:06:13", "snapshot": {"started": true, "playtime": "19:11:14", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 107, "party_count": 2, "max_level": 81, "party": ["Charizard L81", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 81, "hp": 282, "max_hp": 282, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 13], ["Slash", 13], ["Flamethrower", 12], ["Cut", 30]], "stats": [216, 195, 222, 200]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 111504, "map": 247, "map_name": "Agatha's Room", "maps_visited": 158, "hall_of_fame": 0, "battles": 1135, "in_battle": 0}},
+  {"name": "defeated: Agatha", "frame": 4179783, "elapsed_s": 3294.3, "tool_calls": 32072, "at": "2026-10-21T11:06:15", "snapshot": {"started": true, "playtime": "19:13:25", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 108, "party_count": 2, "max_level": 82, "party": ["Charizard L82", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 82, "hp": 286, "max_hp": 286, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 13], ["Slash", 11], ["Flamethrower", 7], ["Cut", 30]], "stats": [219, 197, 225, 202]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 117444, "map": 247, "map_name": "Agatha's Room", "maps_visited": 158, "hall_of_fame": 0, "battles": 1136, "in_battle": 0}},
+  {"name": "reached: Lance's Room", "frame": 4180477, "elapsed_s": 3294.7, "tool_calls": 32080, "at": "2026-10-21T11:06:16", "snapshot": {"started": true, "playtime": "19:13:36", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 108, "party_count": 2, "max_level": 82, "party": ["Charizard L82", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 82, "hp": 286, "max_hp": 286, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 13], ["Slash", 11], ["Flamethrower", 7], ["Cut", 30]], "stats": [219, 197, 225, 202]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 117444, "map": 113, "map_name": "Lance's Room", "maps_visited": 159, "hall_of_fame": 0, "battles": 1136, "in_battle": 0}},
+  {"name": "blacked out (lost a battle)", "frame": 4186878, "elapsed_s": 3296.8, "tool_calls": 32103, "at": "2026-10-21T11:06:18", "snapshot": {"started": true, "playtime": "19:15:22", "badges": 8, "badge_bits": 255, "dex_owned": 4, "dex_seen": 110, "party_count": 2, "max_level": 82, "party": ["Charizard L82", "Lapras L15"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 82, "hp": 286, "max_hp": 286, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 15], ["Slash", 20], ["Flamethrower", 15], ["Cut", 30]], "stats": [219, 197, 225, 202]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}], "surfing": false, "money": 58722, "map": 9, "map_name": "Indigo Plateau", "maps_visited": 159, "hall_of_fame": 0, "battles": 1137, "in_battle": 0}},
+  {"name": "obtained: Machop", "frame": 4235073, "elapsed_s": 3324.3, "tool_calls": 32632, "at": "2026-10-21T11:06:45", "snapshot": {"started": true, "playtime": "19:28:41", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 110, "party_count": 3, "max_level": 82, "party": ["Charizard L82", "Lapras L15", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 82, "hp": 286, "max_hp": 286, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 11], ["Slash", 12], ["Flamethrower", 10], ["Cut", 29]], "stats": [219, 197, 225, 202]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [45, 34, 25, 26]}], "surfing": false, "money": 58722, "map": 198, "map_name": "Victory Road 3F", "maps_visited": 159, "hall_of_fame": 0, "battles": 1157, "in_battle": 0}},
+  {"name": "defeated: Lorelei", "frame": 4513656, "elapsed_s": 3468.0, "tool_calls": 35219, "at": "2026-10-21T11:09:09", "snapshot": {"started": true, "playtime": "20:45:43", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 110, "party_count": 4, "max_level": 85, "party": ["Charizard L85", "Lapras L15", "Machop L24", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 85, "hp": 219, "max_hp": 298, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 14], ["Slash", 15], ["Flamethrower", 10], ["Cut", 29]], "stats": [226, 204, 233, 209]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20], ["Fire Blast", 5]], "stats": [45, 34, 25, 26]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 67, "max_hp": 67, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [48, 30, 21, 26]}], "surfing": false, "money": 64266, "map": 245, "map_name": "Lorelei's Room", "maps_visited": 159, "hall_of_fame": 0, "battles": 1273, "in_battle": 0}},
+  {"name": "defeated: Bruno", "frame": 4520800, "elapsed_s": 3470.4, "tool_calls": 35250, "at": "2026-10-21T11:09:11", "snapshot": {"started": true, "playtime": "20:47:42", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 110, "party_count": 4, "max_level": 85, "party": ["Charizard L85", "Lapras L15", "Machop L24", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 85, "hp": 219, "max_hp": 298, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 13], ["Slash", 13], ["Flamethrower", 8], ["Cut", 29]], "stats": [226, 204, 233, 209]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20], ["Fire Blast", 5]], "stats": [45, 34, 25, 26]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 67, "max_hp": 67, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [48, 30, 21, 26]}], "surfing": false, "money": 70008, "map": 246, "map_name": "Bruno's Room", "maps_visited": 159, "hall_of_fame": 0, "battles": 1274, "in_battle": 0}},
+  {"name": "defeated: Agatha", "frame": 4529438, "elapsed_s": 3472.7, "tool_calls": 35281, "at": "2026-10-21T11:09:14", "snapshot": {"started": true, "playtime": "20:50:06", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 110, "party_count": 4, "max_level": 86, "party": ["Charizard L86", "Lapras L15", "Machop L24", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 86, "hp": 222, "max_hp": 301, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 11], ["Slash", 12], ["Flamethrower", 4], ["Cut", 29]], "stats": [229, 207, 236, 212]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20], ["Fire Blast", 5]], "stats": [45, 34, 25, 26]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 67, "max_hp": 67, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [48, 30, 21, 26]}], "surfing": false, "money": 75948, "map": 247, "map_name": "Agatha's Room", "maps_visited": 159, "hall_of_fame": 0, "battles": 1275, "in_battle": 0}},
+  {"name": "defeated: Lance", "frame": 4537908, "elapsed_s": 3475.1, "tool_calls": 35314, "at": "2026-10-21T11:09:16", "snapshot": {"started": true, "playtime": "20:52:27", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 112, "party_count": 4, "max_level": 86, "party": ["Charizard L86", "Lapras L15", "Machop L24", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 86, "hp": 222, "max_hp": 301, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 9], ["Slash", 9], ["Flamethrower", 3], ["Cut", 29]], "stats": [229, 207, 236, 212]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20], ["Fire Blast", 5]], "stats": [45, 34, 25, 26]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 67, "max_hp": 67, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [48, 30, 21, 26]}], "surfing": false, "money": 82086, "map": 113, "map_name": "Lance's Room", "maps_visited": 159, "hall_of_fame": 0, "battles": 1276, "in_battle": 0}},
+  {"name": "reached: Champion's Room", "frame": 4541934, "elapsed_s": 3476.4, "tool_calls": 35331, "at": "2026-10-21T11:09:17", "snapshot": {"started": true, "playtime": "20:53:34", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 112, "party_count": 4, "max_level": 86, "party": ["Charizard L86", "Lapras L15", "Machop L24", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 86, "hp": 222, "max_hp": 301, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 9], ["Slash", 9], ["Flamethrower", 3], ["Cut", 29]], "stats": [229, 207, 236, 212]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20], ["Fire Blast", 5]], "stats": [45, 34, 25, 26]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 67, "max_hp": 67, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [48, 30, 21, 26]}], "surfing": false, "money": 82086, "map": 120, "map_name": "Champion's Room", "maps_visited": 160, "hall_of_fame": 0, "battles": 1276, "in_battle": 0}},
+  {"name": "defeated: Champion", "frame": 4552752, "elapsed_s": 3478.8, "tool_calls": 35352, "at": "2026-10-21T11:09:20", "snapshot": {"started": true, "playtime": "20:56:34", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 113, "party_count": 4, "max_level": 87, "party": ["Charizard L87", "Lapras L15", "Machop L24", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 87, "hp": 225, "max_hp": 304, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 6], ["Slash", 5], ["Flamethrower", 1], ["Cut", 29]], "stats": [232, 209, 239, 214]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20], ["Fire Blast", 5]], "stats": [45, 34, 25, 26]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 67, "max_hp": 67, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [48, 30, 21, 26]}], "surfing": false, "money": 88521, "map": 120, "map_name": "Champion's Room", "maps_visited": 160, "hall_of_fame": 0, "battles": 1277, "in_battle": 0}},
+  {"name": "reached: Hall of Fame", "frame": 4556130, "elapsed_s": 3479.2, "tool_calls": 35353, "at": "2026-10-21T11:09:20", "snapshot": {"started": true, "playtime": "20:57:30", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 113, "party_count": 4, "max_level": 87, "party": ["Charizard L87", "Lapras L15", "Machop L24", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 87, "hp": 225, "max_hp": 304, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 6], ["Slash", 5], ["Flamethrower", 1], ["Cut", 29]], "stats": [232, 209, 239, 214]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20], ["Fire Blast", 5]], "stats": [45, 34, 25, 26]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 67, "max_hp": 67, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [48, 30, 21, 26]}], "surfing": false, "money": 88521, "map": 118, "map_name": "Hall of Fame", "maps_visited": 161, "hall_of_fame": 0, "battles": 1277, "in_battle": 0}},
+  {"name": "champion defeated (Hall of Fame)", "frame": 4557649, "elapsed_s": 3479.6, "tool_calls": 35360, "at": "2026-10-21T11:09:21", "snapshot": {"started": true, "playtime": "20:57:55", "badges": 8, "badge_bits": 255, "dex_owned": 5, "dex_seen": 113, "party_count": 4, "max_level": 87, "party": ["Charizard L87", "Lapras L15", "Machop L24", "Machop L24"], "team": [{"species": "Charizard", "nick": "AAAAAAAAAA", "level": 87, "hp": 225, "max_hp": 304, "status": "", "types": ["Fire", "Flying"], "moves": [["Strength", 6], ["Slash", 5], ["Flamethrower", 1], ["Cut", 29]], "stats": [232, 209, 239, 214]}, {"species": "Lapras", "nick": "AAAAAAAAAA", "level": 15, "hp": 67, "max_hp": 67, "status": "", "types": ["Water", "Ice"], "moves": [["Water Gun", 25], ["Thunderbolt", 15], ["Surf", 15], ["Ice Beam", 10]], "stats": [35, 31, 23, 36]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 70, "max_hp": 70, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20], ["Fire Blast", 5]], "stats": [45, 34, 25, 26]}, {"species": "Machop", "nick": "AAAAAAAAAA", "level": 24, "hp": 67, "max_hp": 67, "status": "", "types": ["Fighting"], "moves": [["Karate Chop", 25], ["Low Kick", 20]], "stats": [48, 30, 21, 26]}], "surfing": false, "money": 88521, "map": 118, "map_name": "Hall of Fame", "maps_visited": 161, "hall_of_fame": 1, "battles": 1277, "in_battle": 0}}
+ ],
+  "session_id": "jev-solo-exp-uncapped-2__full_game_from_power-on__blank_atlas__no_call_or_time_cap__monitored__UNASSISTED__no_interventions___402e35e__jev-latest_20261021_101119",
+  "ai_model": "jev-latest",
+  "rom": "rom.gb",
+  "profile": "pokemon-gen1",
+  "started": "2026-10-21T10:11:21",
+  "ended": null,
+  "real_seconds": 3479.7,
+  "frames": 4557649,
+  "game_seconds": 75960.8,
+  "tool_calls_total": 35361,
+  "tool_calls": {
+   "screen": 410,
+   "press": 3639,
+   "wait": 13,
+   "state": 8679,
+   "memory": 6188,
+   "save_state": 227,
+   "talk": 2361,
+   "walk": 12095,
+   "battle": 1563,
+   "manage": 184,
+   "shop": 2
+  },
+  "images_sent": 3479,
+  "text_chars_sent": 15210223,
+  "chunks": 1,
+  "loads": 0,
+  "budget": {
+   "max_tool_calls": 1000000,
+   "max_real_seconds": 172800.0
+  },
+  "notes": [],
+  "final_state": {
+   "started": true,
+   "playtime": "20:57:55",
+   "badges": 8,
+   "badge_bits": 255,
+   "dex_owned": 5,
+   "dex_seen": 113,
+   "owned_set": [
+    4,
+    5,
+    6,
+    66,
+    131
+   ],
+   "have_dex": [
+    6,
+    66,
+    131
+   ],
+   "party_count": 4,
+   "max_level": 87,
+   "party": [
+    "Charizard L87",
+    "Lapras L15",
+    "Machop L24",
+    "Machop L24"
+   ],
+   "team": [
+    {
+     "species": "Charizard",
+     "nick": "AAAAAAAAAA",
+     "level": 87,
+     "hp": 225,
+     "max_hp": 304,
+     "status": "",
+     "types": [
+      "Fire",
+      "Flying"
+     ],
+     "moves": [
+      [
+       "Strength",
+       6
+      ],
+      [
+       "Slash",
+       5
+      ],
+      [
+       "Flamethrower",
+       1
+      ],
+      [
+       "Cut",
+       29
+      ]
+     ],
+     "stats": [
+      232,
+      209,
+      239,
+      214
+     ]
+    },
+    {
+     "species": "Lapras",
+     "nick": "AAAAAAAAAA",
+     "level": 15,
+     "hp": 67,
+     "max_hp": 67,
+     "status": "",
+     "types": [
+      "Water",
+      "Ice"
+     ],
+     "moves": [
+      [
+       "Water Gun",
+       25
+      ],
+      [
+       "Thunderbolt",
+       15
+      ],
+      [
+       "Surf",
+       15
+      ],
+      [
+       "Ice Beam",
+       10
+      ]
+     ],
+     "stats": [
+      35,
+      31,
+      23,
+      36
+     ]
+    },
+    {
+     "species": "Machop",
+     "nick": "AAAAAAAAAA",
+     "level": 24,
+     "hp": 70,
+     "max_hp": 70,
+     "status": "",
+     "types": [
+      "Fighting"
+     ],
+     "moves": [
+      [
+       "Karate Chop",
+       25
+      ],
+      [
+       "Low Kick",
+       20
+      ],
+      [
+       "Fire Blast",
+       5
+      ]
+     ],
+     "stats": [
+      45,
+      34,
+      25,
+      26
+     ]
+    },
+    {
+     "species": "Machop",
+     "nick": "AAAAAAAAAA",
+     "level": 24,
+     "hp": 67,
+     "max_hp": 67,
+     "status": "",
+     "types": [
+      "Fighting"
+     ],
+     "moves": [
+      [
+       "Karate Chop",
+       25
+      ],
+      [
+       "Low Kick",
+       20
+      ]
+     ],
+     "stats": [
+      48,
+      30,
+      21,
+      26
+     ]
+    }
+   ],
+   "surfing": false,
+   "money": 88521,
+   "map": 118,
+   "map_name": "Hall of Fame",
+   "maps_visited": 161,
+   "hall_of_fame": 1,
+   "battles": 1277,
+   "in_battle": 0
+  }
+ },
+ "derived": {
+  "starter": "Charmander",
+  "badges": 8,
+  "furthest": "champion defeated (Hall of Fame)",
+  "furthest_rank": 34,
+  "milestone_times": {
+   "badge: Boulder": {
+    "elapsed_s": 169.8,
+    "tool_calls": 4451,
+    "playtime": "2:06:04"
+   },
+   "badge: Cascade": {
+    "elapsed_s": 366.7,
+    "tool_calls": 9672,
+    "playtime": "5:31:54"
+   },
+   "badge: Thunder": {
+    "elapsed_s": 406.5,
+    "tool_calls": 10525,
+    "playtime": "6:13:31"
+   },
+   "badge: Rainbow": {
+    "elapsed_s": 779.2,
+    "tool_calls": 13511,
+    "playtime": "8:24:55"
+   },
+   "badge: Soul": {
+    "elapsed_s": 1357.3,
+    "tool_calls": 16628,
+    "playtime": "10:30:52"
+   },
+   "badge: Marsh": {
+    "elapsed_s": 1694.3,
+    "tool_calls": 18870,
+    "playtime": "12:08:52"
+   },
+   "badge: Volcano": {
+    "elapsed_s": 3172.8,
+    "tool_calls": 31032,
+    "playtime": "18:14:45"
+   },
+   "badge: Earth": {
+    "elapsed_s": 3197.4,
+    "tool_calls": 31387,
+    "playtime": "18:36:56"
+   },
+   "defeated: Lorelei": {
+    "elapsed_s": 3289.0,
+    "tool_calls": 32008,
+    "playtime": "19:09:09"
+   },
+   "defeated: Bruno": {
+    "elapsed_s": 3291.6,
+    "tool_calls": 32039,
+    "playtime": "19:11:07"
+   },
+   "defeated: Agatha": {
+    "elapsed_s": 3294.3,
+    "tool_calls": 32072,
+    "playtime": "19:13:25"
+   },
+   "defeated: Lance": {
+    "elapsed_s": 3475.1,
+    "tool_calls": 35314,
+    "playtime": "20:52:27"
+   },
+   "defeated: Champion": {
+    "elapsed_s": 3478.8,
+    "tool_calls": 35352,
+    "playtime": "20:56:34"
+   },
+   "champion defeated (Hall of Fame)": {
+    "elapsed_s": 3479.6,
+    "tool_calls": 35360,
+    "playtime": "20:57:55"
+   }
+  },
+  "final_team": [
+   {
+    "species": "Charizard",
+    "nick": "AAAAAAAAAA",
+    "level": 87,
+    "hp": 225,
+    "max_hp": 304,
+    "moves": [
+     "Strength",
+     "Slash",
+     "Flamethrower",
+     "Cut"
+    ],
+    "stats": [
+     232,
+     209,
+     239,
+     214
+    ]
+   },
+   {
+    "species": "Lapras",
+    "nick": "AAAAAAAAAA",
+    "level": 15,
+    "hp": 67,
+    "max_hp": 67,
+    "moves": [
+     "Water Gun",
+     "Thunderbolt",
+     "Surf",
+     "Ice Beam"
+    ],
+    "stats": [
+     35,
+     31,
+     23,
+     36
+    ]
+   },
+   {
+    "species": "Machop",
+    "nick": "AAAAAAAAAA",
+    "level": 24,
+    "hp": 70,
+    "max_hp": 70,
+    "moves": [
+     "Karate Chop",
+     "Low Kick",
+     "Fire Blast"
+    ],
+    "stats": [
+     45,
+     34,
+     25,
+     26
+    ]
+   },
+   {
+    "species": "Machop",
+    "nick": "AAAAAAAAAA",
+    "level": 24,
+    "hp": 67,
+    "max_hp": 67,
+    "moves": [
+     "Karate Chop",
+     "Low Kick"
+    ],
+    "stats": [
+     48,
+     30,
+     21,
+     26
+    ]
+   }
+  ],
+  "playtime": "20:57:55",
+  "dex_owned": 5,
+  "maps_visited": 161,
+  "blackouts": 6,
+  "tool_calls": 35361,
+  "real_seconds": 3479.7
+ }
+}
