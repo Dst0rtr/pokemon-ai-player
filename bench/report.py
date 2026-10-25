@@ -193,7 +193,9 @@ def map_cell(h: dict) -> str:
     ms = h.get("map_source") or {}
     if h.get("variant") == "battles":
         return "—"
-    exp = " — experiment" if h.get("experiment") else ""
+    entry = h.get("benchmark_entry") or {}
+    exp = (" — outside the 20k cap" if entry and not entry.get("standard") else "") if entry else \
+        (" — experiment" if h.get("experiment") else "")
     if ms.get("source") == "learned":
         return ("learned (carried atlas)" if ms.get("atlas_seed") else "learned (blank)") + exp
     return "rom" + exp
@@ -222,6 +224,23 @@ def jev_leaderboard(results: list[dict]) -> str:
                  "—" if j.get("ece") is None else f"{j['ece']:.3f}", h.get("exit_reason") or "—"]
         rows.append("| " + " | ".join(cells) + " |")
     return "\n".join(rows)
+
+
+def jev_entries(results: list[dict]) -> str:
+    """The Jev full-game runs recorded as benchmark entries (`harness.benchmark_entry`: label, standard), each with the
+    label that says how it was run: assisted or not, map knowledge, seeds, and whether it kept the standard limits."""
+    rows = [r for r in results if r["harness"].get("benchmark_entry")]
+    if not rows:
+        return ""
+    head = ["Entry", "Variant", "Badges", "Furthest", "Hall of Fame", "Tool calls", "Steps", "Active h", "Total cost", "Exit"]
+    out = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
+    for r in sorted(rows, key=lambda r: (not r["harness"]["benchmark_entry"].get("standard"), r["run_id"])):
+        h, d, m = r["harness"], r["derived"], r["metrics"]
+        out.append("| " + " | ".join([
+            h["benchmark_entry"].get("label", ""), f"jev-{h.get('variant')}", str(d["badges"]), d["furthest"],
+            _cell(d["milestone_times"].get(CHAMPION)), str(d["tool_calls"]), str((h.get("jev") or {}).get("steps", "—")),
+            f"{(m.get('real_seconds') or 0) / 3600:.1f}", _cost(h), h.get("exit_reason") or "—"]) + " |")
+    return "\n".join(out)
 
 
 def iteration_table(results: list[dict]) -> str:
@@ -335,8 +354,14 @@ def build_results_md(results: list[dict]) -> str:
                   "closed set every step and executes the one Jev picks. **jev-solo uses heavy code scaffolding**: a "
                   "whole-game objective graph, progress checks, healing/training/HM rules and stuck recovery are written in "
                   "code, and no LLM is called. Cost is Jev's input tokens ($0.042/MTok, output free) plus any LLM the "
-                  "variant uses.", "", "Variants: " + " ".join(f"**{k}**: {v}" for k, v in JEV_SCAFFOLDING.items()), "",
-                  jev_leaderboard(jev), ""]
+                  "variant uses.", "", "Variants: " + " ".join(f"**{k}**: {v}" for k, v in JEV_SCAFFOLDING.items()), ""]
+        entries = jev_entries(jev)
+        if entries:
+            parts += ["### Jev full-game benchmark entries", "",
+                      "Jev full-game runs from power-on (jev-solo: no LLM). The label says how each was run. "
+                      "An entry outside the standard limits is not comparable with a capped run.", "", entries, "",
+                      "### All Jev runs (iterations, segments and labelled experiments included)", ""]
+        parts += [jev_leaderboard(jev), ""]
         it = iteration_table(jev)
         if it:
             parts += ["### Self-improvement iterations (jev-assist → bench/improve.py → next iteration; goal: 0 fallbacks, "

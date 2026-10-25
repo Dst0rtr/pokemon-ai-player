@@ -149,3 +149,27 @@ def test_run_cost_estimates_when_the_last_claude_chunk_reported_none():
     assert run_cost("claude", [c(2.0), c(None)], tok, None) == (2.0, False)
     assert run_cost("claude", [c(2.0, s="a"), c(1.5, s="b")], tok, prices) == (3.5, False)  # fresh-session fallback
     assert run_cost("codex", [c(None)], tok, None) == (None, False)
+
+
+def test_jev_benchmark_entries_carry_their_label():
+    """A Jev full-game run recorded as a benchmark entry is listed with its label (assisted or not, atlas, seeds, cap),
+    and an entry outside the standard call cap is not shown as an experiment nor ranked as a standard run."""
+    def jev(run_id, names, badges, entry, experiment=None):
+        r = _result(run_id, "jev-latest", "jev", names, badges, 0.3)
+        r["harness"].update({"track": "jev", "variant": "solo", "mode": "jev-solo", "experiment": experiment,
+                             "map_source": {"source": "learned", "atlas_seed": None}, "jev": {"steps": 100},
+                             "benchmark_entry": entry})
+        return r
+    std = jev("std", ["badge: Boulder"], 5, {"label": "standard limits (12 h / 20,000 calls)", "standard": True})
+    unc = jev("unc", ["badge: Boulder", CHAMPION], 8,
+              {"label": "unassisted, blank atlas, one seed, outside the standard 20,000-call cap", "standard": False},
+              experiment="uncapped-2")
+    other = jev("exp", ["badge: Boulder"], 1, None, experiment="a segment check")
+    md = build_results_md([std, unc, other])
+    sec = md.split("### Jev full-game benchmark entries", 1)[1].split("### All Jev runs", 1)[0]
+    rows = [ln for ln in sec.splitlines() if ln.startswith("| ") and not ln.startswith("| Entry")]
+    assert len(rows) == 2 and "standard limits" in rows[0] and "outside the standard 20,000-call cap" in rows[1]
+    assert "0:02 · 20" in rows[1] and "| — |" in rows[0]                      # Hall of Fame cells
+    unc_row = next(ln for ln in md.splitlines() if "outside the 20k cap" in ln)   # its row in the full Jev table
+    assert "experiment" not in unc_row and "learned (blank)" in unc_row
+    assert "learned (blank) — experiment" in md                                     # a plain experiment still says so
