@@ -207,7 +207,7 @@
   },
   "wall_seconds": 3488.0,
   "benchmark_entry": {
-   "label": "unassisted (no interventions), blank atlas, one seed, OUTSIDE the standard 20,000-call cap (no call or time cap); Jev code at 402e35e (the recorded server_commit 69ef71e is that code plus a results commit, since rebased)"
+   "label": "unassisted (no interventions), blank atlas, one seed, OUTSIDE the standard 20,000-call cap (limits raised to 48 h / 1,000,000 calls); Jev code at 402e35e (the recorded server_commit 69ef71e is that code plus a results commit, since rebased)"
   }
  },
  "metrics": {

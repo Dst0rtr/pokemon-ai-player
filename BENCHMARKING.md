@@ -222,7 +222,7 @@ code scaffolding and are reported in a **separate table** in `RESULTS.md`.
 Results so far (details in RESULTS.md, "Jev full-game benchmark entries"):
 * the one run under the standard limits (12 h / 20,000 calls, blank map, unassisted) reached 5 badges, stopped by the
   call cap;
-* `uncapped-2` (2026-10-21, blank map, unassisted, one RNG seed, run with no call or time cap, so outside the
+* `uncapped-2` (2026-10-21, blank map, unassisted, one RNG seed, limits raised to 48 h / 1,000,000 calls, so outside the
   standard limits) reached the Hall of Fame at 35,360 tool calls / 58 min / $0.34.
 
 Jev chooses among options code lists; the objective graph, healing/training/HM rules and stuck recovery are

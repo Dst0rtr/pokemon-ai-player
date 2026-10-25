@@ -22,7 +22,7 @@ the client will run and use that path instead.
 ```bash
 python test_emulator.py "Pokemon-Red_Version.gb"                # boot, press, screenshot
 python test_emulator.py "Pokemon-Red_Version.gb" --play-intro   # plays to the overworld and prints the map
-python -m pytest tests -q                                         # 271 tests, about 15 s
+python -m pytest tests -q                                         # 272 tests, about 15 s
 python examples/reference_run.py "Pokemon-Red_Version.gb"        # scripted agent: power-on to Brock, ~35 s
 ```
 

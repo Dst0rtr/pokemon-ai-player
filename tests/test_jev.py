@@ -599,6 +599,26 @@ def test_a_direct_jev_agent_launch_gets_the_server_flags_the_player_needs():
     assert JevProvider("jev-latest").server_args(__import__("pathlib").Path(".")) == list(J.JEV_SERVER_ARGS)
 
 
+
+def test_a_direct_jev_agent_launch_starts_the_server_with_those_flags(tmp_path, monkeypatch):
+    """(Codex docs review round 3: the helper alone was tested; this checks amain really launches with it.)"""
+    import mcp.client.stdio
+    from bench import jev_agent
+    seen = {}
+
+    class Stop(Exception):
+        pass
+
+    def fake_stdio_client(params):
+        seen["args"] = list(params.args)
+        raise Stop
+    monkeypatch.setattr(mcp.client.stdio, "stdio_client", fake_stdio_client)
+    (tmp_path / "data").mkdir()
+    with pytest.raises(Stop):
+        asyncio.run(jev_agent.amain(_agent_args(tmp_path), ["/py", "server.py", "--rom", "r.gb"]))
+    assert seen["args"][:3] == ["server.py", "--rom", "r.gb"] and set(J.JEV_SERVER_ARGS) <= set(seen["args"]), seen
+
+
 def test_run_refuses_a_real_jev_run_without_the_key(monkeypatch):
     from bench import run
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)

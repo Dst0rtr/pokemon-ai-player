@@ -48,7 +48,7 @@ What it has done, and what that means:
 
 * **Unassisted Hall of Fame, outside the standard cap.** The run `uncapped-2` (2026-10-21) played from power-on to the
   Hall of Fame with no LLM and no human help: 35,360 tool calls, 58 minutes, $0.34. It started with a blank map and
-  ran on one RNG seed, with no call or time cap, on the Jev code at commit `402e35e` (later commits changed the Jev
+  ran on one RNG seed, with the limits raised to 48 hours / 1,000,000 calls, on the Jev code at commit `402e35e` (later commits changed the Jev
   player again). An earlier unassisted run, iteration 91, also reached the Hall of Fame, at 24,715 calls on a
   6-hour / 100,000-call budget, so it was outside the standard limits too.
 * **Under the standard benchmark limits** (12 hours or 20,000 tool calls), the one Jev run so far reached 5 badges
@@ -69,7 +69,7 @@ Details: [RESULTS.md](RESULTS.md) ("Jev full-game benchmark entries") and the
   and 1,400 tool calls per run).
 * A second scripted run (`examples/extended_run.py`) continues from the Boulder Badge through Mt. Moon
   to Cerulean City and Misty, covering caves, trainers, in-battle items, field moves and the world graph.
-* 271 automated tests, including a replay of the game's opening, MCP client round-trips (one checks that the plain
+* 272 automated tests, including a replay of the game's opening, MCP client round-trips (one checks that the plain
   server shows and imports nothing from the Jev mode), the benchmark harness and the Jev player.
 * A public **benchmark**: agent CLIs (Claude Code, Codex) play from power-on toward the Champion with
   the same prompt and budgets; see [RESULTS.md](RESULTS.md) and [BENCHMARKING.md](BENCHMARKING.md). The optional

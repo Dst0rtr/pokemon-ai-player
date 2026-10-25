@@ -21,7 +21,7 @@ Jev full-game runs from power-on (jev-solo: no LLM). The label says how each was
 | Entry | Variant | Badges | Furthest | Hall of Fame | Tool calls | Steps | Active h | Total cost | Exit |
 |---|---|---|---|---|---|---|---|---|---|
 | standard limits (12 h / 20,000 calls), unassisted, blank atlas, one seed: stopped by the call cap | jev-solo | 5 | reached: Silph Co. 1F | — | 20003 | 6563 | 2.2 | $0.28 | budget_calls |
-| unassisted (no interventions), blank atlas, one seed, OUTSIDE the standard 20,000-call cap (no call or time cap); Jev code at 402e35e (the recorded server_commit 69ef71e is that code plus a results commit, since rebased) | jev-solo | 8 | champion defeated (Hall of Fame) | 0:57 · 35360 | 35361 | 11868 | 1.0 | $0.34 | champion |
+| unassisted (no interventions), blank atlas, one seed, OUTSIDE the standard 20,000-call cap (limits raised to 48 h / 1,000,000 calls); Jev code at 402e35e (the recorded server_commit 69ef71e is that code plus a results commit, since rebased) | jev-solo | 8 | champion defeated (Hall of Fame) | 0:57 · 35360 | 35361 | 11868 | 1.0 | $0.34 | champion |
 
 ### All Jev runs (iterations, segments and labelled experiments included)
 
