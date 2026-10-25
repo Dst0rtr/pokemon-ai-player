@@ -125,7 +125,7 @@ def build_server(emu: Emulator, battle_advisor=None) -> FastMCP:
             return blocked
         return _respond("shop", _with_events(emu.shop(item, qty)), None)
 
-    @tool(description="Menu helper (Pokémon, outside battle): action 'lead' (target = Pokémon name/number to put first), 'swap' (two party slots), 'use' (target = item name, target2 = Pokémon for Potions/TMs/HMs; 'Charmander: Growl' (or 'Charmander: weakest') names the move to forget when it already knows 4), 'toss' (target = item: the whole stack; a full bag of 20 kinds picks nothing up), 'field' (target = Cut/Surf/Strength/Flash/Fly/Dig/Teleport while facing the tree/water/boulder; target2 = town for Fly), 'save' (in-game save). Handles the START menu for you.")
+    @tool(description="Menu helper (Pokémon, outside battle): action 'lead' (target = Pokémon name/number to put first), 'swap' (two party slots), 'use' (target = item name, target2 = Pokémon for Potions/TMs/HMs; 'Charmander: Growl' names the move to forget when it already knows 4; 'Charmander: weakest' forgets the least useful one, or keeps the old moves if the new one adds nothing), 'toss' (target = item: the whole stack; a full bag of 20 kinds picks nothing up), 'field' (target = Cut/Surf/Strength/Flash/Fly/Dig/Teleport while facing the tree/water/boulder; target2 = town for Fly), 'save' (in-game save). Handles the START menu for you.")
     def manage(action: str, target: str = "", target2: str = "") -> list:
         if (blocked := _guard("manage")) is not None:
             return blocked

@@ -31,7 +31,7 @@ from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from bench.jev import (BATTLE_RE, DEFAULT_MODEL, PLANNER_MODEL, STATUS_RE, ClaudePlanner, JevError, drop_repeats,  # noqa: E402
+from bench.jev import (BATTLE_RE, DEFAULT_MODEL, JEV_SERVER_ARGS, PLANNER_MODEL, STATUS_RE, ClaudePlanner, JevError, drop_repeats,  # noqa: E402
                        JevPolicy, JevRateLimited, MockPlanner, Obs, Option, battle_options, label_outcome, make_client,
                        overworld_options, parse, parse_items, parse_party, press_options, route_step)
 from bench.jev_solo import GRAPH, GYM_NODES, NURSE_SPOTS, STUCK_Q, is_status_move, SoloDirector, E4_ROOMS as SOLO_E4_ROOMS, STORY_RE as SOLO_STORY_RE  # noqa: E402
@@ -235,12 +235,13 @@ class Agent:
         learn = re.search(r"make\s+room\s+for\s+([A-Z][A-Z\- ]+?)[?!.]", o.text) if o.mode == "prompt" else None
         if learn or (o.mode == "prompt" and re.search(r"Which move should be forgotten|Abandon learning", o.text, re.I)):
             # a level-up move: code decides (run 75's Charizard never learned Flamethrower: cursor presses tried to delete
-            # Cut, an HM). A damaging move is learned over the weakest one; a status move is not
+            # Cut, an HM). A damaging move is learned over the weakest one, and only if it adds coverage (target 'if
+            # better': the server's own battle('learn') always learns); a status move is not
             new = (learn[1].strip().title() if learn else "")
             if new and is_status_move(new):
                 return [Option(f"keep the old moves (do not learn {new})", "battle", {"action": "skip"}, "a status move")]
             return [Option(f"learn {new or 'the new move'} and forget the weakest move (never an HM)", "battle",
-                           {"action": "learn"}, "a new damaging move replaces the weakest one")]
+                           {"action": "learn", "target": "if better"}, "a new damaging move replaces the weakest one")]
         if o.mode == "prompt":
             choices = J.choice_options(o)
             if "secret switch" in o.text.lower() and any(x.label == "choose YES" for x in choices):
@@ -2411,6 +2412,12 @@ class Agent:
         return self.stop or "terminated"
 
 
+def with_jev_server_args(server_cmd: list[str]) -> list[str]:
+    """The server command plus any of the flags the player needs (JEV_SERVER_ARGS) it lacks: run.py passes them, a
+    direct launch of this script may not (Codex docs review round 2)."""
+    return list(server_cmd) + [f for f in JEV_SERVER_ARGS if f not in server_cmd]
+
+
 def load_nav(a: argparse.Namespace, server_cmd: list[str]) -> Optional[WorldNav]:
     """--map-source rom: the static world graph from the ROM the server plays (its --rom argument); learned: the
     atlas Jev builds while playing (<run>/data/jev_atlas.json, seeded from --atlas)."""
@@ -2446,6 +2453,7 @@ async def amain(a: argparse.Namespace, server_cmd: list[str]) -> int:
             return 2
     policy = JevPolicy(client, Path(a.run_dir) / "data" / "jev_decisions.jsonl", variant=a.variant,
                        seed=a.seed * 100003 + (0 if a.mock else int(time.time()) % 100003))   # mock runs are reproducible
+    server_cmd = with_jev_server_args(server_cmd)
     params = StdioServerParameters(command=server_cmd[0], args=server_cmd[1:], cwd=a.run_dir)
     code = 0
     async with stdio_client(params) as (r, w):

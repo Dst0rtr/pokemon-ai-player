@@ -418,6 +418,50 @@ def test_learn_prompt_uses_the_learner_and_stops_at_the_battle_menu(emu, monkeyp
     assert presses == ["A", "DOWN DOWN", "A", "A", "A"]                    # nothing pressed at the battle menu
 
 
+def _scripted_learn(prof, emu, monkeypatch, screens, moves):
+    at, presses = {"i": 0}, []
+    party = [{"species": "Butterfree", "moves": moves, "hp": 100}]
+    monkeypatch.setattr(prof, "screen_text", lambda: screens[at["i"]])
+    monkeypatch.setattr(prof, "dialog_text", lambda: screens[at["i"]].replace("▼", ""))
+    monkeypatch.setattr(prof, "is_text_visible", lambda: True)
+    monkeypatch.setattr(prof, "in_battle", lambda: 1)
+    monkeypatch.setattr(prof, "party", lambda: party)
+    real_u8 = prof._u8
+    monkeypatch.setattr(prof, "_u8", lambda a: {D.WHICH_POKEMON: 0, D.PLAYER_MON_NUMBER: 0}.get(a, real_u8(a)))
+
+    def press(script, **kw):
+        presses.append(script.strip())
+        if script.strip().endswith("A") or script.strip() == "B":
+            at["i"] = min(at["i"] + 1, len(screens) - 1)
+    monkeypatch.setattr(emu, "press", press)
+    return presses
+
+
+def test_learn_reads_the_yes_no_cursor_and_always_learns_when_asked(emu, monkeypatch):
+    # review round 2 (2026-10-24): the YES/NO answer assumed the cursor on YES, and battle('learn') declined a move
+    # whenever it did not add attack coverage (Sleep Powder over Harden), although the tool promises to learn it
+    prof = emu.profile
+    moves = [("Confusion", 20), ("Tackle", 30), ("String Shot", 30), ("Harden", 30)]
+    screens = ["Delete an older move to\nmake room for SLEEP POWDER?\n YES\n▶NO",
+               "Which move should be\nforgotten?\n▶CONFUSION\n TACKLE\n STRING SHOT\n HARDEN",
+               "1, 2 and... Poof!\n▼", "BUTTERFREE learned\nSLEEP POWDER!\n▼", "▶FIGHT PKMN\n ITEM  RUN"]
+    presses = _scripted_learn(prof, emu, monkeypatch, screens, moves)
+    out = prof._learn_prompt(emu, True)
+    assert presses[0] == "UP A" and "forgot" in out and "forgot Confusion" not in out, (presses, out)
+    screens[0] = screens[0].replace(" YES\n▶NO", "▶YES\n NO")
+    presses = _scripted_learn(prof, emu, monkeypatch, screens[:1] + screens[-1:], moves)
+    prof._learn_prompt(emu, False)
+    assert presses[0] == "DOWN A", presses                                          # skip, cursor on YES: NO
+    # the Jev mode's selective policy is asked for explicitly: nothing gained, the old moves stay
+    screens = ["Delete an older move to\nmake room for SLEEP POWDER?\n▶YES\n NO",
+               "Which move should be\nforgotten?\n▶CONFUSION\n TACKLE\n STRING SHOT\n HARDEN",
+               "Abandon learning\nSLEEP POWDER?\n▶YES\n NO", "BUTTERFREE did not learn\nSLEEP POWDER!\n▼",
+               "▶FIGHT PKMN\n ITEM  RUN"]
+    presses = _scripted_learn(prof, emu, monkeypatch, screens, moves)
+    out = prof._learn_prompt(emu, True, only_if_better=True)
+    assert "forgot" not in out and presses[:2] == ["A", "B"] and presses[2] == "A", (presses, out)
+
+
 def test_the_move_to_forget_keeps_the_best_attack_of_each_type(emu):
     # Codex 7: by raw power Fire Blast deleted Slash (Flamethrower kept) and Fire Spin was learned over Slash
     pick = emu.profile._forget_choice

@@ -222,7 +222,8 @@ class JevProvider(Provider):
     def server_args(self, run_dir: Path) -> list[str]:
         # the Jev player builds its own map from the map view and decides each new trainer matchup itself: it asks the
         # server for both (a plain MCP client gets neither)
-        return ["--auto-hand-back", "--map-elevation"]
+        from bench.jev import JEV_SERVER_ARGS
+        return list(JEV_SERVER_ARGS)
 
     def prepare(self, run_dir: Path, server_cmd: list[str]) -> None:
         self._server_cmd = server_cmd

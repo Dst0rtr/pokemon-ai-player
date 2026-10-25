@@ -588,6 +588,17 @@ def test_providers_build_agent_and_battle_commands(tmp_path):
         assert b.server_args(tmp_path)[:2] == ["--battle-advisor", "mock-jev"] and "battle('auto')" in b.prompt_suffix()
 
 
+def test_a_direct_jev_agent_launch_gets_the_server_flags_the_player_needs():
+    """Codex docs review round 2: jev_agent.py run by hand (or by a test) forwarded its server command as given, without
+    the trainer hand-back and the elevation line the player relies on; both launch paths now share one flag list."""
+    from bench.jev_agent import with_jev_server_args
+    from bench.providers import JevProvider
+    plain = ["/py", "server.py", "--rom", "r.gb"]
+    assert with_jev_server_args(plain) == plain + list(J.JEV_SERVER_ARGS)
+    assert with_jev_server_args(plain + ["--map-elevation"]) == plain + ["--map-elevation", "--auto-hand-back"]
+    assert JevProvider("jev-latest").server_args(__import__("pathlib").Path(".")) == list(J.JEV_SERVER_ARGS)
+
+
 def test_run_refuses_a_real_jev_run_without_the_key(monkeypatch):
     from bench import run
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
@@ -1881,7 +1892,7 @@ def test_a_level_up_move_prompt_is_decided_in_code(tmp_path):
     p = J.parse("needs a decision\nscreen:\nDelete an older move to make room for FLAMETHROWER?\n▶YES\nNO")
     assert p.mode == "prompt"
     opts = agent.options(p, [], [], [])
-    assert [(x.tool, x.args) for x in opts] == [("battle", {"action": "learn"})] and "Flamethrower" in opts[0].label
+    assert [(x.tool, x.args) for x in opts] == [("battle", {"action": "learn", "target": "if better"})] and "Flamethrower" in opts[0].label
     q = J.parse("needs a decision\nscreen:\nDelete an older move to make room for LEER?\n▶YES\nNO")
     assert [(x.tool, x.args) for x in agent.options(q, [], [], [])] == [("battle", {"action": "skip"})]
     r = J.parse("needs a decision\nscreen:\nDelete an older move to make room for SMOKESCREEN?\n▶YES\nNO")

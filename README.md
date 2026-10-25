@@ -69,7 +69,7 @@ Details: [RESULTS.md](RESULTS.md) ("Jev full-game benchmark entries") and the
   and 1,400 tool calls per run).
 * A second scripted run (`examples/extended_run.py`) continues from the Boulder Badge through Mt. Moon
   to Cerulean City and Misty, covering caves, trainers, in-battle items, field moves and the world graph.
-* 269 automated tests, including a replay of the game's opening, MCP client round-trips (one checks that the plain
+* 271 automated tests, including a replay of the game's opening, MCP client round-trips (one checks that the plain
   server shows and imports nothing from the Jev mode), the benchmark harness and the Jev player.
 * A public **benchmark**: agent CLIs (Claude Code, Codex) play from power-on toward the Champion with
   the same prompt and budgets; see [RESULTS.md](RESULTS.md) and [BENCHMARKING.md](BENCHMARKING.md). The optional

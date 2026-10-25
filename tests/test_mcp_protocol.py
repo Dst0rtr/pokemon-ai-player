@@ -88,17 +88,24 @@ def test_plain_mcp_mode_has_no_jev_in_what_the_llm_sees(rom_path, scratch):
 
 def test_plain_mcp_mode_imports_no_jev_code(rom_path, tmp_path):
     """server.main without --battle-advisor builds the server without importing anything from bench/ (the Jev player,
-    the benchmark harness): the plain MCP mode works with no TypeSafe key and no Jev defaults."""
+    the benchmark harness), with the Jev mode's opt-in flags (--auto-hand-back, --map-elevation) off: the plain MCP
+    mode works with no TypeSafe key and no Jev defaults."""
     import subprocess
     rom = tmp_path / rom_path.name
     shutil.copy(rom_path, rom)                       # Emulator.stop() writes <rom>.ram: keep it off the project ROM
     code = ("import sys, server\n"
             "server.FastMCP.run = lambda self, *a, **k: None\n"
+            "real = server.build_server\n"
+            "def spy(emu, advisor=None):\n"
+            "    print('FLAGS', emu.profile.auto_hand_back, emu.profile.map_elevation, advisor)\n"
+            "    return real(emu, advisor)\n"
+            "server.build_server = spy\n"
             f"server.main(['--rom', {str(rom)!r}, '--ai-model', 'pytest', '--autosave-every', '0', "
             f"'--no-screenshot-files', '--log-level', 'WARNING', '--data-dir', {str(tmp_path)!r}])\n"
             "print('BENCH', sorted(m for m in sys.modules if m == 'bench' or m.startswith('bench.')))\n")
     out = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), capture_output=True, text=True, timeout=120)
     assert "BENCH []" in out.stdout, out.stdout + out.stderr
+    assert "FLAGS False False None" in out.stdout, out.stdout     # the Jev mode's opt-in flags are off by default
 
 
 def test_shop_and_manage_replies_carry_their_own_events():

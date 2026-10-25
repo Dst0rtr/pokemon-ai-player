@@ -194,6 +194,9 @@ EXIT_RE = re.compile(r"\(\d+,\d+\)→([^,\n]+)")
 MAP_ROW_RE = re.compile(r"^\s*(\d+) ([#.,NPDvT<>~^LoS:BXH]+)$")
 WINDOW_RE = re.compile(r"window x(-?\d+)\.\.-?\d+ y(-?\d+)\.\.-?\d+")
 CONN_RE = re.compile(r"(north|south|east|west) edge→([^,\n]+)")
+# server flags the Jev player needs (a plain MCP client gets neither): battle('auto') hands each new trainer matchup
+# back, and map views list cave/forest elevation steps for the learned atlas
+JEV_SERVER_ARGS = ("--auto-hand-back", "--map-elevation")
 HEAL_ITEMS = ("Potion", "Super Potion", "Hyper Potion", "Max Potion", "Full Restore", "Fresh Water", "Soda Pop", "Lemonade")
 STRONG_HEALS = ("Full Restore", "Max Potion", "Hyper Potion", "Lemonade", "Soda Pop", "Super Potion", "Fresh Water", "Potion")
 BALLS = ("Poké Ball", "Great Ball", "Ultra Ball")

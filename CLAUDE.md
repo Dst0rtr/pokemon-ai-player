@@ -32,7 +32,7 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `bench/jev_solo.py` | jev-solo (no LLM): whole-game objective graph, facts, heal/train/HM rules, stuck recovery |
 | `bench/jev_nav.py`, `bench/jev_atlas.py` | Jev map knowledge: `--map-source learned` (default) = atlas built from map views, wWarpEntries and real arrivals (`data/jev_atlas.json`, blank unless `--atlas`); `rom` = warp/edge graph decoded from the ROM (comparison/debugging); both route with Dijkstra over arrival points and per-dungeon warp memory |
 | `bench/improve.py`, `bench/segments.json` | Jev self-improvement: cluster jev-assist fallbacks, Opus proposal (dry run unless `--call`), apply on an iteration branch, compare; fixed segment start states |
-| `tests/` | pytest (269): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trips (incl. no Jev in plain MCP mode), harness parsers/report, Jev track (mocked, no network) |
+| `tests/` | pytest (271): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trips (incl. no Jev in plain MCP mode), harness parsers/report, Jev track (mocked, no network) |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 

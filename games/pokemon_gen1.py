@@ -590,7 +590,7 @@ class PokemonGen1Profile(GameProfile):
             return party[idx]
         return next((m for m in party if fits(m)), party[idx] if idx < len(party) else None)
 
-    def _learn_prompt(self, emu, learn: bool) -> str:
+    def _learn_prompt(self, emu, learn: bool, only_if_better: bool = False) -> str:
         """battle('learn') / battle('skip') on a level-up move prompt: learn it and forget the weakest move (status
         moves first, then the least power; HM moves stay), or keep the old moves (run 75: Charizard L36+ never learned
         Flamethrower; generic cursor presses tried to delete Cut, an HM, and gave up). It stops at the battle menu or
@@ -606,10 +606,11 @@ class PokemonGen1Profile(GameProfile):
                 new_move = nm[1].strip()
             if "▶YES" in txt or "▶NO" in txt:
                 self._collect(seen)
-                if "abandon" in d:
-                    emu.press("DOWN A" if learn else "A", settle=1)   # learn: do not abandon; skip: abandon
-                else:                                     # "Delete an older move to make room for X?"
-                    emu.press("A" if learn else "DOWN A", settle=1)
+                # learn: YES to "delete an older move?", NO to "abandon learning?"; skip: the other way round. The
+                # cursor is read, not assumed on YES
+                yes = learn != ("abandon" in d)
+                on_yes = "▶YES" in txt
+                emu.press(("A" if on_yes else "UP A") if yes else ("DOWN A" if on_yes else "A"), settle=1)
                 continue
             if "▶" in txt and ("forgotten" in d or "which move" in d):
                 if not learn:
@@ -621,6 +622,10 @@ class PokemonGen1Profile(GameProfile):
                     continue
                 names = [self._norm(n) for n, _ in mon["moves"]]
                 k = self._forget_choice([n for n, _ in mon["moves"]], new_move)
+                if k is None and not only_if_better:
+                    # an explicit battle('learn') learns it: over the least useful move (HMs stay). Keeping the old
+                    # moves when nothing is gained is the Jev mode's policy, asked for with target 'if better'
+                    k = self._forget_choice([n for n, _ in mon["moves"]])
                 if k is None:
                     emu.press("B", settle=1)              # only HMs, or nothing better: keep the old moves
                     learn = False
@@ -806,7 +811,7 @@ class PokemonGen1Profile(GameProfile):
         if action == "auto":
             return self.battle_auto(emu, target)
         if action in ("learn", "skip"):                   # the "Delete an older move to make room for X?" prompt
-            return self._learn_prompt(emu, action == "learn")
+            return self._learn_prompt(emu, action == "learn", only_if_better=(target or "").lower().strip() == "if better")
         if not self.in_battle():
             return "not in a battle"
         kind, prelog = self._wait_menu(emu)
