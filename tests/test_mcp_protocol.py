@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import sys
 
 from mcp import ClientSession, StdioServerParameters
@@ -15,9 +16,12 @@ EXPECTED_TOOLS = {"press", "walk", "battle", "talk", "shop", "manage", "wait", "
 
 
 async def _session(rom_path, scratch, fn):
+    rom = scratch / rom_path.name                    # Emulator.stop() writes <rom>.ram: keep it off the project ROM
+    if not rom.exists():
+        shutil.copy(rom_path, rom)
     params = StdioServerParameters(
         command=sys.executable,
-        args=[str(ROOT / "server.py"), "--rom", str(rom_path), "--ai-model", "pytest", "--autosave-every", "0",
+        args=[str(ROOT / "server.py"), "--rom", str(rom), "--ai-model", "pytest", "--autosave-every", "0",
               "--no-screenshot-files", "--log-level", "WARNING", "--data-dir", str(scratch)],
         cwd=str(scratch),
     )
@@ -63,3 +67,30 @@ def test_press_returns_text_and_image(rom_path, scratch):
         return True
 
     assert asyncio.run(_session(rom_path, scratch, body))
+
+
+def test_plain_mcp_mode_has_no_jev_in_what_the_llm_sees(rom_path, scratch):
+    """The MCP server is the primary product; the Jev player is an optional mode outside it (bench/). Without
+    --battle-advisor nothing the LLM sees mentions Jev, and battle('auto') is the server's own move scorer."""
+    async def body(s, init):
+        tools = await s.list_tools()
+        text = init.instructions + json.dumps([t.model_dump() for t in tools.tools])
+        assert "jev" not in text.lower() and "typesafe" not in text.lower()
+        return True
+
+    assert asyncio.run(_session(rom_path, scratch, body))
+
+
+def test_plain_mcp_mode_imports_no_jev_code(rom_path, tmp_path):
+    """server.main without --battle-advisor builds the server without importing anything from bench/ (the Jev player,
+    the benchmark harness): the plain MCP mode works with no TypeSafe key and no Jev defaults."""
+    import subprocess
+    rom = tmp_path / rom_path.name
+    shutil.copy(rom_path, rom)                       # Emulator.stop() writes <rom>.ram: keep it off the project ROM
+    code = ("import sys, server\n"
+            "server.FastMCP.run = lambda self, *a, **k: None\n"
+            f"server.main(['--rom', {str(rom)!r}, '--ai-model', 'pytest', '--autosave-every', '0', "
+            f"'--no-screenshot-files', '--log-level', 'WARNING', '--data-dir', {str(tmp_path)!r}])\n"
+            "print('BENCH', sorted(m for m in sys.modules if m == 'bench' or m.startswith('bench.')))\n")
+    out = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), capture_output=True, text=True, timeout=120)
+    assert "BENCH []" in out.stdout, out.stdout + out.stderr

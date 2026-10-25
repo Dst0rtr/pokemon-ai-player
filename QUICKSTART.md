@@ -1,5 +1,9 @@
 # Quick Start
 
+This sets up the **MCP server**, the main way to use this project: your LLM plays through any MCP client. Nothing
+here needs a TypeSafe key or touches the optional autonomous Jev mode; for that, see
+[README: Autonomous Jev mode](README.md#2-autonomous-jev-mode).
+
 ## 1. Install
 
 ```bash

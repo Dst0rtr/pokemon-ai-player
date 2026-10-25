@@ -4,6 +4,10 @@ Two layers: the server records **metrics** for every session automatically, and 
 in `bench/` drives agent CLIs headless against the server, enforces budgets and publishes the
 results as `results/*.json` and [RESULTS.md](RESULTS.md).
 
+The main benchmark is LLM agents playing through the MCP server (`--mode llm`). The optional autonomous Jev mode
+(`--mode jev-*`, [Jev track](#jev-track-typesafe-system-one)) is a separate, code-scaffolded track with its own tables
+in RESULTS.md; its results are not comparable with the LLM leaderboard.
+
 ## Running a benchmark (copy-paste)
 
 ### Prerequisites
@@ -214,6 +218,15 @@ Jev (`jev-latest`, docs.typesafe.ai) answers typed questions about a `state`: a 
 define (with a probability per option and a `confidence`), a yes/no Noul, or a Score. It cannot write
 text or call tools, so it cannot drive the MCP server the way an agent CLI does. Jev runs therefore get
 code scaffolding and are reported in a **separate table** in `RESULTS.md`.
+
+Results so far (details in RESULTS.md, "Jev full-game benchmark entries"):
+* the one run under the standard limits (12 h / 20,000 calls, blank map, unassisted) reached 5 badges, stopped by the
+  call cap;
+* `uncapped-2` (2026-10-21, blank map, unassisted, one RNG seed, run with no call or time cap, so outside the
+  standard limits) reached the Hall of Fame at 35,360 tool calls / 58 min / $0.34.
+
+Jev chooses among options code lists; the objective graph, healing/training/HM rules and stuck recovery are
+Pokémon-Red-specific code tuned over about 90 iterations. These results are about Jev plus that code.
 
 ```bash
 # the key is read from TYPESAFE_API_KEY only; load it per command, never store it in the repo

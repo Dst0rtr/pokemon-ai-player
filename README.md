@@ -8,6 +8,56 @@ straight from memory, so the agent plays mostly from text instead of screenshots
 high-level helpers (pathfinding, whole-battle turns, conversations, shops, party management).
 Any other ROM works with the generic profile (button scripts, screenshots, save states, raw memory).
 
+## Two ways to use it
+
+| | **1. MCP server: your LLM plays** (the main purpose) | **2. Autonomous Jev mode** (optional) |
+|---|---|---|
+| Who plays | any LLM, through any MCP client (Claude Desktop, Claude Code, Codex, Goose, ...) | TypeSafe's Jev model plus Pokémon-specific rule code in `bench/`; no LLM is called |
+| What you start | `server.py --rom GAME.gb` (your MCP client launches it) | `bench/run.py --mode jev-solo` (it starts `server.py` itself and plays it as an MCP client) |
+| Games | any Game Boy ROM; rich support for Pokémon Red/Blue/Yellow | Pokémon Red (the only game it was built and tested on) |
+| Needs | the venv and a ROM you own | the same, plus a TypeSafe API key in `TYPESAFE_API_KEY` |
+
+**What switches between them** is the program you start. `server.py` is the plain MCP server: it never calls Jev and
+imports nothing from `bench/` (a test checks this). The only Jev option on the server is
+`--battle-advisor jev`, used by one benchmark variant, and it is off by default. `bench/run.py --mode` picks who
+drives the server for a recorded run: `--mode llm --provider claude|codex` for an agent CLI, `--mode jev-solo` (or
+another `jev-*` mode) for Jev.
+
+### 1. MCP server
+
+```bash
+venv/bin/python server.py --rom path/to/pokemon-red.gb --ai-model my-model   # normally your MCP client runs this
+```
+
+Client configuration is under [Quick start](#quick-start) and in [QUICKSTART.md](QUICKSTART.md). The tools are listed
+under [Tools](#tools); [AGENT_GUIDE.md](AGENT_GUIDE.md) is the long guide for the model.
+
+### 2. Autonomous Jev mode
+
+```bash
+TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" venv/bin/python bench/run.py --mode jev-solo   # from power-on, blank map
+venv/bin/python bench/run.py --mode jev-solo --mock                                          # offline check, no key
+```
+
+The first command uses the standard benchmark limits (12 hours or 20,000 tool calls). `uncapped-2` (below) was run
+with `--budget-hours 48 --max-calls 1000000 --experiment "uncapped-2: ..."` instead, so it is labelled as outside
+the cap.
+
+What it has done, and what that means:
+
+* **Unassisted Hall of Fame, outside the standard cap.** The run `uncapped-2` (2026-10-21) played from power-on to the
+  Hall of Fame with no LLM and no human help: 35,360 tool calls, 58 minutes, $0.34. It started with a blank map and
+  ran on one RNG seed, with no call or time cap. An earlier run (iteration 91) also finished, at 24,715 calls.
+* **Under the standard benchmark limits** (12 hours or 20,000 tool calls), the one Jev run so far reached 5 badges
+  and was stopped by the call cap.
+* **"Autonomous" means Jev plus game-specific code.** Jev only picks among the options code lists each step. The code
+  also holds a whole-game objective graph, healing, training and HM rules, and stuck recovery, written and tuned over
+  about 90 iterations on Pokémon Red. So the result shows that Jev with this code can finish the game, not that Jev
+  plays games in general. It is not comparable with the LLM leaderboard.
+
+Details: [RESULTS.md](RESULTS.md) ("Jev full-game benchmark entries") and the
+[Jev track](BENCHMARKING.md#jev-track-typesafe-system-one) in BENCHMARKING.md.
+
 ## Status
 
 * Played from power-on to the Boulder Badge by a scripted reference agent using only the public
@@ -15,10 +65,11 @@ Any other ROM works with the generic profile (button scripts, screenshots, save 
   and 1,400 tool calls per run).
 * A second scripted run (`examples/extended_run.py`) continues from the Boulder Badge through Mt. Moon
   to Cerulean City and Misty, covering caves, trainers, in-battle items, field moves and the world graph.
-* 66 automated tests, including a replay of the game's opening, an MCP client round-trip and the
-  benchmark harness's stream parsers.
+* 266 automated tests, including a replay of the game's opening, MCP client round-trips (one checks that the plain
+  server shows and imports nothing from the Jev mode), the benchmark harness and the Jev player.
 * A public **benchmark**: agent CLIs (Claude Code, Codex) play from power-on toward the Champion with
-  the same prompt and budgets; see [RESULTS.md](RESULTS.md) and [BENCHMARKING.md](BENCHMARKING.md).
+  the same prompt and budgets; see [RESULTS.md](RESULTS.md) and [BENCHMARKING.md](BENCHMARKING.md). The optional
+  Jev mode has its own, separately labelled entries there.
 * Save states are not included in the repository (they contain emulator memory derived from the
   ROM). Create your own with `save_state("after-brock")` at the post-Brock point and reload it with
   `load_state("after-brock")`.
@@ -68,7 +119,8 @@ Then point your MCP client at `server.py` (see [QUICKSTART.md](QUICKSTART.md)):
 `bench/run.py` plays one autonomous run with an LLM agent CLI (Claude Code, Codex) or with TypeSafe's Jev, under
 a 12 h / 20,000-call budget, and publishes `results/<run>.json` plus [RESULTS.md](RESULTS.md). Prerequisites,
 costs, outputs and troubleshooting are in [BENCHMARKING.md](BENCHMARKING.md#running-a-benchmark-copy-paste).
-Jev's key lives in `~/.typesafe-api-key` (chmod 600, never in the repo) and is loaded per command:
+Jev's key lives in `~/.typesafe-api-key` (chmod 600, never in the repo) and is loaded per command
+(`TYPESAFE_API_KEY="$(cat ~/.typesafe-api-key)" ...`, as in the examples below).
 
 Pick a play mode with `--mode`:
 
