@@ -578,7 +578,11 @@ def test_providers_build_agent_and_battle_commands(tmp_path):
     cmd = p.command(tmp_path, tmp_path / "prompt.md", None, True)
     assert cmd[1].endswith("jev_agent.py") and "--mock" in cmd and cmd[cmd.index("--variant") + 1] == "solo"
     assert cmd[cmd.index("--") + 1:] == ["/py", "server.py", "--rom", "r.gb"]
+    # the Jev player opts in to the server's code-client behaviours; the LLM CLIs do not (plain MCP mode)
+    assert p.server_args(tmp_path) == ["--auto-hand-back", "--map-elevation"]
+    assert make_provider("codex").server_args(tmp_path) == []
     if shutil.which("claude"):
+        assert make_provider("claude").server_args(tmp_path) == []
         b = make_provider("jev", variant="battles", mock=True)
         assert isinstance(b, JevBattlesProvider) and b.parser == "claude" and b.model == "claude-haiku-4-5-20251001"
         assert b.server_args(tmp_path)[:2] == ["--battle-advisor", "mock-jev"] and "battle('auto')" in b.prompt_suffix()

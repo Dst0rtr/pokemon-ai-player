@@ -473,6 +473,16 @@ def test_the_map_view_lists_elevation_steps(emu, monkeypatch):
     assert line == "elevation steps (no walking across): 0,0d 1,0d", line   # (2,1) is a wall: no step listed
 
 
+def test_the_map_view_lists_elevation_steps_only_with_the_flag(emu, monkeypatch):
+    # an LLM's pathfinding already respects elevation steps: the extra line costs tokens on every cave map, so only the
+    # Jev mode (which builds its own map from the view) asks for it with --map-elevation
+    prof = emu.profile
+    monkeypatch.setattr(prof, "elevation_text", lambda cells: "elevation steps (no walking across): 0,0d")
+    assert not prof.map_elevation and "elevation steps" not in prof.full_map_text()
+    monkeypatch.setattr(prof, "map_elevation", True)
+    assert "elevation steps" in prof.full_map_text()
+
+
 def test_auto_battle_hands_back_when_no_move_can_hit(emu, monkeypatch):
     # Codex review 18: with every move left immune (Normal moves vs a Ghost), auto stops before spending a turn
     prof = emu.profile
@@ -501,9 +511,16 @@ def test_auto_battle_hands_back_a_trainers_next_pokemon(emu, monkeypatch):
 
     def act(emu_, action, target=""):
         attacked.append(state["foe"])
-        state["foe"] = next(foes)
-        return "turn done"
+        state["foe"] = next(foes, None)
+        return "turn done" if state["foe"] else "battle over"
     monkeypatch.setattr(prof, "battle_action", act)
+    # plain MCP mode (no --auto-hand-back): auto fights the whole battle as it always did
+    assert not prof.auto_hand_back
+    out = prof.battle_auto(emu)
+    assert "Cloyster" in attacked and "sent out" not in out, (out, attacked)
+    foes, state["foe"] = iter(["Dewgong", "Dewgong", "Cloyster", "Cloyster"]), "Dewgong"
+    attacked.clear()
+    monkeypatch.setattr(prof, "auto_hand_back", True)              # the Jev mode's server flag
     out = prof.battle_auto(emu)
     assert "trainer sent out Cloyster" in out and "Cloyster" not in attacked, (out, attacked)
     # Codex review 16: two of the same species in a row (Lance's Dragonair): the faint itself hands back

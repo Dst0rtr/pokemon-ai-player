@@ -208,8 +208,7 @@
   },
   "wall_seconds": 8063.0,
   "benchmark_entry": {
-   "label": "standard limits (12 h / 20,000 calls), unassisted, blank atlas, one seed: stopped by the call cap",
-   "standard": true
+   "label": "standard limits (12 h / 20,000 calls), unassisted, blank atlas, one seed: stopped by the call cap"
   }
  },
  "metrics": {

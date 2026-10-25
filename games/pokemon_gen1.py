@@ -38,7 +38,7 @@ _LANDMARKS = set(range(0, 37)) | {59, 82, 83, 94, 108, 113, 118, 120, 142, 156, 
 
 _BATTLE_KIND = {1: "wild", 2: "trainer"}
 _STATUS_MOVES = {"Growl", "Tail Whip", "String Shot", "Leer", "Sand-Attack", "Harden", "Withdraw", "Defense Curl",
-                 "PoisonPowder", "Stun Spore", "Sleep Powder", "Supersonic", "Sing", "Smokescreen", "Screech",
+                 "PoisonPowder", "Stun Spore", "Sleep Powder", "Supersonic", "Sing", "SmokeScreen", "Screech",
                  "Focus Energy", "Meditate", "Sharpen", "Agility", "Double Team", "Minimize", "Swords Dance",
                  "Thunder Wave", "Toxic", "Leech Seed", "Hypnosis", "Confuse Ray", "Glare", "Poison Gas",
                  "Lovely Kiss", "Spore", "Mist", "Haze", "Reflect", "Light Screen", "Recover", "Rest",
@@ -67,6 +67,10 @@ class PokemonGen1Profile(GameProfile):
         super().__init__(pyboy, options)
         self.charmap = D.CHARMAP
         self.fast_text = self.options.get("fast_text", True)
+        # opt-in behaviours for a code-driven client (the Jev mode passes --auto-hand-back / --map-elevation); off for
+        # a plain MCP client, which keeps the server's original behaviour
+        self.auto_hand_back = bool(self.options.get("auto_hand_back", False))
+        self.map_elevation = bool(self.options.get("map_elevation", False))
         self.visited: set[int] = set()
         self._reported_maps: set[int] = set()
         self._battles = 0
@@ -776,7 +780,7 @@ class PokemonGen1Profile(GameProfile):
             # a trainer's next Pokémon is a new matchup: hand it back (switch, item, or auto again) before attacking it
             # (Codex review 15: in league-leg-6 one auto call ran from Lorelei's Dewgong into her Cloyster and on)
             foe = (b["enemy"]["species"], b["enemy"]["max_hp"]) if b and b["enemy"]["max_hp"] else None
-            if b and b.get("kind") == "trainer" and foe:
+            if self.auto_hand_back and b and b.get("kind") == "trainer" and foe:
                 if first_foe is None:
                     first_foe = foe
                 elif foe != first_foe and turn:
@@ -787,7 +791,7 @@ class PokemonGen1Profile(GameProfile):
                 return " | ".join(logs + [f"stopped: no move with PP left can affect {b['enemy']['species']}; switch, use an item, or run"])
             r = self.battle_action(emu, "fight", move)
             logs.append(r)
-            if b and b.get("kind") == "trainer" and re.search(r"Enemy [^|]*fainted", r) and self.in_battle() \
+            if self.auto_hand_back and b and b.get("kind") == "trainer" and re.search(r"Enemy [^|]*fainted", r) and self.in_battle() \
                     and "battle over" not in r:
                 # its next Pokémon may be the same species (Lance's two Dragonair: Codex review 16): hand back now
                 return " | ".join(logs) + " — stopped: the trainer is sending out its next Pokémon; switch, use an item, or battle('auto') again"
@@ -2012,7 +2016,7 @@ class PokemonGen1Profile(GameProfile):
         exits = ", ".join(f"({wx},{wy})→{self.map_label(d)}" for wx, wy, d in self.warps()[:12])
         conns = ", ".join(f"{side} edge→{D.map_name(mid)}" for side, mid in self.connections())
         tail = "\n".join(t for t in (f"exits: {exits}" if exits else "", f"connections: {conns}" if conns else "",
-                                     self.elevation_text(cells)) if t)
+                                     self.elevation_text(cells) if self.map_elevation else "") if t)
         return head + "\n" + ruler + "\n" + body + ("\n" + tail if tail else "")
 
     def elevation_text(self, cells) -> str:

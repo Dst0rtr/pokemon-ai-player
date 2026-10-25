@@ -82,9 +82,12 @@ continue. Common questions: keep a nickname? learn a new move? (a YES/NO, then a
 
 ## Battles (Pokémon)
 
-* `battle("auto")` picks damaging moves with PP left and keeps attacking until the battle ends, a
-  question appears, or your Pokémon drops to a quarter of its HP. Call it again to continue, or
-  switch, use an item, or run.
+* `battle("auto")` picks the best damaging move for the matchup (type chart, STAB, accuracy) and keeps
+  attacking until the battle ends, a question appears, your Pokémon drops to a quarter of its HP, or no
+  move with PP left can affect the foe. Call it again to continue, or switch, use an item, or run.
+* `battle("learn")` / `battle("skip")` answer a level-up move prompt: learn the new move over the weakest
+  one (HM moves are kept), or keep the old moves.
+* `walk("push 12,5 to 12,9")` pushes a boulder to a cell one push at a time, turning Strength on first.
 * `battle("fight", "<move>")` refuses a move with no PP and lists the usable ones; with every move
   empty the game uses Struggle.
 * Results include the battle messages and HP before/after: `Critical hit! | Enemy PIDGEY fainted!

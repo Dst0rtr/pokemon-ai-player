@@ -188,14 +188,21 @@ def _ms(x) -> str:
     return "—" if x is None else f"{x:.0f}"
 
 
+def over_cap(h: dict) -> bool:
+    """Whether a run had more than the standard benchmark limits (12 h of active play, 20,000 tool calls), from the
+    budget it recorded (older results without one count as standard)."""
+    b = h.get("budget") or {}
+    return (b.get("max_calls") or 0) > 20000 or (b.get("hours") or 0) > 12
+
+
 def map_cell(h: dict) -> str:
     """How the Jev player knew the maps: rom, learned (blank) or learned (carried atlas). Older runs: rom."""
     ms = h.get("map_source") or {}
     if h.get("variant") == "battles":
         return "—"
-    entry = h.get("benchmark_entry") or {}
-    exp = (" — outside the 20k cap" if entry and not entry.get("standard") else "") if entry else \
-        (" — experiment" if h.get("experiment") else "")
+    tags = [t for t in ("experiment" if h.get("experiment") and not h.get("benchmark_entry") else "",
+                        "outside the 20k cap" if over_cap(h) else "") if t]
+    exp = "".join(f" — {t}" for t in tags)
     if ms.get("source") == "learned":
         return ("learned (carried atlas)" if ms.get("atlas_seed") else "learned (blank)") + exp
     return "rom" + exp
@@ -227,14 +234,14 @@ def jev_leaderboard(results: list[dict]) -> str:
 
 
 def jev_entries(results: list[dict]) -> str:
-    """The Jev full-game runs recorded as benchmark entries (`harness.benchmark_entry`: label, standard), each with the
-    label that says how it was run: assisted or not, map knowledge, seeds, and whether it kept the standard limits."""
+    """The Jev full-game runs recorded as benchmark entries (`harness.benchmark_entry`: a label saying how each was run:
+    assisted or not, map knowledge, seeds); standard limits first, then runs over them (`over_cap`, from the budget)."""
     rows = [r for r in results if r["harness"].get("benchmark_entry")]
     if not rows:
         return ""
     head = ["Entry", "Variant", "Badges", "Furthest", "Hall of Fame", "Tool calls", "Steps", "Active h", "Total cost", "Exit"]
     out = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
-    for r in sorted(rows, key=lambda r: (not r["harness"]["benchmark_entry"].get("standard"), r["run_id"])):
+    for r in sorted(rows, key=lambda r: (over_cap(r["harness"]), r["run_id"])):
         h, d, m = r["harness"], r["derived"], r["metrics"]
         out.append("| " + " | ".join([
             h["benchmark_entry"].get("label", ""), f"jev-{h.get('variant')}", str(d["badges"]), d["furthest"],
@@ -341,7 +348,9 @@ def build_results_md(results: list[dict]) -> str:
              "when the milestone was reached; `—` means never. Ranking: Champion first (by time), then badges, "
              "then the furthest story point, then fewer tool calls. Cost is the CLI's own API-equivalent figure "
              "(runs on a subscription are not billed per token); `(est.)` marks an estimate from list prices. "
-             "Raw data: `results/*.json`; regenerate with `python bench/report.py`.", ""]
+             "Raw data: `results/*.json`; regenerate with `python bench/report.py`. Each result records the server commit "
+             "it ran on (`harness.server_commit`): the server has gained features since round one (October 2026), so "
+             "compare runs made on the same server version.", ""]
     cli = [r for r in results if not is_jev(r)]
     jev = [r for r in results if is_jev(r)]
     if not results:

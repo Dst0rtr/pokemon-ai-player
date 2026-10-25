@@ -18,8 +18,9 @@ Any other ROM works with the generic profile (button scripts, screenshots, save 
 | Needs | the venv and a ROM you own | the same, plus a TypeSafe API key in `TYPESAFE_API_KEY` |
 
 **What switches between them** is the program you start. `server.py` is the plain MCP server: it never calls Jev and
-imports nothing from `bench/` (a test checks this). The only Jev option on the server is
-`--battle-advisor jev`, used by one benchmark variant, and it is off by default. `bench/run.py --mode` picks who
+imports nothing from `bench/` (a test checks this). The Jev mode starts it with two extra flags for a code-driven
+client (`--auto-hand-back`, `--map-elevation`); `--battle-advisor jev` is used by one benchmark variant. All three
+are off by default. `bench/run.py --mode` picks who
 drives the server for a recorded run: `--mode llm --provider claude|codex` for an agent CLI, `--mode jev-solo` (or
 another `jev-*` mode) for Jev.
 
@@ -40,16 +41,19 @@ venv/bin/python bench/run.py --mode jev-solo --mock                             
 ```
 
 The first command uses the standard benchmark limits (12 hours or 20,000 tool calls). `uncapped-2` (below) was run
-with `--budget-hours 48 --max-calls 1000000 --experiment "uncapped-2: ..."` instead, so it is labelled as outside
-the cap.
+with `--budget-hours 48 --max-calls 1000000 --experiment "uncapped-2: ..."` instead. Each result records its budget,
+and RESULTS.md marks every run over the standard limits as "outside the 20k cap".
 
 What it has done, and what that means:
 
 * **Unassisted Hall of Fame, outside the standard cap.** The run `uncapped-2` (2026-10-21) played from power-on to the
   Hall of Fame with no LLM and no human help: 35,360 tool calls, 58 minutes, $0.34. It started with a blank map and
-  ran on one RNG seed, with no call or time cap. An earlier run (iteration 91) also finished, at 24,715 calls.
+  ran on one RNG seed, with no call or time cap, on the Jev code at commit `402e35e` (later commits changed the Jev
+  player again). An earlier unassisted run, iteration 91, also reached the Hall of Fame, at 24,715 calls on a
+  6-hour / 100,000-call budget, so it was outside the standard limits too.
 * **Under the standard benchmark limits** (12 hours or 20,000 tool calls), the one Jev run so far reached 5 badges
-  and was stopped by the call cap.
+  and was stopped by the call cap. It used the same code as iteration 91, an hour later: results vary a lot from
+  run to run.
 * **"Autonomous" means Jev plus game-specific code.** Jev only picks among the options code lists each step. The code
   also holds a whole-game objective graph, healing, training and HM rules, and stuck recovery, written and tuned over
   about 90 iterations on Pokémon Red. So the result shows that Jev with this code can finish the game, not that Jev
@@ -65,7 +69,7 @@ Details: [RESULTS.md](RESULTS.md) ("Jev full-game benchmark entries") and the
   and 1,400 tool calls per run).
 * A second scripted run (`examples/extended_run.py`) continues from the Boulder Badge through Mt. Moon
   to Cerulean City and Misty, covering caves, trainers, in-battle items, field moves and the world graph.
-* 266 automated tests, including a replay of the game's opening, MCP client round-trips (one checks that the plain
+* 269 automated tests, including a replay of the game's opening, MCP client round-trips (one checks that the plain
   server shows and imports nothing from the Jev mode), the benchmark harness and the Jev player.
 * A public **benchmark**: agent CLIs (Claude Code, Codex) play from power-on toward the Champion with
   the same prompt and budgets; see [RESULTS.md](RESULTS.md) and [BENCHMARKING.md](BENCHMARKING.md). The optional
@@ -78,7 +82,7 @@ Details: [RESULTS.md](RESULTS.md) ("Jev full-game benchmark entries") and the
 
 | | Before | Now |
 |---|---|---|
-| Tools exposed to the model | 15 low-level tools (about 1.2k tokens of schema, no guide) | 14 higher-level tools (about 1.6k tokens of schema plus a 320-token agent guide) |
+| Tools exposed to the model | 15 low-level tools (about 1.2k tokens of schema, no guide) | 14 higher-level tools (about 2.5k tokens of schema plus a 400-token agent guide) |
 | Actions per call | 1 button, or a JSON array | scripts and goals: `press("A*4 DOWN A")`, `walk("to Pewter City")`, `battle("auto")`, `talk()` |
 | Seeing the result | separate screenshot call after every action (one extra model turn each) | every action returns status, on-screen text, a hint when the game asks something, and an image only if the screen changed |
 | Reading dialogue / menus | image only | decoded from VRAM as text (Pokémon) |
@@ -160,8 +164,8 @@ Add `--smoke` for a few-minute checklist run first.
 | Tool | What it does |
 |---|---|
 | `press(buttons, screenshot=true)` | Button script: `A B START SELECT UP DOWN LEFT RIGHT`, `A*5` repeats, `UP:16` holds, `W60` waits. Each press waits for text and animations to finish |
-| `walk(path, screenshot=true, on_battle="stop")` | Steps (`"up 5, right 3"`) or goals: `"to 23,25"`, `"to Viridian Mart"`, `"to north edge"`, `"to Pewter City"` (routes through maps you have visited). Stops when blocked, at doors, or when a battle/dialogue starts and says why. `on_battle="run"` or `"auto"` resolves wild encounters and keeps going |
-| `battle(action, target)` | Pokémon: `fight` (move name or 1-4), `auto` (whole routine battle, picking the best move for the type matchup), `run`, `switch` (party number or name), `item` (item name, or `"Potion: Pidgey"`), `bait` / `rock` (Safari Zone). Reports messages and HP changes, marks moves locked by Disable; stops at YES/NO or learn-move prompts |
+| `walk(path, screenshot=true, on_battle="stop")` | Steps (`"up 5, right 3"`) or goals: `"to 23,25"`, `"to Viridian Mart"`, `"to north edge"`, `"to Pewter City"` (routes through maps you have visited). Stops when blocked, at doors, or when a battle/dialogue starts and says why. `on_battle="run"` or `"auto"` resolves wild encounters and keeps going. `"push 12,5 to 12,9"` pushes a boulder (turns Strength on) |
+| `battle(action, target)` | Pokémon: `fight` (move name or 1-4), `auto` (whole routine battle, picking the best move for the type matchup), `run`, `switch` (party number or name), `item` (item name, or `"Potion: Pidgey"`), `bait` / `rock` (Safari Zone), `learn` / `skip` (a level-up move prompt). Reports messages and HP changes, marks moves locked by Disable; stops at YES/NO or learn-move prompts, at low HP, or when no move with PP can affect the foe |
 | `talk()` | Interact with what you face and read the whole conversation, including cutscenes; stops at any choice |
 | `shop(item, qty)` | Pokémon: buy from a clerk by item name; reports money and bag |
 | `manage(action, target, target2)` | Pokémon: `lead` (put a Pokémon first), `swap`, `use` (item, optional Pokémon; TMs/HMs with `"Charmander: Growl"` naming the move to forget), `field` (Cut / Surf / Strength / Flash / Fly / Dig / Teleport from the party menu), `save` (in-game save) |
@@ -185,7 +189,8 @@ python3 server.py --rom GAME.gb [--ai-model NAME] [--profile auto|generic|pokemo
                   [--scale 1-4] [--resume] [--autosave-every N] [--no-fast-text]
                   [--no-screenshot-files] [--allow-memory-write] [--charmap map.json] [--data-dir DIR]
                   [--session-id ID] [--max-tool-calls N] [--max-real-seconds S] [--finalize-on-exit]
-                  [--log-file FILE] [--battle-advisor jev|mock-jev --jev-model M --jev-log FILE]
+                  [--log-file FILE] [--auto-hand-back] [--map-elevation]
+                  [--battle-advisor jev|mock-jev --jev-model M --jev-log FILE]
 ```
 
 * `--resume` continues from `saves/<rom>/autosave.state`.
@@ -197,6 +202,9 @@ python3 server.py --rom GAME.gb [--ai-model NAME] [--profile auto|generic|pokemo
 * `--session-id` continues one metrics session across launches (with `--resume`); `--max-tool-calls` /
   `--max-real-seconds` end a benchmark run cleanly (`BUDGET EXHAUSTED`); `--finalize-on-exit` writes the
   final report when the server stops.
+* `--auto-hand-back` / `--map-elevation` (for code-driven clients; the Jev mode passes both, an LLM client needs
+  neither): `battle('auto')` stops when a trainer sends out its next Pokémon, and map views list cave/forest
+  elevation steps.
 * `--battle-advisor` (benchmark use only): `battle('auto')` turns are picked by Jev (needs `TYPESAFE_API_KEY`).
 
 ## Layout

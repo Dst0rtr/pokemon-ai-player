@@ -46,6 +46,11 @@ def build_server(emu: Emulator, battle_advisor=None) -> FastMCP:
             out.append(ImageContent(type="image", data=base64.b64encode(image).decode(), mimeType="image/png"))
         return out
 
+    def _with_events(text: str) -> str:
+        """A helper's own reply plus the milestones it caused (an evolution from an item, a purchase)."""
+        events = emu.pop_events()
+        return text + ("\nEVENT: " + "; ".join(events) if events else "")
+
     def _guard(tool: str) -> Optional[list]:
         """When a run budget is used up, refuse further game actions (finalizing the metrics once)."""
         reason = emu.metrics.budget_exhausted()
@@ -87,7 +92,7 @@ def build_server(emu: Emulator, battle_advisor=None) -> FastMCP:
             return _respond("press", head, None)
         return _observe("press", head, screenshot)
 
-    @tool(description="Walk. A path of tile steps ('up 5, right 3'), or pathfind with 'to X,Y' (map coordinates), 'to <exit name>' ('to Viridian Mart', 'to outside'), 'to north edge', or 'to <map name>' (routes through maps you have visited). Stops early when blocked, on entering a new map, or when a battle/dialogue starts, and says why. on_battle='run' flees wild battles and keeps going, 'auto' fights them.")
+    @tool(description="Walk. A path of tile steps ('up 5, right 3'), or pathfind with 'to X,Y' (map coordinates), 'to <exit name>' ('to Viridian Mart', 'to outside'), 'to north edge', or 'to <map name>' (routes through maps you have visited). Stops early when blocked, on entering a new map, or when a battle/dialogue starts, and says why. on_battle='run' flees wild battles and keeps going, 'auto' fights them. Pokémon: 'push BX,BY to TX,TY' pushes a boulder to a cell (turns Strength on if needed).")
     def walk(path: str, screenshot: bool = True, on_battle: str = "stop") -> list:
         if (blocked := _guard("walk")) is not None:
             return blocked
@@ -96,7 +101,7 @@ def build_server(emu: Emulator, battle_advisor=None) -> FastMCP:
             return _respond("walk", head, None)
         return _observe("walk", head, screenshot, with_map=True)
 
-    @tool(description="Battle helper (Pokémon): action 'fight' (target = move name or 1-4), 'auto' (keep attacking with the best move for the matchup - type chart, STAB, accuracy, never one the foe is immune to - until the battle ends, a question appears, or HP is low; target = preferred move), 'run', 'switch' (target = party number or name; also answers 'Bring out which POKéMON?'), 'item' (target = item name, optionally 'Potion: Pidgey' to pick who gets it; in the Safari Zone it throws a Safari Ball), 'bait' / 'rock' (Safari Zone). Returns what happened plus HP changes; stops on YES/NO or learn-move prompts so you can answer with press().")
+    @tool(description="Battle helper (Pokémon): action 'fight' (target = move name or 1-4), 'auto' (keep attacking with the best move for the matchup - type chart, STAB, accuracy, never one the foe is immune to - until the battle ends, a question appears, HP is low, or no move with PP can affect the foe; target = preferred move), 'run', 'switch' (target = party number or name; also answers 'Bring out which POKéMON?'), 'item' (target = item name, optionally 'Potion: Pidgey' to pick who gets it; in the Safari Zone it throws a Safari Ball), 'bait' / 'rock' (Safari Zone), 'learn' / 'skip' (a level-up move prompt: learn it over the weakest move, or keep the old moves). Returns what happened plus HP changes; stops on YES/NO or learn-move prompts so you can answer with press().")
     def battle(action: str = "fight", target: str = "", screenshot: bool = False) -> list:
         if (blocked := _guard("battle")) is not None:
             return blocked
@@ -118,13 +123,13 @@ def build_server(emu: Emulator, battle_advisor=None) -> FastMCP:
     def shop(item: str, qty: int = 1) -> list:
         if (blocked := _guard("shop")) is not None:
             return blocked
-        return _respond("shop", emu.shop(item, qty), None)
+        return _respond("shop", _with_events(emu.shop(item, qty)), None)
 
     @tool(description="Menu helper (Pokémon, outside battle): action 'lead' (target = Pokémon name/number to put first), 'swap' (two party slots), 'use' (target = item name, target2 = Pokémon for Potions/TMs/HMs; 'Charmander: Growl' (or 'Charmander: weakest') names the move to forget when it already knows 4), 'toss' (target = item: the whole stack; a full bag of 20 kinds picks nothing up), 'field' (target = Cut/Surf/Strength/Flash/Fly/Dig/Teleport while facing the tree/water/boulder; target2 = town for Fly), 'save' (in-game save). Handles the START menu for you.")
     def manage(action: str, target: str = "", target2: str = "") -> list:
         if (blocked := _guard("manage")) is not None:
             return blocked
-        return _respond("manage", emu.manage(action, target, target2), None)
+        return _respond("manage", _with_events(emu.manage(action, target, target2)), None)
 
     @tool(description="Let the game run for N frames (60 = 1 second) without input, e.g. to let text or animations finish.")
     def wait(frames: int = 60, screenshot: bool = True) -> list:
@@ -219,6 +224,10 @@ def main(argv: Optional[list[str]] = None) -> None:
     p.add_argument("--finalize-on-exit", action="store_true", help="write the final metrics report when the server exits")
     p.add_argument("--log-file", help="also append the log to this file")
     p.add_argument("--log-level", default="INFO")
+    p.add_argument("--auto-hand-back", action="store_true", help="battle('auto') stops when a trainer sends out its next "
+                   "Pokémon (for code-driven clients such as the Jev mode; default: fight the whole battle)")
+    p.add_argument("--map-elevation", action="store_true", help="map views list cave/forest elevation steps (for clients "
+                   "that build their own map from the view, such as the Jev mode)")
     p.add_argument("--battle-advisor", choices=["jev", "mock-jev"], help="benchmark: battle('auto') turns are picked by Jev")
     p.add_argument("--jev-model", default="jev-latest")
     p.add_argument("--jev-log", help="JSONL file for the battle advisor's decisions")
@@ -235,6 +244,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         allow_memory_write=args.allow_memory_write, charmap_file=args.charmap, ai_model=args.ai_model,
         base_dir=args.data_dir, session_id=args.session_id, max_tool_calls=args.max_tool_calls,
         max_real_seconds=args.max_real_seconds, finalize_on_exit=args.finalize_on_exit,
+        profile_options={"auto_hand_back": args.auto_hand_back, "map_elevation": args.map_elevation},
     )
     advisor = None
     if args.battle_advisor:

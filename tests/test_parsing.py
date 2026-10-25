@@ -79,3 +79,10 @@ def test_safari_battle_menu_cursor():
     assert cur(None, "▶FIGHT  PKMN\n ITEM   RUN") == (0, 0)
     assert cur(None, " FIGHT  PKMN\n ITEM  ▶RUN") == (1, 1)
     assert cur(None, "some text ▼") is None
+
+
+def test_status_move_names_match_the_rom_move_list():
+    # "Smokescreen" (the ROM spells it SmokeScreen) was scored as a damaging move by battle('auto')
+    from games.pokemon_gen1 import _STATUS_MOVES
+    from games import gen1_data as D
+    assert _STATUS_MOVES <= set(D.MOVES.values()), sorted(_STATUS_MOVES - set(D.MOVES.values()))

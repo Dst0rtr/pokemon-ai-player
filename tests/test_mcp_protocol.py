@@ -75,7 +75,12 @@ def test_plain_mcp_mode_has_no_jev_in_what_the_llm_sees(rom_path, scratch):
     async def body(s, init):
         tools = await s.list_tools()
         text = init.instructions + json.dumps([t.model_dump() for t in tools.tools])
-        assert "jev" not in text.lower() and "typesafe" not in text.lower()
+        for name, args in (("press", {"buttons": "W300 A W60 A"}), ("state", {"section": "summary"}),
+                           ("walk", {"path": "up 1"}), ("battle", {"action": "auto"}), ("metrics", {"action": "report"})):
+            r = await s.call_tool(name, args)
+            text += "\n" + "\n".join(c.text for c in r.content if c.type == "text")
+        low = text.lower()
+        assert "jev" not in low and "typesafe" not in low and "codex review" not in low, text[-2000:]
         return True
 
     assert asyncio.run(_session(rom_path, scratch, body))
@@ -94,3 +99,23 @@ def test_plain_mcp_mode_imports_no_jev_code(rom_path, tmp_path):
             "print('BENCH', sorted(m for m in sys.modules if m == 'bench' or m.startswith('bench.')))\n")
     out = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT), capture_output=True, text=True, timeout=120)
     assert "BENCH []" in out.stdout, out.stdout + out.stderr
+
+
+def test_shop_and_manage_replies_carry_their_own_events():
+    """An evolution from manage('use', 'Moon Stone') or a milestone during a purchase is reported in that call's reply,
+    not on the next walk (review of the MCP path, 2026-10-24)."""
+    from types import SimpleNamespace
+
+    import server
+    events = []
+    metrics = SimpleNamespace(budget_exhausted=lambda: None, record_call=lambda *a: None)
+    emu = SimpleNamespace(metrics=metrics, profile=None, pop_events=lambda: [events.pop() for _ in list(events)],
+                          manage=lambda *a: events.append("evolved: Clefairy → Clefable") or "used Moon Stone",
+                          shop=lambda *a: events.append("obtained: Bicycle") or "bought 1 Bicycle")
+    mcp = server.build_server(emu)
+    out = asyncio.run(mcp.call_tool("manage", {"action": "use", "target": "Moon Stone", "target2": "Clefairy"}))
+    text = json.dumps([c.model_dump() for c in (out[0] if isinstance(out, tuple) else out)])
+    assert "used Moon Stone" in text and "EVENT: evolved: Clefairy" in text, text
+    out = asyncio.run(mcp.call_tool("shop", {"item": "Bicycle"}))
+    text = json.dumps([c.model_dump() for c in (out[0] if isinstance(out, tuple) else out)])
+    assert "EVENT: obtained: Bicycle" in text, text

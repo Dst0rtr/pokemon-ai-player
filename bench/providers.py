@@ -219,6 +219,11 @@ class JevProvider(Provider):
         from bench.jev_agent import AGENT_VERSION
         return f"jev_agent.py v{AGENT_VERSION}" + (" (mock Jev)" if self.mock else "")
 
+    def server_args(self, run_dir: Path) -> list[str]:
+        # the Jev player builds its own map from the map view and decides each new trainer matchup itself: it asks the
+        # server for both (a plain MCP client gets neither)
+        return ["--auto-hand-back", "--map-elevation"]
+
     def prepare(self, run_dir: Path, server_cmd: list[str]) -> None:
         self._server_cmd = server_cmd
 

@@ -70,6 +70,7 @@ class Emulator:
         max_tool_calls: int = 0,
         max_real_seconds: float = 0,
         finalize_on_exit: bool = False,
+        profile_options: Optional[dict] = None,
     ):
         self.rom_path = Path(rom_path).expanduser().resolve()
         if not self.rom_path.exists():
@@ -84,7 +85,7 @@ class Emulator:
         self.autosave_every = autosave_every
         self.allow_memory_write = allow_memory_write
         self.ai_model = ai_model
-        self.options: dict[str, Any] = {"fast_text": fast_text}
+        self.options: dict[str, Any] = {"fast_text": fast_text, **(profile_options or {})}
         if charmap_file:
             with open(charmap_file) as f:
                 raw = json.load(f)

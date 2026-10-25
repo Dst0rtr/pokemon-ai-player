@@ -32,7 +32,7 @@ scripted agent on four RNG seeds with zero anomalies (`examples/reference_run.py
 | `bench/jev_solo.py` | jev-solo (no LLM): whole-game objective graph, facts, heal/train/HM rules, stuck recovery |
 | `bench/jev_nav.py`, `bench/jev_atlas.py` | Jev map knowledge: `--map-source learned` (default) = atlas built from map views, wWarpEntries and real arrivals (`data/jev_atlas.json`, blank unless `--atlas`); `rom` = warp/edge graph decoded from the ROM (comparison/debugging); both route with Dijkstra over arrival points and per-dungeon warp memory |
 | `bench/improve.py`, `bench/segments.json` | Jev self-improvement: cluster jev-assist fallbacks, Opus proposal (dry run unless `--call`), apply on an iteration branch, compare; fixed segment start states |
-| `tests/` | pytest (266): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trips (incl. no Jev in plain MCP mode), harness parsers/report, Jev track (mocked, no network) |
+| `tests/` | pytest (269): parser unit tests, ROM-driven gameplay tests, opening replay, MCP stdio round-trips (incl. no Jev in plain MCP mode), harness parsers/report, Jev track (mocked, no network) |
 | `test_emulator.py` | CLI smoke test (`--play-intro` plays to the overworld) |
 | `.backup-original/` | the pre-rewrite code, kept for reference (gitignored) |
 
@@ -44,7 +44,7 @@ Jev change, never commit or push it.
 
 ```bash
 source venv/bin/activate            # venv has pyboy 2.6, mcp 1.24, pillow, numpy, pytest, pyflakes
-python -m pytest tests -q           # ~5 s with a Pokémon Red ROM in the project root
+python -m pytest tests -q           # ~15 s with a Pokémon Red ROM in the project root
 python examples/reference_run.py Pokemon-Red_Version.gb [seed]   # ~35 s; expect "0 oddities" and 1 badge
 python test_emulator.py Pokemon-Red_Version.gb --play-intro
 python server.py --rom Pokemon-Red_Version.gb --ai-model NAME [--resume]
@@ -65,7 +65,7 @@ exists, but keep the project ROM free of a `.ram` file for reproducible runs.
 `press`, `walk`, `battle` (incl. `auto`, `bait`, `rock`), `talk`, `shop`, `manage` (`lead`, `swap`, `use`, `toss`,
 `field`, `save`), `wait`, `screen`, `state`, `save_state`, `load_state`, `reset_game`, `memory`, `metrics`
 (incl. `note`). Tool schema JSON stays under 10 KB (enforced by a
-test, currently ~6.5 KB) and the agent guide under 1.5 KB. If you add a tool, ask whether it could
+test, currently ~8.8 KB) and the agent guide under 1.5 KB (~1.2 KB; ~1.5 KB sent with the Pokémon hints). If you add a tool, ask whether it could
 be a parameter of an existing one instead.
 
 `battle` (incl. `auto`), `talk`, `shop`, `manage` live in the Pokémon profile (`battle_action`,
